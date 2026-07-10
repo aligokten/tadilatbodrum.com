@@ -34,7 +34,7 @@ _tokens = {}  # token -> expiry epoch
 def _seed_db():
     return {
         "adminPasswordHash": hashlib.sha256(DEFAULT_PASSWORD.encode()).hexdigest(),
-        "ticker": "🏗️ Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
+        "ticker": "Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
         "heroImage": "/assets/hero.jpg",
         "services": [
             {"id": "s1", "icon": "villa",   "title": "Villa Tadilatı",     "desc": "Villalarınız için kapsamlı tadilat ve renovasyon çözümleri."},

@@ -1,5 +1,6 @@
 /* ═══ TadilatBodrum.com — ana sayfa ═══ */
 
+/* Tek renk (currentColor) 2D çizgi ikon seti */
 const ICONS = {
   villa: '<path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/>',
   sun:   '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -12,16 +13,19 @@ const ICONS = {
   roof:  '<path d="M2 12 12 3l10 9M5 10v10h14V10"/>',
   garden:'<path d="M12 21v-8M12 13c0-4 3-7 7-7 0 4-3 7-7 7zM12 13c0-4-3-7-7-7 0 4 3 7 7 7z"/>',
   elec:  '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>',
-  pool:  '<path d="M2 17q2.5-2 5 0t5 0 5 0 5 0M2 21q2.5-2 5 0t5 0 5 0 5 0M8 15V5a2 2 0 0 1 4 0M14 15V5a2 2 0 0 1 4 0"/>'
+  pool:  '<path d="M2 17q2.5-2 5 0t5 0 5 0 5 0M2 21q2.5-2 5 0t5 0 5 0 5 0M8 15V5a2 2 0 0 1 4 0M14 15V5a2 2 0 0 1 4 0"/>',
+  window:'<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M4 12h16M12 3v18"/>',
+  door:  '<path d="M5 21V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v17M3 21h18M13 12h.01"/>',
+  brush: '<path d="M9.5 14.5 4 20M14 4l6 6-7 3-2-2z"/><path d="M8 13l3 3"/>',
+  wall:  '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M8 4v5M16 9v6M8 15v5"/>',
 };
-
-const svgIcon = k => `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[k] || ICONS.tools}</svg>`;
+const svgIcon = k => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[k] || ICONS.tools}</svg>`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* Statik/önizleme yedeği: API'ye (Python sunucusu) ulaşılamazsa —
    örn. GitHub Pages gibi yalnızca statik barındırmada — site bu verilerle dolu görünür. */
 const FALLBACK_SITE = {
-  ticker: "🏗️ Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
+  ticker: "Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
   heroImage: "assets/hero.jpg",
   services: [
     { icon: "villa", title: "Villa Tadilatı",    desc: "Villalarınız için kapsamlı tadilat ve renovasyon çözümleri." },
@@ -45,7 +49,7 @@ const FALLBACK_SITE = {
 };
 
 let SITE = { projects: [], services: [] };
-let STATIC_MODE = false;   // API yoksa true → formlar demo modunda çalışır
+let STATIC_MODE = false;
 
 /* ── veri yükle ── */
 async function loadSite() {
@@ -55,7 +59,7 @@ async function loadSite() {
     SITE = await res.json();
   } catch {
     STATIC_MODE = true;
-    SITE = FALLBACK_SITE;   // statik barındırma yedeği
+    SITE = FALLBACK_SITE;
   }
 
   // kayan yazı
@@ -72,28 +76,14 @@ async function loadSite() {
   if (SITE.heroImage) document.getElementById('heroImage').src = SITE.heroImage;
 
   // hizmetler
-  const sg = document.getElementById('servicesGrid');
-  sg.innerHTML = (SITE.services || []).map(s => `
+  document.getElementById('servicesGrid').innerHTML = (SITE.services || []).map(s => `
     <div class="service-card glass reveal">
       <div class="service-icon">${svgIcon(s.icon)}</div>
       <h3>${esc(s.title)}</h3>
       <p>${esc(s.desc)}</p>
     </div>`).join('');
 
-  // projeler
-  const ps = document.getElementById('projSlider');
-  ps.innerHTML = (SITE.projects || []).map((p, i) => `
-    <article class="proj-card" data-idx="${i}" tabindex="0" role="button" aria-label="${esc(p.title)} detayları">
-      <div class="proj-card-img"><img src="${esc((p.images && p.images[0]) || '')}" alt="${esc(p.title)}" loading="lazy"></div>
-      <div class="proj-card-body"><span>${esc(p.location || '')}</span><h3>${esc(p.title)}</h3></div>
-    </article>`).join('');
-
-  ps.querySelectorAll('.proj-card').forEach(card => {
-    const open = () => openProjModal(+card.dataset.idx);
-    card.addEventListener('click', open);
-    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-  });
-
+  buildCarousel();
   observeReveals();
 }
 
@@ -105,10 +95,73 @@ function observeReveals() {
   document.querySelectorAll('.reveal:not(.visible)').forEach(el => io.observe(el));
 }
 
-/* ── proje slider okları ── */
-const slider = document.getElementById('projSlider');
-document.getElementById('projPrev').onclick = () => slider.scrollBy({ left: -410, behavior: 'smooth' });
-document.getElementById('projNext').onclick = () => slider.scrollBy({ left: 410, behavior: 'smooth' });
+/* ═══ animasyonlu glassmorphism karusel ═══ */
+const carStage = document.getElementById('carStage');
+const carDots = document.getElementById('carDots');
+let carActive = 0;
+let carCards = [];
+
+function buildCarousel() {
+  const items = SITE.projects || [];
+  carStage.innerHTML = '';
+  carActive = 0;
+  carCards = items.map((p, i) => {
+    const el = document.createElement('article');
+    el.className = 'car-card';
+    el.innerHTML = `
+      <img src="${esc((p.images && p.images[0]) || '')}" alt="${esc(p.title)}" loading="lazy">
+      <button class="car-open" aria-label="Detay"><svg class="ic" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+      <div class="car-body">
+        <span class="car-loc"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s7-6.5 7-11a7 7 0 0 0-14 0c0 4.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(p.location || '')}</span>
+        <h3>${esc(p.title)}</h3>
+      </div>`;
+    el.addEventListener('click', () => {
+      if (i === carActive) openProjModal(i);
+      else setCarActive(i);
+    });
+    carStage.appendChild(el);
+    return el;
+  });
+
+  carDots.innerHTML = items.map((_, i) =>
+    `<button class="${i === 0 ? 'active' : ''}" data-i="${i}" aria-label="Proje ${i + 1}"></button>`).join('');
+  carDots.querySelectorAll('button').forEach(b => b.onclick = () => setCarActive(+b.dataset.i));
+
+  positionCards();
+}
+
+function positionCards() {
+  const n = carCards.length;
+  carCards.forEach((el, i) => {
+    let off = i - carActive;
+    if (off > n / 2) off -= n;
+    if (off < -n / 2) off += n;
+    const a = Math.abs(off);
+    if (a > 2) {
+      el.style.transform = `translateX(${off > 0 ? 220 : -220}%) scale(.5)`;
+      el.classList.add('hidden');
+    } else {
+      el.classList.remove('hidden');
+      const x = off * 62;
+      const scale = a === 0 ? 1 : a === 1 ? 0.82 : 0.66;
+      const rotY = off * -8;
+      el.style.transform = `translateX(${x}%) scale(${scale}) rotateY(${rotY}deg)`;
+      el.style.opacity = a === 0 ? 1 : a === 1 ? 0.9 : 0.45;
+      el.style.zIndex = 10 - a;
+    }
+    el.classList.toggle('active', off === 0);
+  });
+  carDots.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', i === carActive));
+}
+
+function setCarActive(i) {
+  const n = carCards.length;
+  carActive = ((i % n) + n) % n;
+  positionCards();
+}
+
+document.getElementById('carPrev').onclick = () => setCarActive(carActive - 1);
+document.getElementById('carNext').onclick = () => setCarActive(carActive + 1);
 
 /* ── proje modalı ── */
 const projModal = document.getElementById('projModal');
@@ -121,7 +174,7 @@ function openProjModal(idx) {
   if (!curProj) return;
   curImg = 0;
   document.getElementById('modalTitle').textContent = curProj.title;
-  document.getElementById('modalLoc').textContent = '📍 ' + (curProj.location || '');
+  document.getElementById('modalLoc').textContent = curProj.location || '';
   document.getElementById('modalDesc').textContent = curProj.desc || '';
   renderModalSlide();
   openModal(projModal);
@@ -164,6 +217,9 @@ document.addEventListener('keydown', e => {
   if (projModal.classList.contains('open') && curProj && curProj.images.length > 1) {
     if (e.key === 'ArrowLeft') document.getElementById('modalPrev').click();
     if (e.key === 'ArrowRight') document.getElementById('modalNext').click();
+  } else if (!projModal.classList.contains('open') && !kesifModal.classList.contains('open')) {
+    if (e.key === 'ArrowLeft') setCarActive(carActive - 1);
+    if (e.key === 'ArrowRight') setCarActive(carActive + 1);
   }
 });
 
@@ -172,7 +228,7 @@ async function submitForm(form, url, statusEl, okMsg) {
   const data = Object.fromEntries(new FormData(form).entries());
   statusEl.textContent = 'Gönderiliyor…';
   statusEl.className = 'form-status';
-  if (STATIC_MODE) {   // GitHub Pages önizlemesi: sunucu yok, demo yanıt ver
+  if (STATIC_MODE) {
     setTimeout(() => {
       statusEl.textContent = '✔ (Önizleme) Canlı sitede bu bilgi yönetim paneline iletilir.';
       statusEl.className = 'form-status ok';
@@ -212,3 +268,4 @@ navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', () => na
 document.getElementById('year').textContent = new Date().getFullYear();
 
 loadSite();
+window.addEventListener('resize', () => { if (carCards.length) positionCards(); });

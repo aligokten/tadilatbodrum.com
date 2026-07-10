@@ -8,7 +8,7 @@
 <link rel="icon" href="/assets/logo.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -28,7 +28,9 @@
       <a href="#projeler">Projeler</a>
       <a href="#hakkimizda">Hakkımızda</a>
       <a href="#iletisim">İletişim</a>
-      <a href="#iletisim" class="btn btn-primary btn-sm" data-open-kesif>Ücretsiz Keşif</a>
+      <button class="btn btn-primary btn-sm" data-open-kesif>Ücretsiz Keşif
+        <svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
     </nav>
     <button class="nav-burger" id="navBurger" aria-label="Menü"><span></span><span></span><span></span></button>
   </div>
@@ -36,27 +38,54 @@
 
 <!-- ═══ Hero ═══ -->
 <section class="hero" id="hero">
-  <div class="container hero-grid">
-    <div class="hero-text reveal">
-      <span class="hero-badge">✦ Bodrum & Milas Tadilat Uzmanı</span>
-      <h1>Yaşam alanlarınıza<br><span class="grad-text">değer katıyoruz</span></h1>
-      <p>Villa tadilatından anahtar teslim renovasyona kadar; tasarım ve uygulama gücümüzle hayalinizdeki mekânı birlikte inşa edelim.</p>
-      <div class="hero-cta">
-        <button class="btn btn-primary" data-open-kesif>Ücretsiz Keşif Al</button>
-        <a href="#projeler" class="btn btn-ghost">Projelerimizi İnceleyin</a>
+  <div class="container">
+    <div class="hero-head reveal">
+      <span class="badge-glass">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>
+        Bodrum &amp; Milas Tadilat Uzmanı
+      </span>
+      <h1 class="hero-title">
+        <span>Tadilat</span>
+        <span class="title-chip" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6"/><path d="M14 10h4M16 10v4"/></svg>
+        </span>
+        <span>Bodrum</span>
+      </h1>
+      <p class="hero-sub">Villa tadilatından anahtar teslim renovasyona; tasarım ve uygulama gücümüzle yaşam alanlarınıza değer katıyoruz.</p>
+    </div>
+
+    <div class="hero-stage reveal">
+      <div class="hero-frame glass">
+        <img id="heroImage" src="/assets/hero.jpg" alt="Bodrum villa tadilat projesi">
+        <span class="pin-tag pin-1"><svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="M11.5 11.5 21 21M17 17l2-2"/></svg> Anahtar Teslim</span>
+        <span class="pin-tag pin-2"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2l3 6 6 .5-4.5 4 1.5 6-6-3.5-6 3.5 1.5-6L3 8.5 9 8z"/></svg> 15+ Yıl</span>
       </div>
-      <div class="hero-stats">
-        <div><strong>15+</strong><span>Yıllık Deneyim</span></div>
-        <div><strong>120+</strong><span>Tamamlanan Proje</span></div>
-        <div><strong>%100</strong><span>Şeffaf Süreç</span></div>
+      <div class="hero-cta">
+        <button class="btn btn-primary btn-lg" data-open-kesif>
+          <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h4"/></svg>
+          Ücretsiz Keşif Al
+        </button>
+        <a href="#projeler" class="btn btn-ghost btn-lg">
+          Projelerimiz
+          <svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
       </div>
     </div>
-    <div class="hero-visual reveal">
-      <div class="hero-img-wrap glass">
-        <img id="heroImage" src="/assets/hero.jpg" alt="Bodrum villa tadilat projesi">
+
+    <!-- SunVault tarzı alt cam kartlar -->
+    <div class="hero-cards">
+      <div class="hc glass reveal">
+        <div class="hc-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.2 1 5.9L12 16.9 6.8 19.4l1-5.9L3.5 9.2l5.9-.9z"/></svg></div>
+        <div><strong>4.9 / 5</strong><span>Müşteri Memnuniyeti</span></div>
       </div>
-      <div class="hero-float glass hf-1">🏠 Villa Tadilatı</div>
-      <div class="hero-float glass hf-2">🔑 Anahtar Teslim</div>
+      <div class="hc glass reveal">
+        <div class="hc-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <div><strong>2 Yıl Garanti</strong><span>İşçilik &amp; malzeme</span></div>
+      </div>
+      <div class="hc glass reveal">
+        <div class="hc-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10l8-6 8 6v10M4 20h16M9 20v-5h6v5"/></svg></div>
+        <div><strong>120+ Proje</strong><span>Bodrum &amp; Milas</span></div>
+      </div>
     </div>
   </div>
 </section>
@@ -82,15 +111,27 @@
       <p>Keşiften teslime kadar her adımda yanınızdayız — süreç baştan sona şeffaf.</p>
     </div>
     <div class="process-grid">
-      <div class="process-step glass reveal"><span class="pnum">01</span><h3>Ücretsiz Keşif</h3><p>Mekânınızı yerinde inceliyor, ihtiyaç ve beklentilerinizi dinliyoruz.</p></div>
-      <div class="process-step glass reveal"><span class="pnum">02</span><h3>Tasarım & Teklif</h3><p>Detaylı planlama ile size özel tasarım ve net fiyat teklifi sunuyoruz.</p></div>
-      <div class="process-step glass reveal"><span class="pnum">03</span><h3>Uygulama</h3><p>Uzman ekibimiz projeyi takvime uygun ve kaliteli işçilikle hayata geçirir.</p></div>
-      <div class="process-step glass reveal"><span class="pnum">04</span><h3>Teslim & Garanti</h3><p>Projenizi eksiksiz teslim ediyor, sonrasında da yanınızda oluyoruz.</p></div>
+      <div class="process-step glass reveal">
+        <div class="pstep-ic"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+        <span class="pnum">01</span><h3>Ücretsiz Keşif</h3><p>Mekânınızı yerinde inceliyor, ihtiyaç ve beklentilerinizi dinliyoruz.</p>
+      </div>
+      <div class="process-step glass reveal">
+        <div class="pstep-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2 5 5 .5-4 3.5 1 5-4-2.7L8 17l1-5-4-3.5 5-.5z"/><path d="M3 21h18"/></svg></div>
+        <span class="pnum">02</span><h3>Tasarım &amp; Teklif</h3><p>Detaylı planlama ile size özel tasarım ve net fiyat teklifi sunuyoruz.</p>
+      </div>
+      <div class="process-step glass reveal">
+        <div class="pstep-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M14 6l4 4M3 21l1-4L15 6l3 3L7 20z"/></svg></div>
+        <span class="pnum">03</span><h3>Uygulama</h3><p>Uzman ekibimiz projeyi takvime uygun ve kaliteli işçilikle hayata geçirir.</p>
+      </div>
+      <div class="process-step glass reveal">
+        <div class="pstep-ic"><svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="M11.5 11.5 21 21M17 17l2-2"/></svg></div>
+        <span class="pnum">04</span><h3>Teslim &amp; Garanti</h3><p>Projenizi eksiksiz teslim ediyor, sonrasında da yanınızda oluyoruz.</p>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ═══ Projeler ═══ -->
+<!-- ═══ Projeler (animasyonlu glassmorphism karusel) ═══ -->
 <section class="section" id="projeler">
   <div class="container">
     <div class="section-head reveal">
@@ -99,11 +140,16 @@
       <p>Bodrum ve Milas genelinde gerçekleştirdiğimiz çalışmalardan örnekler.</p>
     </div>
   </div>
-  <div class="proj-slider-wrap reveal">
-    <button class="proj-arrow prev" id="projPrev" aria-label="Önceki">‹</button>
-    <div class="proj-slider" id="projSlider"></div>
-    <button class="proj-arrow next" id="projNext" aria-label="Sonraki">›</button>
+  <div class="carousel reveal" id="carousel">
+    <button class="car-arrow prev" id="carPrev" aria-label="Önceki">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <div class="car-stage" id="carStage"></div>
+    <button class="car-arrow next" id="carNext" aria-label="Sonraki">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
   </div>
+  <div class="car-dots" id="carDots"></div>
 </section>
 
 <!-- ═══ Hakkımızda ═══ -->
@@ -116,23 +162,23 @@
     </div>
     <div class="about-grid">
       <div class="about-card glass reveal">
-        <div class="about-icon">🎯</div>
+        <div class="about-ic"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg></div>
         <h3>Misyonumuz</h3>
         <p>Her bütçeye uygun, kaliteden ödün vermeyen tadilat çözümleri üretmek; keşiften teslime kadar şeffaf bir süreçle müşterilerimizin güvenini kazanmak.</p>
       </div>
       <div class="about-card glass reveal">
-        <div class="about-icon">🔭</div>
+        <div class="about-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
         <h3>Vizyonumuz</h3>
         <p>Bodrum yarımadasının en güvenilir tadilat ve renovasyon markası olmak; modern tasarım anlayışını yerel dokuyla buluşturarak bölgeye değer katmak.</p>
       </div>
       <div class="about-card glass reveal">
-        <div class="about-icon">🤝</div>
+        <div class="about-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21C5 16 3 12 3 8.5 3 6 5 4 7.5 4 9.4 4 11 5 12 6.5 13 5 14.6 4 16.5 4 19 4 21 6 21 8.5 21 12 19 16 12 21z"/></svg></div>
         <h3>Değerlerimiz</h3>
-        <ul>
-          <li>Uzman Ekip</li>
-          <li>Detaylı Planlama</li>
-          <li>Şeffaf Süreç</li>
-          <li>Kaliteli İşçilik</li>
+        <ul class="value-list">
+          <li><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Uzman Ekip</li>
+          <li><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Detaylı Planlama</li>
+          <li><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Şeffaf Süreç</li>
+          <li><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Kaliteli İşçilik</li>
         </ul>
       </div>
     </div>
@@ -148,21 +194,38 @@
       <p>Formu doldurun ya da tek tıkla WhatsApp'tan bize ulaşın — 24 saat içinde dönüş yapıyoruz.</p>
     </div>
     <div class="contact-grid">
-      <div class="contact-cta glass reveal">
-        <h3>Hemen başlayalım 👋</h3>
-        <p>Mekânınızı yerinde görelim, ihtiyacınıza özel çözümü birlikte planlayalım. Keşif tamamen <strong>ücretsiz</strong>.</p>
-        <button class="btn btn-primary btn-lg" data-open-kesif>📅 Ücretsiz Keşif Al</button>
-        <a class="btn btn-whatsapp btn-lg" href="https://wa.me/905413488833?text=Merhaba%2C%20%C3%BCcretsiz%20ke%C5%9Fif%20randevusu%20almak%20istiyorum." target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.7 14.9L2 22l5.3-1.4A10 10 0 1 0 12 2zm0 18.2a8.1 8.1 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.6-6.1c-.3-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.6.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3 0-.2 0-.3-.1-.5l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5 0-.7.3a3 3 0 0 0-1 2.2c0 1.3 1 2.6 1.1 2.8.1.2 2 3 4.8 4.2 1.8.8 2.5.8 3.4.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2l-.3-.3z"/></svg>
-          WhatsApp'tan Yazın
+      <div class="contact-left">
+        <a class="contact-card glass reveal" href="tel:+905413488833">
+          <span class="cc-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L19 13l2 5v3a1 1 0 0 1-1 1A16 16 0 0 1 4 6a1 1 0 0 1 1-2z"/></svg></span>
+          <span class="cc-body"><small>Bizi arayın</small><strong>0 541 348 88 33</strong></span>
+          <svg class="cc-arrow" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>
         </a>
-        <div class="contact-info">
-          <p>📍 İsmetpaşa Mh. Zafer Cd. No:42/C Milas/Muğla</p>
-          <p>📞 <a href="tel:+905413488833">0 541 348 88 33</a></p>
-          <p>✉️ <a href="mailto:info@saggplus.com">info@saggplus.com</a></p>
-          <p>🕐 Pazartesi – Cumartesi, 09:00 – 18:00</p>
+        <a class="contact-card glass reveal" href="mailto:info@saggplus.com">
+          <span class="cc-ic"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+          <span class="cc-body"><small>E-posta</small><strong>info@saggplus.com</strong></span>
+          <svg class="cc-arrow" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>
+        </a>
+        <a class="contact-card glass reveal" href="https://www.google.com/maps?q=%C4%B0smetpa%C5%9Fa+Zafer+Caddesi+42+Milas" target="_blank" rel="noopener">
+          <span class="cc-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s7-6.5 7-11a7 7 0 0 0-14 0c0 4.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+          <span class="cc-body"><small>Ofisimiz</small><strong>İsmetpaşa Mh. Zafer Cd. No:42/C, Milas</strong></span>
+          <svg class="cc-arrow" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>
+        </a>
+        <div class="cta-glass glass reveal">
+          <h3>Hemen başlayalım</h3>
+          <p>Mekânınızı yerinde görelim, çözümü birlikte planlayalım. Keşif tamamen <strong>ücretsiz</strong>.</p>
+          <div class="cta-btns">
+            <button class="btn btn-primary" data-open-kesif>
+              <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+              Ücretsiz Keşif Al
+            </button>
+            <a class="btn btn-whatsapp" href="https://wa.me/905413488833?text=Merhaba%2C%20%C3%BCcretsiz%20ke%C5%9Fif%20randevusu%20almak%20istiyorum." target="_blank" rel="noopener">
+              <svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2a10 10 0 0 0-8.7 14.9L2 22l5.3-1.4A10 10 0 1 0 12 2zm0 18.2a8.1 8.1 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.6-6.1c-.3-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.6.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3 0-.2 0-.3-.1-.5l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5 0-.7.3a3 3 0 0 0-1 2.2c0 1.3 1 2.6 1.1 2.8.1.2 2 3 4.8 4.2 1.8.8 2.5.8 3.4.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2l-.3-.3z"/></svg>
+              WhatsApp
+            </a>
+          </div>
         </div>
       </div>
+
       <form class="contact-form glass reveal" id="contactForm">
         <h3>Bize mesaj gönderin</h3>
         <div class="form-row">
@@ -170,8 +233,11 @@
           <label>Telefon<input type="tel" name="phone" maxlength="20" placeholder="05xx xxx xx xx"></label>
         </div>
         <label>E-posta<input type="email" name="email" maxlength="100" placeholder="ornek@eposta.com"></label>
-        <label>Mesajınız *<textarea name="message" rows="4" required maxlength="1000" placeholder="Projenizden kısaca bahsedin..."></textarea></label>
-        <button class="btn btn-primary" type="submit">Mesajı Gönder</button>
+        <label>Mesajınız *<textarea name="message" rows="5" required maxlength="1000" placeholder="Projenizden kısaca bahsedin..."></textarea></label>
+        <button class="btn btn-primary btn-block" type="submit">
+          Mesajı Gönder
+          <svg class="ic" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+        </button>
         <p class="form-status" id="contactStatus"></p>
       </form>
     </div>
@@ -187,11 +253,17 @@
   <div class="container footer-inner">
     <div class="footer-col">
       <img src="/assets/logo.png" alt="TadilatBodrum.com" class="footer-logo">
-      <p>Bodrum & Milas'ta güvenilir, şeffaf ve kaliteli tadilat hizmeti.</p>
+      <p>Bodrum &amp; Milas'ta güvenilir, şeffaf ve kaliteli tadilat hizmeti.</p>
       <div class="footer-social">
-        <a href="https://instagram.com/tadilatbodrumcom" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
-        <a href="https://facebook.com/tadilatbodrumcom" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
-        <a href="https://youtube.com/@tadilatbodrumcom" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+        <a href="https://instagram.com/tadilatbodrumcom" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="https://facebook.com/tadilatbodrumcom" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M14 8h3V4h-3a4 4 0 0 0-4 4v2H7v4h3v6h4v-6h3l1-4h-4V8a1 1 0 0 1 1-1z"/></svg>
+        </a>
+        <a href="https://youtube.com/@tadilatbodrumcom" target="_blank" rel="noopener" aria-label="YouTube">
+          <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z" fill="currentColor" stroke="none"/></svg>
+        </a>
       </div>
     </div>
     <div class="footer-col">
@@ -224,11 +296,13 @@
 <!-- ═══ Proje detay modalı ═══ -->
 <div class="modal-backdrop" id="projModal" aria-hidden="true">
   <div class="modal glass-strong" role="dialog" aria-modal="true">
-    <button class="modal-close" id="projModalClose" aria-label="Kapat">✕</button>
+    <button class="modal-close" id="projModalClose" aria-label="Kapat">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
     <div class="modal-slider">
-      <button class="modal-arrow prev" id="modalPrev" aria-label="Önceki görsel">‹</button>
+      <button class="modal-arrow prev" id="modalPrev" aria-label="Önceki görsel"><svg class="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div class="modal-img-wrap"><img id="modalImg" src="" alt=""></div>
-      <button class="modal-arrow next" id="modalNext" aria-label="Sonraki görsel">›</button>
+      <button class="modal-arrow next" id="modalNext" aria-label="Sonraki görsel"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
       <div class="modal-dots" id="modalDots"></div>
     </div>
     <div class="modal-info">
@@ -242,16 +316,18 @@
 <!-- ═══ Keşif randevusu modalı ═══ -->
 <div class="modal-backdrop" id="kesifModal" aria-hidden="true">
   <div class="modal modal-sm glass-strong" role="dialog" aria-modal="true">
-    <button class="modal-close" id="kesifModalClose" aria-label="Kapat">✕</button>
+    <button class="modal-close" id="kesifModalClose" aria-label="Kapat">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
     <form class="kesif-form" id="kesifForm">
-      <h3>📅 Ücretsiz Keşif Randevusu</h3>
+      <h3>Ücretsiz Keşif Randevusu</h3>
       <p>Bilgilerinizi bırakın, randevunuzu onaylamak için sizi arayalım.</p>
       <label>Ad Soyad *<input type="text" name="name" required maxlength="100" placeholder="Adınız Soyadınız"></label>
       <label>Telefon *<input type="tel" name="phone" required maxlength="20" placeholder="05xx xxx xx xx"></label>
       <label>Bölge<input type="text" name="district" maxlength="100" placeholder="Örn: Bitez, Bodrum"></label>
       <label>Tercih ettiğiniz tarih<input type="date" name="date"></label>
       <label>Not<textarea name="note" rows="3" maxlength="500" placeholder="Projeniz hakkında kısa bilgi..."></textarea></label>
-      <button class="btn btn-primary" type="submit">Randevu Talebi Gönder</button>
+      <button class="btn btn-primary btn-block" type="submit">Randevu Talebi Gönder</button>
       <p class="form-status" id="kesifStatus"></p>
     </form>
   </div>
