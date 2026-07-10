@@ -1,0 +1,28 @@
+{
+  "hosting": {
+    "site": "SITE_ID_BURAYA",
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true,
+    "rewrites": [
+      { "source": "/admin", "destination": "/admin/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|svg|jpg|jpeg|png|webp)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

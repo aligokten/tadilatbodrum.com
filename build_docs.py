@@ -27,6 +27,13 @@ def main():
     for d in ("css", "js", "assets"):
         shutil.copytree(os.path.join(SRC, d), os.path.join(DST, d))
 
+    # main.js içindeki kök-mutlak yedek görsel yollarını göreli yap (Pages alt-yolu için)
+    mj = os.path.join(DST, "js", "main.js")
+    js = open(mj, encoding="utf-8").read()
+    for a, b in (('"/assets/', '"assets/'), ('"/uploads/', '"uploads/')):
+        js = js.replace(a, b)
+    open(mj, "w", encoding="utf-8").write(js)
+
     os.makedirs(os.path.join(DST, "uploads"))
     for f in os.listdir(os.path.join(ROOT, "uploads")):
         if f.startswith("seed-"):

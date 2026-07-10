@@ -1,4 +1,16 @@
-/* ═══ TadilatBodrum.com — admin paneli ═══ */
+/* ═══ TadilatBodrum.com — admin paneli (Firebase) ═══ */
+import { auth, db, storage } from "/js/firebase-init.js";
+import { firebaseConfig, ADMIN_EMAIL_DOMAIN } from "/js/firebase-config.js";
+import {
+  signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  query, orderBy, onSnapshot, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  ref as sref, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const ICONS = {
   villa: '<path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/>',
@@ -16,60 +28,54 @@ const ICONS = {
   window:'<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M4 12h16M12 3v18"/>',
   door:  '<path d="M5 21V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v17M3 21h18M13 12h.01"/>',
   brush: '<path d="M9.5 14.5 4 20M14 4l6 6-7 3-2-2z"/><path d="M8 13l3 3"/>',
-  wall:  '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M8 4v5M16 9v6M8 15v5"/>'
+  wall:  '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M8 4v5M16 9v6M8 15v5"/>',
 };
 const svgIcon = k => `<svg viewBox="0 0 24 24">${ICONS[k] || ICONS.tools}</svg>`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
 
-let TOKEN = sessionStorage.getItem('tb_token') || '';
-let DB = null;
+/* yerel bellek — Firestore'dan yüklenen içerik */
+const DB = { config: {}, services: [], projects: [], reviews: [], appointments: [], messages: [] };
+let unsubApp = null, unsubMsg = null;
 
-/* ── api ── */
-async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-Auth-Token': TOKEN },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 401) { logout(); throw new Error('Oturum süresi doldu, tekrar giriş yapın'); }
-  const j = await res.json();
-  if (!res.ok) throw new Error(j.error || 'İşlem başarısız');
-  return j;
+/* ── görsel yükleme (Storage) ── */
+async function uploadImage(file, folder) {
+  const clean = (file.name || 'img').replace(/[^\w.\-]/g, '_');
+  const r = sref(storage, `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${clean}`);
+  await uploadBytes(r, file);
+  return await getDownloadURL(r);
 }
-
-const fileToDataURL = f => new Promise((ok, err) => {
-  const r = new FileReader();
-  r.onload = () => ok(r.result);
-  r.onerror = err;
-  r.readAsDataURL(f);
-});
+const fmtDate = ts => ts && ts.toDate ? ts.toDate().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }) : '';
 
 /* ── giriş / çıkış ── */
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const st = $('loginStatus');
   st.textContent = 'Giriş yapılıyor…'; st.className = 'form-status';
+  const u = $('loginUser').value.trim();
+  const email = u.includes('@') ? u : `${u}@${ADMIN_EMAIL_DOMAIN}`;
   try {
-    const j = await api('POST', '/api/admin/login', { username: $('loginUser').value, password: $('loginPassword').value });
-    TOKEN = j.token;
-    sessionStorage.setItem('tb_token', TOKEN);
-    await enterPanel();
-  } catch (err) { st.textContent = '⚠ ' + err.message; st.className = 'form-status err'; }
+    await signInWithEmailAndPassword(auth, email, $('loginPassword').value);
+    // onAuthStateChanged paneli açar
+  } catch (err) {
+    st.textContent = '⚠ Kullanıcı adı veya şifre hatalı';
+    st.className = 'form-status err';
+  }
 });
+$('logoutBtn').onclick = () => signOut(auth);
 
-function logout() {
-  TOKEN = ''; sessionStorage.removeItem('tb_token');
-  $('panelView').hidden = true; $('loginView').style.display = 'flex';
-}
-$('logoutBtn').onclick = logout;
-
-async function enterPanel() {
-  DB = await api('GET', '/api/admin/data');
-  $('loginView').style.display = 'none';
-  $('panelView').hidden = false;
-  renderAll();
-}
+onAuthStateChanged(auth, user => {
+  if (user) {
+    $('loginView').style.display = 'none';
+    $('panelView').hidden = false;
+    startPanel();
+  } else {
+    if (unsubApp) unsubApp(); if (unsubMsg) unsubMsg();
+    $('panelView').hidden = true;
+    $('loginView').style.display = 'flex';
+    $('loginPassword').value = '';
+  }
+});
 
 /* ── sekmeler ── */
 document.querySelectorAll('.side-link[data-tab]').forEach(btn => {
@@ -81,11 +87,36 @@ document.querySelectorAll('.side-link[data-tab]').forEach(btn => {
   };
 });
 
-/* ── render ── */
-function renderAll() {
-  $('tickerInput').value = DB.ticker || '';
-  $('heroPreview').src = DB.heroImage || '';
-  renderProjects(); renderServices(); renderReviews(); renderInbox('appointments'); renderInbox('messages'); renderBadges();
+/* ── panel verilerini yükle ── */
+async function startPanel() {
+  await loadContent();
+  // gerçek zamanlı gelen kutuları
+  if (unsubApp) unsubApp();
+  if (unsubMsg) unsubMsg();
+  unsubApp = onSnapshot(query(collection(db, 'appointments'), orderBy('createdAt', 'desc')), snap => {
+    DB.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderInbox('appointments'); renderBadges();
+  });
+  unsubMsg = onSnapshot(query(collection(db, 'messages'), orderBy('createdAt', 'desc')), snap => {
+    DB.messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderInbox('messages'); renderBadges();
+  });
+}
+
+async function fetchColl(name) {
+  const snap = await getDocs(query(collection(db, name), orderBy('order')));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function loadContent() {
+  const cfg = await getDoc(doc(db, 'site', 'config'));
+  DB.config = cfg.exists() ? cfg.data() : {};
+  [DB.services, DB.projects, DB.reviews] = await Promise.all([
+    fetchColl('services'), fetchColl('projects'), fetchColl('reviews'),
+  ]);
+  $('tickerInput').value = DB.config.ticker || '';
+  $('heroPreview').src = DB.config.heroImage || '/assets/hero.jpg';
+  renderProjects(); renderServices(); renderReviews();
 }
 
 function renderBadges() {
@@ -94,41 +125,46 @@ function renderBadges() {
   set('badgeMesaj', DB.messages.filter(m => !m.read).length);
 }
 
-/* ═══ Genel ayarlar ═══ */
-$('saveTicker').onclick = async () => {
-  try { await api('POST', '/api/admin/ticker', { ticker: $('tickerInput').value }); toast($('saveTicker'), '✔ Kaydedildi'); }
-  catch (e) { alert(e.message); }
-};
-
-let heroData = null;
-$('heroFile').addEventListener('change', async e => {
-  if (!e.target.files[0]) return;
-  heroData = await fileToDataURL(e.target.files[0]);
-  $('heroPreview').src = heroData;
-  $('saveHero').disabled = false;
-});
-$('saveHero').onclick = async () => {
-  if (!heroData) return;
-  $('saveHero').disabled = true;
-  try {
-    const j = await api('POST', '/api/admin/hero', { image: heroData });
-    DB.heroImage = j.heroImage; heroData = null;
-    toast($('saveHero'), '✔ Yüklendi');
-  } catch (e) { alert(e.message); $('saveHero').disabled = false; }
-};
-
-$('savePassword').onclick = async () => {
-  const p = $('newPassword').value;
-  if (p.length < 6) return alert('Şifre en az 6 karakter olmalı');
-  try { await api('POST', '/api/admin/password', { password: p }); $('newPassword').value = ''; toast($('savePassword'), '✔ Güncellendi'); }
-  catch (e) { alert(e.message); }
-};
-
 function toast(btn, msg) {
   const old = btn.textContent;
   btn.textContent = msg;
   setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1600);
 }
+
+/* ═══ Genel ayarlar ═══ */
+$('saveTicker').onclick = async () => {
+  try { await setDoc(doc(db, 'site', 'config'), { ticker: $('tickerInput').value }, { merge: true }); toast($('saveTicker'), '✔ Kaydedildi'); }
+  catch (e) { alert('Kaydedilemedi: ' + e.message); }
+};
+
+let heroFile = null;
+$('heroFile').addEventListener('change', e => {
+  heroFile = e.target.files[0] || null;
+  if (heroFile) { $('heroPreview').src = URL.createObjectURL(heroFile); $('saveHero').disabled = false; }
+});
+$('saveHero').onclick = async () => {
+  if (!heroFile) return;
+  $('saveHero').disabled = true;
+  try {
+    const url = await uploadImage(heroFile, 'hero');
+    await setDoc(doc(db, 'site', 'config'), { heroImage: url }, { merge: true });
+    DB.config.heroImage = url; heroFile = null;
+    toast($('saveHero'), '✔ Yüklendi');
+  } catch (e) { alert('Yüklenemedi: ' + e.message); $('saveHero').disabled = false; }
+};
+
+$('savePassword').onclick = async () => {
+  const p = $('newPassword').value;
+  if (p.length < 6) return alert('Şifre en az 6 karakter olmalı');
+  try {
+    await updatePassword(auth.currentUser, p);
+    $('newPassword').value = '';
+    toast($('savePassword'), '✔ Güncellendi');
+  } catch (e) {
+    if (e.code === 'auth/requires-recent-login') alert('Güvenlik için çıkıp tekrar giriş yaptıktan sonra şifreyi değiştirin.');
+    else alert('Güncellenemedi: ' + e.message);
+  }
+};
 
 /* ═══ Projeler ═══ */
 let editingProject = null;
@@ -139,7 +175,7 @@ function renderProjects() {
   if (!DB.projects.length) { el.innerHTML = '<div class="empty">Henüz proje eklenmemiş.</div>'; return; }
   el.innerHTML = DB.projects.map(p => `
     <div class="item">
-      <img class="item-thumb" src="${esc(p.images[0] || '')}" alt="">
+      <img class="item-thumb" src="${esc((p.images && p.images[0]) || '')}" alt="">
       <div class="item-body"><h4>${esc(p.title)}</h4><p>${esc(p.location || '')} — ${esc(p.desc || '')}</p></div>
       <div class="item-actions">
         <button class="btn btn-ghost btn-xs" data-edit="${p.id}">Düzenle</button>
@@ -149,7 +185,7 @@ function renderProjects() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProjectForm(DB.projects.find(p => p.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu proje silinsin mi?')) return;
-    await api('DELETE', '/api/admin/projects/' + b.dataset.del);
+    await deleteDoc(doc(db, 'projects', b.dataset.del));
     DB.projects = DB.projects.filter(p => p.id !== b.dataset.del);
     renderProjects();
   });
@@ -157,7 +193,7 @@ function renderProjects() {
 
 function openProjectForm(proj) {
   editingProject = proj || null;
-  pfImageList = proj ? [...proj.images] : [];
+  pfImageList = proj ? [...(proj.images || [])] : [];
   $('projectFormTitle').textContent = proj ? 'Projeyi Düzenle' : 'Yeni Proje';
   $('pfTitle').value = proj ? proj.title : '';
   $('pfLocation').value = proj ? (proj.location || '') : '';
@@ -177,9 +213,15 @@ function renderPfImages() {
 }
 
 $('pfFile').addEventListener('change', async e => {
-  for (const f of e.target.files) pfImageList.push(await fileToDataURL(f));
+  const files = [...e.target.files];
   e.target.value = '';
-  renderPfImages();
+  const st = $('projectFormStatus');
+  st.textContent = 'Görsel yükleniyor…'; st.className = 'form-status';
+  try {
+    for (const f of files) pfImageList.push(await uploadImage(f, 'projects'));
+    st.textContent = '';
+    renderPfImages();
+  } catch (err) { st.textContent = '⚠ Görsel yüklenemedi'; st.className = 'form-status err'; }
 });
 
 $('projectForm').addEventListener('submit', async e => {
@@ -187,13 +229,14 @@ $('projectForm').addEventListener('submit', async e => {
   const st = $('projectFormStatus');
   st.textContent = 'Kaydediliyor…'; st.className = 'form-status';
   const payload = { title: $('pfTitle').value, location: $('pfLocation').value, desc: $('pfDesc').value, images: pfImageList };
+  if (!payload.title) { st.textContent = '⚠ Başlık gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingProject) {
-      const j = await api('PUT', '/api/admin/projects/' + editingProject.id, payload);
-      Object.assign(editingProject, j);
+      await updateDoc(doc(db, 'projects', editingProject.id), payload);
+      Object.assign(editingProject, payload);
     } else {
-      const j = await api('POST', '/api/admin/projects', payload);
-      DB.projects.unshift(j);
+      const ref = await addDoc(collection(db, 'projects'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      DB.projects.push({ id: ref.id, ...payload });
     }
     $('projectModal').classList.remove('open');
     renderProjects();
@@ -219,7 +262,7 @@ function renderServices() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openServiceForm(DB.services.find(s => s.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu hizmet silinsin mi?')) return;
-    await api('DELETE', '/api/admin/services/' + b.dataset.del);
+    await deleteDoc(doc(db, 'services', b.dataset.del));
     DB.services = DB.services.filter(s => s.id !== b.dataset.del);
     renderServices();
   });
@@ -249,13 +292,14 @@ $('serviceForm').addEventListener('submit', async e => {
   const st = $('serviceFormStatus');
   st.textContent = 'Kaydediliyor…'; st.className = 'form-status';
   const payload = { title: $('sfTitle').value, desc: $('sfDesc').value, icon: sfIcon };
+  if (!payload.title) { st.textContent = '⚠ Başlık gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingService) {
-      const j = await api('PUT', '/api/admin/services/' + editingService.id, payload);
-      Object.assign(editingService, j);
+      await updateDoc(doc(db, 'services', editingService.id), payload);
+      Object.assign(editingService, payload);
     } else {
-      const j = await api('POST', '/api/admin/services', payload);
-      DB.services.push(j);
+      const ref = await addDoc(collection(db, 'services'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      DB.services.push({ id: ref.id, ...payload });
     }
     $('serviceModal').classList.remove('open');
     renderServices();
@@ -264,13 +308,11 @@ $('serviceForm').addEventListener('submit', async e => {
 
 /* ═══ Müşteri Yorumları ═══ */
 let editingReview = null;
-const stars = n => '★★★★★☆☆☆☆☆'.slice(5 - Math.max(1, Math.min(5, +n || 5)), 10 - Math.max(1, Math.min(5, +n || 5)));
 
 function renderReviews() {
   const el = $('reviewList');
-  const list = DB.reviews || (DB.reviews = []);
-  if (!list.length) { el.innerHTML = '<div class="empty">Henüz yorum eklenmemiş.</div>'; return; }
-  el.innerHTML = list.map(r => `
+  if (!DB.reviews.length) { el.innerHTML = '<div class="empty">Henüz yorum eklenmemiş.</div>'; return; }
+  el.innerHTML = DB.reviews.map(r => `
     <div class="item">
       <div class="rev-badge">${esc((r.name || '?').trim().charAt(0).toUpperCase())}</div>
       <div class="item-body">
@@ -285,7 +327,7 @@ function renderReviews() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openReviewForm(DB.reviews.find(r => r.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu yorum silinsin mi?')) return;
-    await api('DELETE', '/api/admin/reviews/' + b.dataset.del);
+    await deleteDoc(doc(db, 'reviews', b.dataset.del));
     DB.reviews = DB.reviews.filter(r => r.id !== b.dataset.del);
     renderReviews();
   });
@@ -308,13 +350,14 @@ $('reviewForm').addEventListener('submit', async e => {
   const st = $('reviewFormStatus');
   st.textContent = 'Kaydediliyor…'; st.className = 'form-status';
   const payload = { name: $('rfName').value, location: $('rfLocation').value, rating: +$('rfRating').value, text: $('rfText').value };
+  if (!payload.name || !payload.text) { st.textContent = '⚠ İsim ve yorum metni gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingReview) {
-      const j = await api('PUT', '/api/admin/reviews/' + editingReview.id, payload);
-      Object.assign(editingReview, j);
+      await updateDoc(doc(db, 'reviews', editingReview.id), payload);
+      Object.assign(editingReview, payload);
     } else {
-      const j = await api('POST', '/api/admin/reviews', payload);
-      DB.reviews.unshift(j);
+      const ref = await addDoc(collection(db, 'reviews'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      DB.reviews.push({ id: ref.id, ...payload });
     }
     $('reviewModal').classList.remove('open');
     renderReviews();
@@ -324,9 +367,9 @@ $('reviewForm').addEventListener('submit', async e => {
 /* ═══ Gelen kutuları ═══ */
 function waNumber(phone) {
   let d = String(phone).replace(/\D/g, '');
-  if (d.startsWith('90')) return d;          // +90 5xx …
-  if (d.startsWith('0')) return '9' + d;     // 05xx …
-  return '90' + d;                           // 5xx …
+  if (d.startsWith('90')) return d;
+  if (d.startsWith('0')) return '9' + d;
+  return '90' + d;
 }
 
 function renderInbox(key) {
@@ -341,7 +384,7 @@ function renderInbox(key) {
       <div class="inbox-top">
         <strong>${esc(r.name)}</strong>
         ${r.read ? '' : '<span class="new-tag">YENİ</span>'}
-        <time>${esc(r.createdAt)}</time>
+        <time>${esc(fmtDate(r.createdAt))}</time>
       </div>
       <div class="inbox-meta">
         ${r.phone ? `<span>📞 <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a></span>` : ''}
@@ -357,16 +400,11 @@ function renderInbox(key) {
       </div>
     </div>`).join('');
 
-  el.querySelectorAll('[data-read]').forEach(b => b.onclick = async () => {
-    await api('PUT', `/api/admin/${key}/${b.dataset.read}/read`, { read: true });
-    DB[key].find(r => r.id === b.dataset.read).read = true;
-    renderInbox(key); renderBadges();
-  });
+  el.querySelectorAll('[data-read]').forEach(b => b.onclick = async () =>
+    updateDoc(doc(db, key, b.dataset.read), { read: true }));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu kayıt silinsin mi?')) return;
-    await api('DELETE', `/api/admin/${key}/${b.dataset.del}`);
-    DB[key] = DB[key].filter(r => r.id !== b.dataset.del);
-    renderInbox(key); renderBadges();
+    await deleteDoc(doc(db, key, b.dataset.del));
   });
 }
 
@@ -376,15 +414,51 @@ document.querySelectorAll('[data-close-modal]').forEach(b =>
 document.querySelectorAll('.modal-backdrop').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
 
-/* ── her 60 sn'de gelen kutularını tazele ── */
-setInterval(async () => {
-  if (!TOKEN || $('panelView').hidden) return;
-  try {
-    const j = await api('GET', '/api/admin/data');
-    DB.appointments = j.appointments; DB.messages = j.messages;
-    renderInbox('appointments'); renderInbox('messages'); renderBadges();
-  } catch { /* sessiz geç */ }
-}, 60000);
+/* ═══ Örnek içerik yükleme ═══ */
+const SEED = {
+  config: { ticker: "Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın." },
+  services: [
+    { icon: "villa", title: "Villa Tadilatı",    desc: "Villalarınız için kapsamlı tadilat ve renovasyon çözümleri." },
+    { icon: "sun",   title: "Yazlık Yenileme",   desc: "Yazlıklarınıza modern, konforlu ve estetik dokunuşlar." },
+    { icon: "sofa",  title: "İç Mekan Tasarımı", desc: "Fonksiyonel, şık ve size özel iç mekan tasarım çözümleri." },
+    { icon: "bath",  title: "Banyo & Mutfak",    desc: "Banyo ve mutfak alanlarınızı yenileyerek değer katıyoruz." },
+    { icon: "paint", title: "Boya & Uygulama",   desc: "İç ve dış boya, dekoratif uygulama ve yüzey çözümleri." },
+    { icon: "key",   title: "Anahtar Teslim",    desc: "Tasarım, uygulama ve teslimat dahil anahtar teslim hizmet." },
+  ],
+  projects: [
+    { title: "Bitez Villa Yenileme", location: "Bitez, Bodrum",
+      desc: "Havuzlu villanın iç ve dış mekanlarının komple yenilenmesi; mutfak, banyolar, zemin kaplamaları ve dış cephe boyası anahtar teslim tamamlandı.",
+      images: ["/uploads/seed-bitez.svg", "/assets/hero.jpg"] },
+    { title: "Ören Villa Yenileme", location: "Ören, Milas",
+      desc: "Deniz manzaralı villada iç mekan tasarımı, banyo & mutfak yenileme ve dekoratif boya uygulamaları gerçekleştirildi.",
+      images: ["/uploads/seed-oren.svg"] },
+    { title: "Güllük Daire Yenileme", location: "Güllük, Milas",
+      desc: "Yazlık dairenin komple renovasyonu; zemin, elektrik-su tesisatı, mutfak dolapları ve boya işleri şeffaf süreç yönetimiyle teslim edildi.",
+      images: ["/uploads/seed-gulluk.svg"] },
+  ],
+  reviews: [
+    { name: "Ayşe K.", location: "Bitez, Bodrum", rating: 5, text: "Villamızın tadilatını baştan sona kusursuz yönettiler. Söz verilen tarihte, temiz ve kaliteli bir işçilikle teslim aldık. Kesinlikle tavsiye ederim." },
+    { name: "Mehmet A.", location: "Ören, Milas", rating: 5, text: "Banyo ve mutfak yenilemesi yaptırdık. Şeffaf fiyatlandırma ve düzenli bilgilendirme çok iyiydi. İşçilik gerçekten kaliteli." },
+    { name: "Zeynep T.", location: "Güllük, Milas", rating: 5, text: "Yazlık dairemiz adeta yeniden doğdu. Ekip son derece profesyonel ve titizdi. Sürecin her aşamasında yanımızdaydılar." },
+  ],
+};
 
-/* ── otomatik giriş ── */
-if (TOKEN) enterPanel().catch(logout);
+$('seedBtn').onclick = async () => {
+  if (!confirm('Örnek içerik yüklensin mi? (Sadece boş bölümler doldurulur)')) return;
+  $('seedBtn').disabled = true;
+  try {
+    if (!DB.config.ticker) await setDoc(doc(db, 'site', 'config'), SEED.config, { merge: true });
+    let t = Date.now();
+    if (!DB.services.length) for (const s of SEED.services) await addDoc(collection(db, 'services'), { ...s, order: t++, createdAt: serverTimestamp() });
+    if (!DB.projects.length) for (const p of SEED.projects) await addDoc(collection(db, 'projects'), { ...p, order: t++, createdAt: serverTimestamp() });
+    if (!DB.reviews.length)  for (const r of SEED.reviews)  await addDoc(collection(db, 'reviews'),  { ...r, order: t++, createdAt: serverTimestamp() });
+    await loadContent();
+    toast($('seedBtn'), '✔ Yüklendi');
+  } catch (e) { alert('Yüklenemedi: ' + e.message); $('seedBtn').disabled = false; }
+};
+
+/* ── yapılandırma uyarısı ── */
+if (String(firebaseConfig.apiKey).startsWith('BURAYA')) {
+  $('loginStatus').textContent = '⚠ Firebase yapılandırması eksik (js/firebase-config.js).';
+  $('loginStatus').className = 'form-status err';
+}

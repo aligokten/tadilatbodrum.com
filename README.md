@@ -1,6 +1,10 @@
 # TadilatBodrum.com — Yeni Web Sitesi + Admin Paneli
 
-Saf Python (stdlib) ile çalışır — **hiçbir bağımlılık gerektirmez** (Python 3.8+).
+> **Canlı yayın Firebase üzerindedir** (Hosting + Firestore + Auth + Storage) —
+> kurulum ve dağıtım için **[DEPLOY.md](DEPLOY.md)**'ye bakın. Aşağıdaki saf Python
+> sunucusu isteğe bağlı bir yerel/self-host alternatifidir.
+
+Saf Python (stdlib) ile de çalışır — **hiçbir bağımlılık gerektirmez** (Python 3.8+).
 
 ## Çalıştırma
 

@@ -64,6 +64,13 @@
         <h3>🔒 Şifre Değiştir</h3>
         <input type="password" id="newPassword" minlength="6" maxlength="60" placeholder="Yeni şifre (en az 6 karakter)" autocomplete="new-password">
         <button class="btn btn-primary" id="savePassword">Şifreyi Güncelle</button>
+        <p class="hint">Admin hesabınızın (Firebase) giriş şifresini değiştirir.</p>
+      </div>
+
+      <div class="card">
+        <h3>🌱 Örnek İçerik</h3>
+        <p class="hint">İlk kurulumda içerik boşsa, hizmet/proje/yorum ve varsayılan ayarları tek tıkla yükleyin. Mevcut içerik varsa üzerine yazmaz.</p>
+        <button class="btn btn-ghost" id="seedBtn">Örnek İçeriği Yükle</button>
       </div>
     </section>
 
@@ -160,6 +167,6 @@
   </form>
 </div>
 
-<script src="/admin/admin.js"></script>
+<script type="module" src="/admin/admin.js"></script>
 </body>
 </html>

@@ -1,4 +1,9 @@
-/* ═══ TadilatBodrum.com — ana sayfa ═══ */
+/* ═══ TadilatBodrum.com — ana sayfa (Firebase / Firestore) ═══ */
+import { db } from "./firebase-init.js";
+import {
+  collection, getDocs, getDoc, doc, query, orderBy,
+  addDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* Tek renk (currentColor) 2D çizgi ikon seti */
 const ICONS = {
@@ -22,8 +27,7 @@ const ICONS = {
 const svgIcon = k => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[k] || ICONS.tools}</svg>`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* Statik/önizleme yedeği: API'ye (Python sunucusu) ulaşılamazsa —
-   örn. GitHub Pages gibi yalnızca statik barındırmada — site bu verilerle dolu görünür. */
+/* Firestore boş/erişilemezse gösterilecek yedek içerik */
 const FALLBACK_SITE = {
   ticker: "Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
   heroImage: "assets/hero.jpg",
@@ -56,20 +60,38 @@ const FALLBACK_SITE = {
   ],
 };
 
-let SITE = { projects: [], services: [] };
+let SITE = { projects: [], services: [], reviews: [] };
 let STATIC_MODE = false;
+
+async function fetchCollection(name) {
+  const snap = await getDocs(query(collection(db, name), orderBy('order')));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
 
 /* ── veri yükle ── */
 async function loadSite() {
   try {
-    const res = await fetch('/api/site');
-    if (!res.ok) throw new Error('api');
-    SITE = await res.json();
-  } catch {
+    const cfgSnap = await getDoc(doc(db, 'site', 'config'));
+    const cfg = cfgSnap.exists() ? cfgSnap.data() : {};
+    const [services, projects, reviews] = await Promise.all([
+      fetchCollection('services'), fetchCollection('projects'), fetchCollection('reviews'),
+    ]);
+    SITE = {
+      ticker: cfg.ticker ?? FALLBACK_SITE.ticker,
+      heroImage: cfg.heroImage || FALLBACK_SITE.heroImage,
+      services: services.length ? services : FALLBACK_SITE.services,
+      projects: projects.length ? projects : FALLBACK_SITE.projects,
+      reviews: reviews.length ? reviews : FALLBACK_SITE.reviews,
+    };
+  } catch (err) {
+    console.warn('Firestore okunamadı, yedek içerik gösteriliyor:', err);
     STATIC_MODE = true;
     SITE = FALLBACK_SITE;
   }
+  renderSite();
+}
 
+function renderSite() {
   // kayan yazı
   const track = document.getElementById('tickerTrack');
   const msg = SITE.ticker || '';
@@ -108,8 +130,7 @@ function starRow(n) {
 function renderReviews() {
   const el = document.getElementById('reviewsGrid');
   if (!el) return;
-  const list = SITE.reviews || [];
-  el.innerHTML = list.map(r => `
+  el.innerHTML = (SITE.reviews || []).map(r => `
     <figure class="review-card glass reveal">
       <div class="review-stars">${starRow(r.rating)}</div>
       <blockquote>“${esc(r.text)}”</blockquote>
@@ -189,6 +210,7 @@ function positionCards() {
 
 function setCarActive(i) {
   const n = carCards.length;
+  if (!n) return;
   carActive = ((i % n) + n) % n;
   positionCards();
 }
@@ -256,46 +278,44 @@ document.addEventListener('keydown', e => {
   }
 });
 
-/* ── formlar ── */
-async function submitForm(form, url, statusEl, okMsg) {
+/* ── formlar → Firestore ── */
+async function submitForm(form, coll, statusEl, okMsg) {
   const data = Object.fromEntries(new FormData(form).entries());
   statusEl.textContent = 'Gönderiliyor…';
   statusEl.className = 'form-status';
   if (STATIC_MODE) {
     setTimeout(() => {
-      statusEl.textContent = '✔ (Önizleme) Canlı sitede bu bilgi yönetim paneline iletilir.';
+      statusEl.textContent = '✔ (Önizleme) Bağlantı kurulunca bu bilgi yönetim paneline iletilir.';
       statusEl.className = 'form-status ok';
       form.reset();
     }, 500);
     return;
   }
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || 'Hata oluştu');
+    await addDoc(collection(db, coll), { ...data, read: false, createdAt: serverTimestamp() });
     statusEl.textContent = okMsg;
     statusEl.className = 'form-status ok';
     form.reset();
   } catch (err) {
-    statusEl.textContent = '⚠ ' + err.message;
+    statusEl.textContent = '⚠ Gönderilemedi, lütfen tekrar deneyin.';
     statusEl.className = 'form-status err';
+    console.error(err);
   }
 }
 
 document.getElementById('contactForm').addEventListener('submit', e => {
   e.preventDefault();
-  submitForm(e.target, '/api/message', document.getElementById('contactStatus'), '✔ Mesajınız alındı, en kısa sürede dönüş yapacağız.');
+  submitForm(e.target, 'messages', document.getElementById('contactStatus'), '✔ Mesajınız alındı, en kısa sürede dönüş yapacağız.');
 });
 
 document.getElementById('kesifForm').addEventListener('submit', e => {
   e.preventDefault();
-  submitForm(e.target, '/api/appointment', document.getElementById('kesifStatus'), '✔ Randevu talebiniz alındı! Onay için sizi arayacağız.');
+  submitForm(e.target, 'appointments', document.getElementById('kesifStatus'), '✔ Randevu talebiniz alındı! Onay için sizi arayacağız.');
 });
 
 /* ── mobil menü ── */
-const burger = document.getElementById('navBurger');
 const navLinks = document.getElementById('navLinks');
-burger.onclick = () => navLinks.classList.toggle('open');
+document.getElementById('navBurger').onclick = () => navLinks.classList.toggle('open');
 navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', () => navLinks.classList.remove('open')));
 
 document.getElementById('year').textContent = new Date().getFullYear();

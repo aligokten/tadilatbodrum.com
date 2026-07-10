@@ -10,6 +10,11 @@ uploads/*
 __pycache__/
 *.pyc
 
+# Firebase
+.firebase/
+firebase-debug.log
+.runtimeconfig.json
+
 # Sistem
 .DS_Store
 *.log
