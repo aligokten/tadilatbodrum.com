@@ -5,7 +5,7 @@ rules_version = '2';
 //   match /tadilatbodrum/{allPaths=**} { ... }
 // bloğunu saggplus'ın kendi storage.rules dosyasındaki
 // "match /b/{bucket}/o {" bloğunun İÇİNE EKLEYİN (ya da Console'da yapıştırın).
-// ADMIN_UID_BURAYA yerine admin kullanıcısının UID'sini yazın.
+// Admin UID dolduruldu: jGnBLRR86GWP3Jntfl52iOeiDMq1
 
 service firebase.storage {
   match /b/{bucket}/o {
@@ -14,7 +14,7 @@ service firebase.storage {
     match /tadilatbodrum/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null
-                   && request.auth.uid == 'ADMIN_UID_BURAYA'
+                   && request.auth.uid == 'jGnBLRR86GWP3Jntfl52iOeiDMq1'
                    && request.resource.size < 15 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }

@@ -6,13 +6,13 @@ rules_version = '2';
 // yardımcı fonksiyonu, saggplus'ın kendi firestore.rules dosyasındaki
 // "match /databases/{database}/documents {" bloğunun İÇİNE EKLEYİN
 // (ya da Firebase Console → Firestore → Rules'ta yapıştırıp yayınlayın).
-// ADMIN_UID_BURAYA yerine admin kullanıcısının UID'sini yazın.
+// Admin UID dolduruldu: jGnBLRR86GWP3Jntfl52iOeiDMq1
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isTBAdmin() {
-      return request.auth != null && request.auth.uid == 'ADMIN_UID_BURAYA';
+      return request.auth != null && request.auth.uid == 'jGnBLRR86GWP3Jntfl52iOeiDMq1';
     }
     function tbValidLead() {
       return request.resource.data.name is string
