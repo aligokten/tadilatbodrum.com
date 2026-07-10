@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yönetim Paneli — TadilatBodrum.com</title>
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+
+<!-- ═══ Giriş ═══ -->
+<div class="login-wrap" id="loginView">
+  <form class="login-card" id="loginForm">
+    <img src="/assets/logo.png" alt="TadilatBodrum.com">
+    <h1>Yönetim Paneli</h1>
+    <label>Şifre<input type="password" id="loginPassword" required autocomplete="current-password" placeholder="Admin şifresi"></label>
+    <button class="btn btn-primary" type="submit">Giriş Yap</button>
+    <p class="form-status" id="loginStatus"></p>
+  </form>
+</div>
+
+<!-- ═══ Panel ═══ -->
+<div class="panel" id="panelView" hidden>
+  <aside class="sidebar">
+    <img src="/assets/logo.png" alt="TadilatBodrum.com" class="side-logo">
+    <nav>
+      <button class="side-link active" data-tab="genel">⚙️ Genel Ayarlar</button>
+      <button class="side-link" data-tab="projeler">🏗️ Projeler</button>
+      <button class="side-link" data-tab="hizmetler">🛠️ Hizmetler</button>
+      <button class="side-link" data-tab="randevular">📅 Keşif Randevuları <span class="badge" id="badgeRandevu"></span></button>
+      <button class="side-link" data-tab="mesajlar">✉️ Mesajlar <span class="badge" id="badgeMesaj"></span></button>
+    </nav>
+    <div class="side-bottom">
+      <a href="/" target="_blank" class="side-link">🌐 Siteyi Görüntüle</a>
+      <button class="side-link" id="logoutBtn">🚪 Çıkış</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Genel -->
+    <section class="tab active" id="tab-genel">
+      <h2>Genel Ayarlar</h2>
+
+      <div class="card">
+        <h3>📢 Kayan Yazı / Duyuru</h3>
+        <p class="hint">Sitenin en üstünde kayan duyuru metni. Boş bırakırsanız şerit gizlenir.</p>
+        <textarea id="tickerInput" rows="3" maxlength="500" placeholder="Duyuru metni..."></textarea>
+        <button class="btn btn-primary" id="saveTicker">Kaydet</button>
+      </div>
+
+      <div class="card">
+        <h3>🖼️ Hero Görseli</h3>
+        <p class="hint">Ana sayfanın üst bölümünde görünen büyük görsel. Önerilen: yatay, en az 1600px genişlik.</p>
+        <img id="heroPreview" class="hero-preview" src="" alt="Hero görseli">
+        <label class="file-btn">📤 Yeni Görsel Seç<input type="file" id="heroFile" accept="image/*" hidden></label>
+        <button class="btn btn-primary" id="saveHero" disabled>Görseli Yükle</button>
+      </div>
+
+      <div class="card">
+        <h3>🔒 Şifre Değiştir</h3>
+        <input type="password" id="newPassword" minlength="6" maxlength="60" placeholder="Yeni şifre (en az 6 karakter)" autocomplete="new-password">
+        <button class="btn btn-primary" id="savePassword">Şifreyi Güncelle</button>
+      </div>
+    </section>
+
+    <!-- Projeler -->
+    <section class="tab" id="tab-projeler">
+      <div class="tab-head"><h2>Projeler</h2><button class="btn btn-primary" id="newProject">+ Yeni Proje</button></div>
+      <div id="projectList" class="item-list"></div>
+    </section>
+
+    <!-- Hizmetler -->
+    <section class="tab" id="tab-hizmetler">
+      <div class="tab-head"><h2>Hizmetler</h2><button class="btn btn-primary" id="newService">+ Yeni Hizmet</button></div>
+      <div id="serviceList" class="item-list"></div>
+    </section>
+
+    <!-- Randevular -->
+    <section class="tab" id="tab-randevular">
+      <h2>Keşif Randevu Talepleri</h2>
+      <div id="appointmentList" class="inbox"></div>
+    </section>
+
+    <!-- Mesajlar -->
+    <section class="tab" id="tab-mesajlar">
+      <h2>İletişim Mesajları</h2>
+      <div id="messageList" class="inbox"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ═══ Proje düzenleme modalı ═══ -->
+<div class="modal-backdrop" id="projectModal">
+  <form class="modal" id="projectForm">
+    <button type="button" class="modal-close" data-close-modal>✕</button>
+    <h3 id="projectFormTitle">Yeni Proje</h3>
+    <label>Proje Başlığı *<input type="text" id="pfTitle" required maxlength="120" placeholder="Örn: Yalıkavak Villa Yenileme"></label>
+    <label>Konum<input type="text" id="pfLocation" maxlength="120" placeholder="Örn: Yalıkavak, Bodrum"></label>
+    <label>Proje Bilgileri<textarea id="pfDesc" rows="4" maxlength="2000" placeholder="Projede yapılan işler..."></textarea></label>
+    <label>Görseller</label>
+    <div class="pf-images" id="pfImages"></div>
+    <label class="file-btn">📤 Görsel Ekle<input type="file" id="pfFile" accept="image/*" multiple hidden></label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Vazgeç</button>
+      <button type="submit" class="btn btn-primary">Kaydet</button>
+    </div>
+    <p class="form-status" id="projectFormStatus"></p>
+  </form>
+</div>
+
+<!-- ═══ Hizmet düzenleme modalı ═══ -->
+<div class="modal-backdrop" id="serviceModal">
+  <form class="modal modal-sm" id="serviceForm">
+    <button type="button" class="modal-close" data-close-modal>✕</button>
+    <h3 id="serviceFormTitle">Yeni Hizmet</h3>
+    <label>Hizmet Adı *<input type="text" id="sfTitle" required maxlength="120" placeholder="Örn: Villa Tadilatı"></label>
+    <label>Açıklama<textarea id="sfDesc" rows="3" maxlength="500" placeholder="Kısa açıklama..."></textarea></label>
+    <label>İkon</label>
+    <div class="icon-picker" id="sfIcons"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Vazgeç</button>
+      <button type="submit" class="btn btn-primary">Kaydet</button>
+    </div>
+    <p class="form-status" id="serviceFormStatus"></p>
+  </form>
+</div>
+
+<script src="/admin/admin.js"></script>
+</body>
+</html>

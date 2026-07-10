@@ -1,0 +1,15 @@
+# Çalışma zamanı verisi (sunucu ilk açılışta yeniden oluşturur)
+data/db.json
+data/db.json.tmp
+
+# Kullanıcı yüklemeleri — seed görselleri hariç
+uploads/*
+!uploads/seed-*.svg
+
+# Python
+__pycache__/
+*.pyc
+
+# Sistem
+.DS_Store
+*.log
