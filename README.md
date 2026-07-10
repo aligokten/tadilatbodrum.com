@@ -11,7 +11,7 @@ python3 server.py 8080     # farklı port
 
 - **Site:** http://localhost:8000
 - **Admin paneli:** http://localhost:8000/admin
-- **Varsayılan admin şifresi:** `tadilat2026` → İlk girişte *Genel Ayarlar → Şifre Değiştir* ile değiştirin!
+- **Giriş:** kullanıcı adı `admin` · şifre `exalmc11` → İlk girişte *Genel Ayarlar → Şifre Değiştir* ile değiştirin!
 
 ## Özellikler
 

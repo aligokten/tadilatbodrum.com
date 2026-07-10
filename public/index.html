@@ -26,6 +26,7 @@
       <a href="#hizmetler">Hizmetlerimiz</a>
       <a href="#surec">Süreç</a>
       <a href="#projeler">Projeler</a>
+      <a href="#yorumlar">Yorumlar</a>
       <a href="#hakkimizda">Hakkımızda</a>
       <a href="#iletisim">İletişim</a>
       <button class="btn btn-primary btn-sm" data-open-kesif>Ücretsiz Keşif
@@ -49,11 +50,9 @@
       </span>
       <h1 class="hero-title">
         <span>Tadilat</span>
-        <span class="title-chip" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6"/><path d="M14 10h4M16 10v4"/></svg>
-        </span>
         <span>Bodrum</span>
       </h1>
+      <p class="hero-tagline">Bodrum'daki eviniz için profesyonel tadilat çözümleri</p>
       <p class="hero-sub">Villa tadilatından anahtar teslim renovasyona; tasarım ve uygulama gücümüzle yaşam alanlarınıza değer katıyoruz.</p>
       <div class="hero-cta">
         <button class="btn btn-primary btn-lg" data-open-kesif>
@@ -145,6 +144,18 @@
     </button>
   </div>
   <div class="car-dots" id="carDots"></div>
+</section>
+
+<!-- ═══ Müşteri Yorumları ═══ -->
+<section class="section" id="yorumlar">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="section-tag">Müşteri Yorumları</span>
+      <h2>Müşterilerimiz Ne Diyor?</h2>
+      <p>Tamamladığımız projelerin ardından müşterilerimizin paylaştığı deneyimler.</p>
+    </div>
+    <div class="reviews-grid" id="reviewsGrid"></div>
+  </div>
 </section>
 
 <!-- ═══ Hakkımızda ═══ -->
@@ -278,7 +289,13 @@
   </div>
   <div class="footer-bottom">
     <div class="container">
-      <p>© <span id="year"></span> TadilatBodrum.com — Bir <a href="https://www.saggplus.com" target="_blank" rel="noopener"><strong>SAGG Plus</strong></a> kuruluşudur. Tüm hakları saklıdır.</p>
+      <p>© <span id="year"></span> TadilatBodrum.com — Bir <a href="https://www.saggplus.com" target="_blank" rel="noopener"><strong>SAGG Plus</strong></a> kuruluşudur. Tüm hakları saklıdır.
+        <span class="footer-sep">•</span>
+        <a href="/admin" class="footer-admin">
+          <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3M12 15v2"/></svg>
+          Yönetim Paneli
+        </a>
+      </p>
     </div>
   </div>
 </footer>

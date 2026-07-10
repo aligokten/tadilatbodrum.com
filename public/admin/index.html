@@ -15,7 +15,8 @@
   <form class="login-card" id="loginForm">
     <img src="/assets/logo.png" alt="TadilatBodrum.com">
     <h1>Yönetim Paneli</h1>
-    <label>Şifre<input type="password" id="loginPassword" required autocomplete="current-password" placeholder="Admin şifresi"></label>
+    <label>Kullanıcı Adı<input type="text" id="loginUser" required autocomplete="username" placeholder="Kullanıcı adı"></label>
+    <label>Şifre<input type="password" id="loginPassword" required autocomplete="current-password" placeholder="Şifre"></label>
     <button class="btn btn-primary" type="submit">Giriş Yap</button>
     <p class="form-status" id="loginStatus"></p>
   </form>
@@ -29,6 +30,7 @@
       <button class="side-link active" data-tab="genel">⚙️ Genel Ayarlar</button>
       <button class="side-link" data-tab="projeler">🏗️ Projeler</button>
       <button class="side-link" data-tab="hizmetler">🛠️ Hizmetler</button>
+      <button class="side-link" data-tab="yorumlar">⭐ Müşteri Yorumları</button>
       <button class="side-link" data-tab="randevular">📅 Keşif Randevuları <span class="badge" id="badgeRandevu"></span></button>
       <button class="side-link" data-tab="mesajlar">✉️ Mesajlar <span class="badge" id="badgeMesaj"></span></button>
     </nav>
@@ -75,6 +77,12 @@
     <section class="tab" id="tab-hizmetler">
       <div class="tab-head"><h2>Hizmetler</h2><button class="btn btn-primary" id="newService">+ Yeni Hizmet</button></div>
       <div id="serviceList" class="item-list"></div>
+    </section>
+
+    <!-- Yorumlar -->
+    <section class="tab" id="tab-yorumlar">
+      <div class="tab-head"><h2>Müşteri Yorumları</h2><button class="btn btn-primary" id="newReview">+ Yeni Yorum</button></div>
+      <div id="reviewList" class="item-list"></div>
     </section>
 
     <!-- Randevular -->
@@ -124,6 +132,31 @@
       <button type="submit" class="btn btn-primary">Kaydet</button>
     </div>
     <p class="form-status" id="serviceFormStatus"></p>
+  </form>
+</div>
+
+<!-- ═══ Yorum düzenleme modalı ═══ -->
+<div class="modal-backdrop" id="reviewModal">
+  <form class="modal modal-sm" id="reviewForm">
+    <button type="button" class="modal-close" data-close-modal>✕</button>
+    <h3 id="reviewFormTitle">Yeni Yorum</h3>
+    <label>Müşteri Adı *<input type="text" id="rfName" required maxlength="80" placeholder="Örn: Ayşe K."></label>
+    <label>Konum / Proje<input type="text" id="rfLocation" maxlength="80" placeholder="Örn: Bitez, Bodrum"></label>
+    <label>Puan
+      <select id="rfRating">
+        <option value="5">★★★★★ (5)</option>
+        <option value="4">★★★★☆ (4)</option>
+        <option value="3">★★★☆☆ (3)</option>
+        <option value="2">★★☆☆☆ (2)</option>
+        <option value="1">★☆☆☆☆ (1)</option>
+      </select>
+    </label>
+    <label>Yorum Metni *<textarea id="rfText" rows="4" maxlength="800" placeholder="Müşterinin yorumu..."></textarea></label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Vazgeç</button>
+      <button type="submit" class="btn btn-primary">Kaydet</button>
+    </div>
+    <p class="form-status" id="reviewFormStatus"></p>
   </form>
 </div>
 

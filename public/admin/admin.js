@@ -51,7 +51,7 @@ $('loginForm').addEventListener('submit', async e => {
   const st = $('loginStatus');
   st.textContent = 'Giriş yapılıyor…'; st.className = 'form-status';
   try {
-    const j = await api('POST', '/api/admin/login', { password: $('loginPassword').value });
+    const j = await api('POST', '/api/admin/login', { username: $('loginUser').value, password: $('loginPassword').value });
     TOKEN = j.token;
     sessionStorage.setItem('tb_token', TOKEN);
     await enterPanel();
@@ -85,7 +85,7 @@ document.querySelectorAll('.side-link[data-tab]').forEach(btn => {
 function renderAll() {
   $('tickerInput').value = DB.ticker || '';
   $('heroPreview').src = DB.heroImage || '';
-  renderProjects(); renderServices(); renderInbox('appointments'); renderInbox('messages'); renderBadges();
+  renderProjects(); renderServices(); renderReviews(); renderInbox('appointments'); renderInbox('messages'); renderBadges();
 }
 
 function renderBadges() {
@@ -259,6 +259,65 @@ $('serviceForm').addEventListener('submit', async e => {
     }
     $('serviceModal').classList.remove('open');
     renderServices();
+  } catch (err) { st.textContent = '⚠ ' + err.message; st.className = 'form-status err'; }
+});
+
+/* ═══ Müşteri Yorumları ═══ */
+let editingReview = null;
+const stars = n => '★★★★★☆☆☆☆☆'.slice(5 - Math.max(1, Math.min(5, +n || 5)), 10 - Math.max(1, Math.min(5, +n || 5)));
+
+function renderReviews() {
+  const el = $('reviewList');
+  const list = DB.reviews || (DB.reviews = []);
+  if (!list.length) { el.innerHTML = '<div class="empty">Henüz yorum eklenmemiş.</div>'; return; }
+  el.innerHTML = list.map(r => `
+    <div class="item">
+      <div class="rev-badge">${esc((r.name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="item-body">
+        <h4>${esc(r.name)} <span class="rev-rate">${'★'.repeat(Math.max(1, Math.min(5, r.rating || 5)))}</span></h4>
+        <p>${esc(r.location || '')}${r.location ? ' — ' : ''}${esc(r.text || '')}</p>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-ghost btn-xs" data-edit="${r.id}">Düzenle</button>
+        <button class="btn btn-danger btn-xs" data-del="${r.id}">Sil</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openReviewForm(DB.reviews.find(r => r.id === b.dataset.edit)));
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Bu yorum silinsin mi?')) return;
+    await api('DELETE', '/api/admin/reviews/' + b.dataset.del);
+    DB.reviews = DB.reviews.filter(r => r.id !== b.dataset.del);
+    renderReviews();
+  });
+}
+
+function openReviewForm(rev) {
+  editingReview = rev || null;
+  $('reviewFormTitle').textContent = rev ? 'Yorumu Düzenle' : 'Yeni Yorum';
+  $('rfName').value = rev ? rev.name : '';
+  $('rfLocation').value = rev ? (rev.location || '') : '';
+  $('rfRating').value = rev ? String(rev.rating || 5) : '5';
+  $('rfText').value = rev ? (rev.text || '') : '';
+  $('reviewFormStatus').textContent = '';
+  $('reviewModal').classList.add('open');
+}
+$('newReview').onclick = () => openReviewForm(null);
+
+$('reviewForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const st = $('reviewFormStatus');
+  st.textContent = 'Kaydediliyor…'; st.className = 'form-status';
+  const payload = { name: $('rfName').value, location: $('rfLocation').value, rating: +$('rfRating').value, text: $('rfText').value };
+  try {
+    if (editingReview) {
+      const j = await api('PUT', '/api/admin/reviews/' + editingReview.id, payload);
+      Object.assign(editingReview, j);
+    } else {
+      const j = await api('POST', '/api/admin/reviews', payload);
+      DB.reviews.unshift(j);
+    }
+    $('reviewModal').classList.remove('open');
+    renderReviews();
   } catch (err) { st.textContent = '⚠ ' + err.message; st.className = 'form-status err'; }
 });
 

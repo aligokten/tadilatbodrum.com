@@ -46,6 +46,14 @@ const FALLBACK_SITE = {
       desc: "Yazlık dairenin komple renovasyonu; zemin, elektrik-su tesisatı, mutfak dolapları ve boya işleri şeffaf süreç yönetimiyle teslim edildi.",
       images: ["uploads/seed-gulluk.svg"] },
   ],
+  reviews: [
+    { name: "Ayşe K.", location: "Bitez, Bodrum", rating: 5,
+      text: "Villamızın tadilatını baştan sona kusursuz yönettiler. Söz verilen tarihte, temiz ve kaliteli bir işçilikle teslim aldık. Kesinlikle tavsiye ederim." },
+    { name: "Mehmet A.", location: "Ören, Milas", rating: 5,
+      text: "Banyo ve mutfak yenilemesi yaptırdık. Şeffaf fiyatlandırma ve düzenli bilgilendirme çok iyiydi. İşçilik gerçekten kaliteli." },
+    { name: "Zeynep T.", location: "Güllük, Milas", rating: 5,
+      text: "Yazlık dairemiz adeta yeniden doğdu. Ekip son derece profesyonel ve titizdi. Sürecin her aşamasında yanımızdaydılar." },
+  ],
 };
 
 let SITE = { projects: [], services: [] };
@@ -83,8 +91,33 @@ async function loadSite() {
       <p>${esc(s.desc)}</p>
     </div>`).join('');
 
+  renderReviews();
   buildCarousel();
   observeReveals();
+}
+
+/* ── müşteri yorumları ── */
+function starRow(n) {
+  n = Math.max(1, Math.min(5, +n || 5));
+  let s = '';
+  for (let i = 1; i <= 5; i++) {
+    s += `<svg class="star ${i <= n ? 'on' : ''}" viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.2 1 5.9L12 16.9 6.8 19.4l1-5.9L3.5 9.2l5.9-.9z"/></svg>`;
+  }
+  return s;
+}
+function renderReviews() {
+  const el = document.getElementById('reviewsGrid');
+  if (!el) return;
+  const list = SITE.reviews || [];
+  el.innerHTML = list.map(r => `
+    <figure class="review-card glass reveal">
+      <div class="review-stars">${starRow(r.rating)}</div>
+      <blockquote>“${esc(r.text)}”</blockquote>
+      <figcaption>
+        <span class="rev-avatar">${esc((r.name || '?').trim().charAt(0).toUpperCase())}</span>
+        <span class="rev-meta"><strong>${esc(r.name)}</strong><small>${esc(r.location || '')}</small></span>
+      </figcaption>
+    </figure>`).join('');
 }
 
 /* ── scroll reveal ── */

@@ -4,7 +4,7 @@ TadilatBodrum.com — web sitesi + admin paneli sunucusu
 Saf Python (stdlib), harici bağımlılık yok.
 
 Çalıştırma:  python3 server.py  [port]   (varsayılan 8000)
-Admin panel: http://localhost:8000/admin  (varsayılan şifre: tadilat2026 — admin panelinden değiştirin)
+Admin panel: http://localhost:8000/admin  (kullanıcı: admin  şifre: exalmc11 — admin panelinden değiştirin)
 """
 import base64
 import hashlib
@@ -24,7 +24,8 @@ PUBLIC = os.path.join(ROOT, "public")
 UPLOADS = os.path.join(ROOT, "uploads")
 DATA_FILE = os.path.join(ROOT, "data", "db.json")
 
-DEFAULT_PASSWORD = "tadilat2026"
+DEFAULT_USER = "admin"
+DEFAULT_PASSWORD = "exalmc11"
 
 _lock = threading.Lock()
 _tokens = {}  # token -> expiry epoch
@@ -33,6 +34,7 @@ _tokens = {}  # token -> expiry epoch
 
 def _seed_db():
     return {
+        "adminUser": DEFAULT_USER,
         "adminPasswordHash": hashlib.sha256(DEFAULT_PASSWORD.encode()).hexdigest(),
         "ticker": "Bodrum ve Milas genelinde ücretsiz keşif! Hemen arayın: 0 541 348 88 33  •  Yaz sezonu öncesi tadilat randevularınızı bugünden planlayın.",
         "heroImage": "/assets/hero.jpg",
@@ -54,6 +56,14 @@ def _seed_db():
             {"id": "p3", "title": "Güllük Daire Yenileme", "location": "Güllük, Milas",
              "desc": "Yazlık dairenin komple renovasyonu; zemin, elektrik-su tesisatı, mutfak dolapları ve boya işleri şeffaf süreç yönetimiyle teslim edildi.",
              "images": ["/uploads/seed-gulluk.svg"]},
+        ],
+        "reviews": [
+            {"id": "r1", "name": "Ayşe K.", "location": "Bitez, Bodrum", "rating": 5,
+             "text": "Villamızın tadilatını baştan sona kusursuz yönettiler. Söz verilen tarihte, temiz ve kaliteli bir işçilikle teslim aldık. Kesinlikle tavsiye ederim."},
+            {"id": "r2", "name": "Mehmet A.", "location": "Ören, Milas", "rating": 5,
+             "text": "Banyo ve mutfak yenilemesi yaptırdık. Şeffaf fiyatlandırma ve düzenli bilgilendirme çok iyiydi. İşçilik gerçekten kaliteli."},
+            {"id": "r3", "name": "Zeynep T.", "location": "Güllük, Milas", "rating": 5,
+             "text": "Yazlık dairemiz adeta yeniden doğdu. Ekip son derece profesyonel ve titizdi. Sürecin her aşamasında yanımızdaydılar."},
         ],
         "appointments": [],
         "messages": [],
@@ -190,13 +200,14 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/api/site":
                 db = load_db()
                 return self._json({"ticker": db["ticker"], "heroImage": db["heroImage"],
-                                   "services": db["services"], "projects": db["projects"]})
+                                   "services": db["services"], "projects": db["projects"],
+                                   "reviews": db.get("reviews", [])})
             if p == "/api/admin/data":
                 if not self._auth_ok():
                     return self._err(401, "Yetkisiz")
                 db = load_db()
-                return self._json({k: db[k] for k in
-                                   ("ticker", "heroImage", "services", "projects", "appointments", "messages")})
+                return self._json({k: db.get(k, [] if k != "ticker" else "") for k in
+                                   ("ticker", "heroImage", "services", "projects", "reviews", "appointments", "messages")})
             return self._serve_static(p)
         except Exception as e:
             self._err(500, str(e))
@@ -218,10 +229,13 @@ class Handler(BaseHTTPRequestHandler):
                                        ["name", "phone", "email", "message"], need=["name", "message"])
             if p == "/api/admin/login":
                 db = load_db()
+                user = (body.get("username") or "").strip()
                 pw = (body.get("password") or "").encode()
-                if hashlib.sha256(pw).hexdigest() != db["adminPasswordHash"]:
+                ok_user = user == db.get("adminUser", DEFAULT_USER)
+                ok_pw = hashlib.sha256(pw).hexdigest() == db["adminPasswordHash"]
+                if not (ok_user and ok_pw):
                     time.sleep(0.7)  # kaba kuvvet yavaşlatma
-                    return self._err(401, "Şifre hatalı")
+                    return self._err(401, "Kullanıcı adı veya şifre hatalı")
                 tok = secrets.token_urlsafe(32)
                 _tokens[tok] = time.time() + 8 * 3600
                 return self._json({"token": tok})
@@ -264,6 +278,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self._err(400, "Başlık gerekli")
                 db["services"].append(svc)
                 save_db(db); return self._json(svc)
+
+            if p == "/api/admin/reviews":
+                rev = {"id": new_id("r"), "name": str(body.get("name", ""))[:80],
+                       "location": str(body.get("location", ""))[:80],
+                       "rating": max(1, min(5, int(body.get("rating", 5) or 5))),
+                       "text": str(body.get("text", ""))[:800]}
+                if not rev["name"] or not rev["text"]:
+                    return self._err(400, "İsim ve yorum metni gerekli")
+                db.setdefault("reviews", []).insert(0, rev)
+                save_db(db); return self._json(rev)
 
             return self._err(404, "Bulunamadı")
         except Exception as e:
@@ -312,6 +336,17 @@ class Handler(BaseHTTPRequestHandler):
                         save_db(db); return self._json(svc)
                 return self._err(404, "Hizmet bulunamadı")
 
+            m = re.match(r"^/api/admin/reviews/([\w-]+)$", p)
+            if m:
+                for rev in db.get("reviews", []):
+                    if rev["id"] == m.group(1):
+                        rev["name"] = str(body.get("name", rev["name"]))[:80]
+                        rev["location"] = str(body.get("location", rev.get("location", "")))[:80]
+                        rev["rating"] = max(1, min(5, int(body.get("rating", rev.get("rating", 5)) or 5)))
+                        rev["text"] = str(body.get("text", rev["text"]))[:800]
+                        save_db(db); return self._json(rev)
+                return self._err(404, "Yorum bulunamadı")
+
             m = re.match(r"^/api/admin/(appointments|messages)/([\w-]+)/read$", p)
             if m:
                 for rec in db[m.group(1)]:
@@ -331,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._auth_ok():
                 return self._err(401, "Yetkisiz")
             db = load_db()
-            m = re.match(r"^/api/admin/(projects|services|appointments|messages)/([\w-]+)$", p)
+            m = re.match(r"^/api/admin/(projects|services|reviews|appointments|messages)/([\w-]+)$", p)
             if m:
                 key, rid = m.group(1), m.group(2)
                 before = len(db[key])
@@ -349,7 +384,7 @@ def main():
     load_db()  # ilk çalıştırmada seed
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"TadilatBodrum sitesi çalışıyor →  http://localhost:{port}")
-    print(f"Admin paneli               →  http://localhost:{port}/admin  (varsayılan şifre: {DEFAULT_PASSWORD})")
+    print(f"Admin paneli               →  http://localhost:{port}/admin  (kullanıcı: {DEFAULT_USER}  şifre: {DEFAULT_PASSWORD})")
     srv.serve_forever()
 
 

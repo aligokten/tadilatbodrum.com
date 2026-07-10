@@ -57,5 +57,5 @@ server {
 Sonra `certbot --nginx -d tadilatbodrum.com -d www.tadilatbodrum.com` ile HTTPS.
 Alan adının DNS'ini bu sunucunun IP'sine yönlendirmeyi unutmayın (şu an Wix'te).
 
-- İlk girişte admin şifresini (`tadilat2026`) mutlaka değiştirin.
+- İlk girişte admin şifresini (`exalmc11`) mutlaka değiştirin.
 - `data/` ve `uploads/` klasörlerini yedekleyin — tüm içerik oradadır.
