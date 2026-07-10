@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="600" viewBox="0 0 760 600">
+  <g fill="none" stroke="#112F5B" stroke-opacity="0.06" stroke-width="2.4"
+     stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- 1) İskeleli ev + çatı + kapı-pencere -->
+    <g>
+      <path d="M70 250 L70 150 L140 100 L210 150 L210 250"/>
+      <path d="M70 150 L140 100 L210 150"/>
+      <rect x="120" y="185" width="40" height="65"/>
+      <rect x="95" y="165" width="26" height="26"/>
+      <rect x="159" y="165" width="26" height="26"/>
+      <!-- iskele -->
+      <path d="M58 258 L222 258 M58 205 L222 205 M58 152 L222 152"/>
+      <path d="M78 258 L78 130 M202 258 L202 130 M140 258 L140 130"/>
+      <!-- merdiven -->
+      <path d="M225 258 L245 150 M235 258 L255 150"/>
+      <path d="M228 240 L248 240 M230 215 L250 215 M232 190 L252 190 M234 165 L254 165"/>
+    </g>
+
+    <!-- 2) Kule vinç -->
+    <g>
+      <path d="M470 330 L470 90"/>
+      <path d="M455 330 L470 300 L485 330 Z"/>
+      <path d="M470 300 L455 330 M470 300 L485 330 M462 250 L470 300 L478 250"/>
+      <path d="M470 90 L360 120 M470 90 L580 120"/>
+      <path d="M470 105 L385 128 M470 105 L560 128"/>
+      <path d="M370 118 L378 90 L470 90 M570 118 L562 90"/>
+      <rect x="352" y="118" width="26" height="22"/> <!-- karşı ağırlık -->
+      <path d="M545 122 L545 150 M540 150 L550 150 L547 168 L543 168 Z"/> <!-- kanca -->
+    </g>
+
+    <!-- 3) Apartman bloğu + pencere ızgarası -->
+    <g>
+      <rect x="610" y="200" width="110" height="230"/>
+      <path d="M628 230 h74 M628 270 h74 M628 310 h74 M628 350 h74 M628 390 h74"/>
+      <path d="M646 210 v210 M665 210 v210 M684 210 v210"/>
+      <path d="M600 430 h130"/>
+    </g>
+
+    <!-- 4) Boya rulosu -->
+    <g>
+      <rect x="120" y="430" width="90" height="30" rx="6"/>
+      <path d="M210 445 h26 v10 h-16 v70"/>
+      <path d="M212 512 q8 8 16 0"/>
+    </g>
+
+    <!-- 5) Merdiven + kova -->
+    <g>
+      <path d="M300 560 L322 440 M320 560 L342 440"/>
+      <path d="M305 535 L336 535 M309 505 L340 505 M313 475 L344 475"/>
+      <path d="M380 500 L372 560 L418 560 L410 500 Z"/>
+      <path d="M378 500 q17 -14 34 0"/>
+    </g>
+
+    <!-- 6) İnşaat halindeki bina (kolon-kiriş iskeleti) -->
+    <g>
+      <path d="M540 560 L540 430 L680 430 L680 560"/>
+      <path d="M540 495 L680 495 M540 460 L680 460"/>
+      <path d="M585 430 L585 560 M632 430 L632 560"/>
+      <path d="M540 430 L560 410 L700 410 L680 430"/>
+    </g>
+
+    <!-- 7) El arabası -->
+    <g>
+      <path d="M60 520 L110 520 L120 545 L70 545 Z"/>
+      <path d="M110 545 L135 555 M60 533 L40 545"/>
+      <circle cx="92" cy="565" r="12"/>
+    </g>
+
+  </g>
+</svg>
