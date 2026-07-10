@@ -1,20 +1,21 @@
-/* ═══ Firebase Web Yapılandırması ═══
- * Bu değerler Firebase Console → Proje Ayarları → "Uygulamalarınız" (Web) → SDK kurulumu
- * bölümündeki config nesnesinden gelir. GÜVENLİDİR — bu anahtarlar herkese açıktır,
- * gerçek koruma Firestore/Storage güvenlik kurallarıyla sağlanır.
- *
- * saggplus Firebase projesindeki değerlerle DOLDURUN (ya da bana yapıştırın, ben dolduracağım).
+/* ═══ Firebase Web Yapılandırması (saggplus projesi) ═══
+ * Bu anahtarlar herkese açıktır ve paylaşılması güvenlidir; asıl koruma
+ * Firestore/Storage güvenlik kurallarında sağlanır.
  */
 export const firebaseConfig = {
-  apiKey:            "BURAYA_API_KEY",
-  authDomain:        "BURAYA_PROJE.firebaseapp.com",
-  projectId:         "BURAYA_PROJE_ID",
-  storageBucket:     "BURAYA_PROJE.appspot.com",
-  messagingSenderId: "BURAYA_SENDER_ID",
-  appId:             "BURAYA_APP_ID",
+  apiKey:            "AIzaSyBF5tRelmpnKaWtlZBeqvmYITapH0kyqw0",
+  authDomain:        "saggplus.firebaseapp.com",
+  projectId:         "saggplus",
+  storageBucket:     "saggplus.firebasestorage.app",
+  messagingSenderId: "808666491811",
+  appId:             "1:808666491811:web:11de4983c6f7516cf70816",
+  measurementId:     "G-ZZ59ZX0GKH",
 };
 
-/* Admin girişinde kullanıcı adının tamamlanacağı sabit alan adı.
- * "admin" yazınca Firebase Auth'a "admin@tadilatbodrum.com" olarak gider.
- * Firebase Auth'ta bu e-posta ile bir kullanıcı oluşturun (şifre: exalmc11). */
+/* Bu sitenin tüm verileri Firestore'da sites/{SITE_ID}/... altında izole tutulur,
+ * böylece saggplus'ın kendi koleksiyonlarıyla karışmaz. */
+export const SITE_ID = "tadilatbodrum";
+
+/* Admin girişinde kullanıcı adının tamamlanacağı alan adı:
+ * "admin" → "admin@tadilatbodrum.com" (Firebase Auth'ta bu kullanıcıyı oluşturun). */
 export const ADMIN_EMAIL_DOMAIN = "tadilatbodrum.com";

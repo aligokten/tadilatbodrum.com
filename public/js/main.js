@@ -1,9 +1,14 @@
 /* ═══ TadilatBodrum.com — ana sayfa (Firebase / Firestore) ═══ */
 import { db } from "./firebase-init.js";
+import { SITE_ID } from "./firebase-config.js";
 import {
   collection, getDocs, getDoc, doc, query, orderBy,
   addDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* tüm veriler sites/{SITE_ID}/... altında izole */
+const col = name => collection(db, 'sites', SITE_ID, name);
+const cfgRef = () => doc(db, 'sites', SITE_ID);
 
 /* Tek renk (currentColor) 2D çizgi ikon seti */
 const ICONS = {
@@ -64,14 +69,14 @@ let SITE = { projects: [], services: [], reviews: [] };
 let STATIC_MODE = false;
 
 async function fetchCollection(name) {
-  const snap = await getDocs(query(collection(db, name), orderBy('order')));
+  const snap = await getDocs(query(col(name), orderBy('order')));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 /* ── veri yükle ── */
 async function loadSite() {
   try {
-    const cfgSnap = await getDoc(doc(db, 'site', 'config'));
+    const cfgSnap = await getDoc(cfgRef());
     const cfg = cfgSnap.exists() ? cfgSnap.data() : {};
     const [services, projects, reviews] = await Promise.all([
       fetchCollection('services'), fetchCollection('projects'), fetchCollection('reviews'),
@@ -292,7 +297,7 @@ async function submitForm(form, coll, statusEl, okMsg) {
     return;
   }
   try {
-    await addDoc(collection(db, coll), { ...data, read: false, createdAt: serverTimestamp() });
+    await addDoc(col(coll), { ...data, read: false, createdAt: serverTimestamp() });
     statusEl.textContent = okMsg;
     statusEl.className = 'form-status ok';
     form.reset();

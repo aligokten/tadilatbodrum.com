@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "SITE_ID_BURAYA",
+    "site": "tadilatbodrum",
     "public": "public",
     "ignore": [
       "firebase.json",
@@ -17,12 +17,5 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
       }
     ]
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "storage": {
-    "rules": "storage.rules"
   }
 }

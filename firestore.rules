@@ -1,33 +1,35 @@
 rules_version = '2';
+
+// ⚠️ DİKKAT: Firestore, saggplus projesiyle PAYLAŞIMLIDIR (tek veritabanı).
+// Bu dosyayı OLDUĞU GİBİ deploy ETMEYİN — saggplus'ın mevcut kurallarını siler!
+// Bunun yerine aşağıdaki  match /sites/tadilatbodrum { ... }  bloğunu ve iki
+// yardımcı fonksiyonu, saggplus'ın kendi firestore.rules dosyasındaki
+// "match /databases/{database}/documents {" bloğunun İÇİNE EKLEYİN
+// (ya da Firebase Console → Firestore → Rules'ta yapıştırıp yayınlayın).
+// ADMIN_UID_BURAYA yerine admin kullanıcısının UID'sini yazın.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Admin = yalnızca aşağıdaki UID'ye sahip oturum. Admin kullanıcısını
-    // Firebase Auth'ta oluşturduktan sonra UID'sini buraya yazın.
-    function isAdmin() {
+    function isTBAdmin() {
       return request.auth != null && request.auth.uid == 'ADMIN_UID_BURAYA';
     }
-
-    // Site içeriği: herkes okur, yalnızca admin yazar
-    match /site/{doc}      { allow read: if true;  allow write: if isAdmin(); }
-    match /services/{id}   { allow read: if true;  allow write: if isAdmin(); }
-    match /projects/{id}   { allow read: if true;  allow write: if isAdmin(); }
-    match /reviews/{id}    { allow read: if true;  allow write: if isAdmin(); }
-
-    // Formdan gelen kayıtlar: herkes OLUŞTURABİLİR (temel doğrulama ile),
-    // yalnızca admin okuyabilir/güncelleyebilir/silebilir
-    function validLead() {
+    function tbValidLead() {
       return request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() < 200;
     }
-    match /appointments/{id} {
-      allow create: if validLead();
-      allow read, update, delete: if isAdmin();
-    }
-    match /messages/{id} {
-      allow create: if validLead();
-      allow read, update, delete: if isAdmin();
+
+    // ── tadilatbodrum sitesinin tüm verileri (saggplus'tan izole) ──
+    match /sites/tadilatbodrum {
+      allow read: if true;
+      allow write: if isTBAdmin();
+
+      match /services/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
+      match /projects/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
+      match /reviews/{id}      { allow read: if true;          allow write: if isTBAdmin(); }
+      match /appointments/{id} { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
+      match /messages/{id}     { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
     }
   }
 }

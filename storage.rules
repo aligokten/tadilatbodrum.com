@@ -1,10 +1,18 @@
 rules_version = '2';
+
+// ⚠️ DİKKAT: Storage, saggplus projesiyle PAYLAŞIMLIDIR.
+// Bu dosyayı olduğu gibi deploy ETMEYİN. Aşağıdaki
+//   match /tadilatbodrum/{allPaths=**} { ... }
+// bloğunu saggplus'ın kendi storage.rules dosyasındaki
+// "match /b/{bucket}/o {" bloğunun İÇİNE EKLEYİN (ya da Console'da yapıştırın).
+// ADMIN_UID_BURAYA yerine admin kullanıcısının UID'sini yazın.
+
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      // Görseller herkese açık okunur (sitede gösterilir)
+
+    // tadilatbodrum yüklemeleri yalnızca tadilatbodrum/ altına
+    match /tadilatbodrum/{allPaths=**} {
       allow read: if true;
-      // Yalnızca admin, 15 MB'a kadar görsel yükleyebilir
       allow write: if request.auth != null
                    && request.auth.uid == 'ADMIN_UID_BURAYA'
                    && request.resource.size < 15 * 1024 * 1024

@@ -1,6 +1,6 @@
 /* ═══ TadilatBodrum.com — admin paneli (Firebase) ═══ */
 import { auth, db, storage } from "/js/firebase-init.js";
-import { firebaseConfig, ADMIN_EMAIL_DOMAIN } from "/js/firebase-config.js";
+import { firebaseConfig, ADMIN_EMAIL_DOMAIN, SITE_ID } from "/js/firebase-config.js";
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -34,6 +34,11 @@ const svgIcon = k => `<svg viewBox="0 0 24 24">${ICONS[k] || ICONS.tools}</svg>`
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
 
+/* tüm veriler sites/{SITE_ID}/... altında izole */
+const col = name => collection(db, 'sites', SITE_ID, name);
+const dref = (name, id) => doc(db, 'sites', SITE_ID, name, id);
+const cfgRef = () => doc(db, 'sites', SITE_ID);
+
 /* yerel bellek — Firestore'dan yüklenen içerik */
 const DB = { config: {}, services: [], projects: [], reviews: [], appointments: [], messages: [] };
 let unsubApp = null, unsubMsg = null;
@@ -41,7 +46,7 @@ let unsubApp = null, unsubMsg = null;
 /* ── görsel yükleme (Storage) ── */
 async function uploadImage(file, folder) {
   const clean = (file.name || 'img').replace(/[^\w.\-]/g, '_');
-  const r = sref(storage, `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${clean}`);
+  const r = sref(storage, `tadilatbodrum/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${clean}`);
   await uploadBytes(r, file);
   return await getDownloadURL(r);
 }
@@ -93,23 +98,23 @@ async function startPanel() {
   // gerçek zamanlı gelen kutuları
   if (unsubApp) unsubApp();
   if (unsubMsg) unsubMsg();
-  unsubApp = onSnapshot(query(collection(db, 'appointments'), orderBy('createdAt', 'desc')), snap => {
+  unsubApp = onSnapshot(query(col('appointments'), orderBy('createdAt', 'desc')), snap => {
     DB.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderInbox('appointments'); renderBadges();
   });
-  unsubMsg = onSnapshot(query(collection(db, 'messages'), orderBy('createdAt', 'desc')), snap => {
+  unsubMsg = onSnapshot(query(col('messages'), orderBy('createdAt', 'desc')), snap => {
     DB.messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderInbox('messages'); renderBadges();
   });
 }
 
 async function fetchColl(name) {
-  const snap = await getDocs(query(collection(db, name), orderBy('order')));
+  const snap = await getDocs(query(col(name), orderBy('order')));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 async function loadContent() {
-  const cfg = await getDoc(doc(db, 'site', 'config'));
+  const cfg = await getDoc(cfgRef());
   DB.config = cfg.exists() ? cfg.data() : {};
   [DB.services, DB.projects, DB.reviews] = await Promise.all([
     fetchColl('services'), fetchColl('projects'), fetchColl('reviews'),
@@ -133,7 +138,7 @@ function toast(btn, msg) {
 
 /* ═══ Genel ayarlar ═══ */
 $('saveTicker').onclick = async () => {
-  try { await setDoc(doc(db, 'site', 'config'), { ticker: $('tickerInput').value }, { merge: true }); toast($('saveTicker'), '✔ Kaydedildi'); }
+  try { await setDoc(cfgRef(), { ticker: $('tickerInput').value }, { merge: true }); toast($('saveTicker'), '✔ Kaydedildi'); }
   catch (e) { alert('Kaydedilemedi: ' + e.message); }
 };
 
@@ -147,7 +152,7 @@ $('saveHero').onclick = async () => {
   $('saveHero').disabled = true;
   try {
     const url = await uploadImage(heroFile, 'hero');
-    await setDoc(doc(db, 'site', 'config'), { heroImage: url }, { merge: true });
+    await setDoc(cfgRef(), { heroImage: url }, { merge: true });
     DB.config.heroImage = url; heroFile = null;
     toast($('saveHero'), '✔ Yüklendi');
   } catch (e) { alert('Yüklenemedi: ' + e.message); $('saveHero').disabled = false; }
@@ -185,7 +190,7 @@ function renderProjects() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProjectForm(DB.projects.find(p => p.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu proje silinsin mi?')) return;
-    await deleteDoc(doc(db, 'projects', b.dataset.del));
+    await deleteDoc(dref('projects', b.dataset.del));
     DB.projects = DB.projects.filter(p => p.id !== b.dataset.del);
     renderProjects();
   });
@@ -232,10 +237,10 @@ $('projectForm').addEventListener('submit', async e => {
   if (!payload.title) { st.textContent = '⚠ Başlık gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingProject) {
-      await updateDoc(doc(db, 'projects', editingProject.id), payload);
+      await updateDoc(dref('projects', editingProject.id), payload);
       Object.assign(editingProject, payload);
     } else {
-      const ref = await addDoc(collection(db, 'projects'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      const ref = await addDoc(col('projects'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
       DB.projects.push({ id: ref.id, ...payload });
     }
     $('projectModal').classList.remove('open');
@@ -262,7 +267,7 @@ function renderServices() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openServiceForm(DB.services.find(s => s.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu hizmet silinsin mi?')) return;
-    await deleteDoc(doc(db, 'services', b.dataset.del));
+    await deleteDoc(dref('services', b.dataset.del));
     DB.services = DB.services.filter(s => s.id !== b.dataset.del);
     renderServices();
   });
@@ -295,10 +300,10 @@ $('serviceForm').addEventListener('submit', async e => {
   if (!payload.title) { st.textContent = '⚠ Başlık gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingService) {
-      await updateDoc(doc(db, 'services', editingService.id), payload);
+      await updateDoc(dref('services', editingService.id), payload);
       Object.assign(editingService, payload);
     } else {
-      const ref = await addDoc(collection(db, 'services'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      const ref = await addDoc(col('services'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
       DB.services.push({ id: ref.id, ...payload });
     }
     $('serviceModal').classList.remove('open');
@@ -327,7 +332,7 @@ function renderReviews() {
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openReviewForm(DB.reviews.find(r => r.id === b.dataset.edit)));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu yorum silinsin mi?')) return;
-    await deleteDoc(doc(db, 'reviews', b.dataset.del));
+    await deleteDoc(dref('reviews', b.dataset.del));
     DB.reviews = DB.reviews.filter(r => r.id !== b.dataset.del);
     renderReviews();
   });
@@ -353,10 +358,10 @@ $('reviewForm').addEventListener('submit', async e => {
   if (!payload.name || !payload.text) { st.textContent = '⚠ İsim ve yorum metni gerekli'; st.className = 'form-status err'; return; }
   try {
     if (editingReview) {
-      await updateDoc(doc(db, 'reviews', editingReview.id), payload);
+      await updateDoc(dref('reviews', editingReview.id), payload);
       Object.assign(editingReview, payload);
     } else {
-      const ref = await addDoc(collection(db, 'reviews'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      const ref = await addDoc(col('reviews'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
       DB.reviews.push({ id: ref.id, ...payload });
     }
     $('reviewModal').classList.remove('open');
@@ -401,10 +406,10 @@ function renderInbox(key) {
     </div>`).join('');
 
   el.querySelectorAll('[data-read]').forEach(b => b.onclick = async () =>
-    updateDoc(doc(db, key, b.dataset.read), { read: true }));
+    updateDoc(dref(key, b.dataset.read), { read: true }));
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Bu kayıt silinsin mi?')) return;
-    await deleteDoc(doc(db, key, b.dataset.del));
+    await deleteDoc(dref(key, b.dataset.del));
   });
 }
 
@@ -447,11 +452,11 @@ $('seedBtn').onclick = async () => {
   if (!confirm('Örnek içerik yüklensin mi? (Sadece boş bölümler doldurulur)')) return;
   $('seedBtn').disabled = true;
   try {
-    if (!DB.config.ticker) await setDoc(doc(db, 'site', 'config'), SEED.config, { merge: true });
+    if (!DB.config.ticker) await setDoc(cfgRef(), SEED.config, { merge: true });
     let t = Date.now();
-    if (!DB.services.length) for (const s of SEED.services) await addDoc(collection(db, 'services'), { ...s, order: t++, createdAt: serverTimestamp() });
-    if (!DB.projects.length) for (const p of SEED.projects) await addDoc(collection(db, 'projects'), { ...p, order: t++, createdAt: serverTimestamp() });
-    if (!DB.reviews.length)  for (const r of SEED.reviews)  await addDoc(collection(db, 'reviews'),  { ...r, order: t++, createdAt: serverTimestamp() });
+    if (!DB.services.length) for (const s of SEED.services) await addDoc(col('services'), { ...s, order: t++, createdAt: serverTimestamp() });
+    if (!DB.projects.length) for (const p of SEED.projects) await addDoc(col('projects'), { ...p, order: t++, createdAt: serverTimestamp() });
+    if (!DB.reviews.length)  for (const r of SEED.reviews)  await addDoc(col('reviews'),  { ...r, order: t++, createdAt: serverTimestamp() });
     await loadContent();
     toast($('seedBtn'), '✔ Yüklendi');
   } catch (e) { alert('Yüklenemedi: ' + e.message); $('seedBtn').disabled = false; }
