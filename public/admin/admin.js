@@ -121,6 +121,11 @@ async function loadContent() {
   ]);
   $('tickerInput').value = DB.config.ticker || '';
   $('heroPreview').src = DB.config.heroImage || '/assets/hero.jpg';
+  $('logoPreview').src = DB.config.logoUrl || '/assets/logo.png';
+  const scalePct = Math.round((DB.config.logoScale || 1) * 100);
+  $('logoScale').value = scalePct;
+  $('logoScaleVal').textContent = scalePct + '%';
+  $('logoPreview').style.transform = `scale(${scalePct / 100})`;
   renderProjects(); renderServices(); renderReviews();
 }
 
@@ -140,6 +145,34 @@ function toast(btn, msg) {
 $('saveTicker').onclick = async () => {
   try { await setDoc(cfgRef(), { ticker: $('tickerInput').value }, { merge: true }); toast($('saveTicker'), '✔ Kaydedildi'); }
   catch (e) { alert('Kaydedilemedi: ' + e.message); }
+};
+
+/* ═══ Logo ═══ */
+let logoFile = null;
+$('logoFile').addEventListener('change', e => {
+  logoFile = e.target.files[0] || null;
+  if (logoFile) {
+    if (logoFile.size > 5 * 1024 * 1024) { alert('Logo 5 MB\'den büyük olamaz'); logoFile = null; e.target.value = ''; return; }
+    $('logoPreview').src = URL.createObjectURL(logoFile);
+    $('saveLogo').disabled = false;
+  }
+});
+$('logoScale').addEventListener('input', () => {
+  const pct = +$('logoScale').value;
+  $('logoScaleVal').textContent = pct + '%';
+  $('logoPreview').style.transform = `scale(${pct / 100})`;
+  $('saveLogo').disabled = false;
+});
+$('saveLogo').onclick = async () => {
+  $('saveLogo').disabled = true;
+  try {
+    const payload = { logoScale: +$('logoScale').value / 100 };
+    if (logoFile) payload.logoUrl = await uploadImage(logoFile, 'logo');
+    await setDoc(cfgRef(), payload, { merge: true });
+    Object.assign(DB.config, payload);
+    logoFile = null;
+    toast($('saveLogo'), '✔ Kaydedildi');
+  } catch (e) { alert('Kaydedilemedi: ' + e.message); $('saveLogo').disabled = false; }
 };
 
 let heroFile = null;

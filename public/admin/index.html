@@ -53,6 +53,19 @@
       </div>
 
       <div class="card">
+        <h3>🏷️ Logo</h3>
+        <p class="hint">Nav menü ve footer'da kullanılır. SVG veya PNG yükleyin, boyutunu ayarlayın.</p>
+        <div class="logo-preview-wrap">
+          <img id="logoPreview" class="logo-preview" src="/assets/logo.png" alt="Logo önizleme">
+        </div>
+        <label class="file-btn">📤 Logo Seç (SVG/PNG)<input type="file" id="logoFile" accept="image/png,image/svg+xml,image/webp" hidden></label>
+        <label class="logo-scale-label">Boyut: <span id="logoScaleVal">100%</span>
+          <input type="range" id="logoScale" min="50" max="220" value="100" step="5">
+        </label>
+        <button class="btn btn-primary" id="saveLogo" disabled>Logoyu Kaydet</button>
+      </div>
+
+      <div class="card">
         <h3>🖼️ Hero Görseli</h3>
         <p class="hint">Ana sayfanın üst bölümünde görünen büyük görsel. Önerilen: yatay, en az 1600px genişlik.</p>
         <img id="heroPreview" class="hero-preview" src="" alt="Hero görseli">

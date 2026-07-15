@@ -87,6 +87,15 @@ label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;
 .card textarea,.card input{width:100%}
 .hero-preview{width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 
+.logo-preview-wrap{
+  width:100%;padding:24px;border-radius:12px;border:1px solid var(--line);
+  background:repeating-conic-gradient(#f4f8f9 0% 25%, #eef2f4 0% 50%) 0/20px 20px;
+  display:flex;align-items:center;justify-content:center;
+}
+.logo-preview{max-height:120px;max-width:100%;object-fit:contain;transition:transform .15s}
+.logo-scale-label{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--navy)}
+.logo-scale-label input[type="range"]{flex:1;width:auto;accent-color:var(--teal);padding:0}
+
 .file-btn{
   display:inline-flex;align-items:center;gap:8px;cursor:pointer;
   background:#eef6f7;color:var(--navy);font-weight:700;font-size:14px;

@@ -84,6 +84,8 @@ async function loadSite() {
     SITE = {
       ticker: cfg.ticker ?? FALLBACK_SITE.ticker,
       heroImage: cfg.heroImage || FALLBACK_SITE.heroImage,
+      logoUrl: cfg.logoUrl || "",
+      logoScale: cfg.logoScale || 1,
       services: services.length ? services : FALLBACK_SITE.services,
       projects: projects.length ? projects : FALLBACK_SITE.projects,
       reviews: reviews.length ? reviews : FALLBACK_SITE.reviews,
@@ -109,6 +111,13 @@ function renderSite() {
 
   // hero görseli
   if (SITE.heroImage) document.getElementById('heroImage').src = SITE.heroImage;
+
+  // logo (özel yüklenmediyse varsayılan /assets/logo.png kalır)
+  if (SITE.logoUrl) {
+    document.getElementById('navLogoImg').src = SITE.logoUrl;
+    document.getElementById('footerLogoImg').src = SITE.logoUrl;
+  }
+  document.documentElement.style.setProperty('--logo-scale', SITE.logoScale || 1);
 
   // hizmetler
   document.getElementById('servicesGrid').innerHTML = (SITE.services || []).map(s => `
