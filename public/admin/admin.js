@@ -40,7 +40,7 @@ const dref = (name, id) => doc(db, 'sites', SITE_ID, name, id);
 const cfgRef = () => doc(db, 'sites', SITE_ID);
 
 /* yerel bellek — Firestore'dan yüklenen içerik */
-const DB = { config: {}, services: [], projects: [], reviews: [], appointments: [], messages: [] };
+const DB = { config: {}, services: [], projects: [], reviews: [], partners: [], appointments: [], messages: [] };
 let unsubApp = null, unsubMsg = null;
 
 /* ── görsel yükleme (Storage) ── */
@@ -116,8 +116,8 @@ async function fetchColl(name) {
 async function loadContent() {
   const cfg = await getDoc(cfgRef());
   DB.config = cfg.exists() ? cfg.data() : {};
-  [DB.services, DB.projects, DB.reviews] = await Promise.all([
-    fetchColl('services'), fetchColl('projects'), fetchColl('reviews'),
+  [DB.services, DB.projects, DB.reviews, DB.partners] = await Promise.all([
+    fetchColl('services'), fetchColl('projects'), fetchColl('reviews'), fetchColl('partners'),
   ]);
   $('tickerInput').value = DB.config.ticker || '';
   $('heroPreview').src = DB.config.heroImage || '/assets/hero.jpg';
@@ -126,7 +126,7 @@ async function loadContent() {
   $('logoScale').value = scalePct;
   $('logoScaleVal').textContent = scalePct + '%';
   $('logoPreview').style.transform = `scale(${scalePct / 100})`;
-  renderProjects(); renderServices(); renderReviews();
+  renderProjects(); renderServices(); renderReviews(); renderPartners();
 }
 
 function renderBadges() {
@@ -341,6 +341,78 @@ $('serviceForm').addEventListener('submit', async e => {
     }
     $('serviceModal').classList.remove('open');
     renderServices();
+  } catch (err) { st.textContent = '⚠ ' + err.message; st.className = 'form-status err'; }
+});
+
+/* ═══ İşbirliği Yaptığımız Firmalar ═══ */
+let editingPartner = null;
+let pnLogoUrl = '';
+
+function renderPartners() {
+  const el = $('partnerList');
+  if (!DB.partners.length) { el.innerHTML = '<div class="empty">Henüz firma eklenmemiş.</div>'; return; }
+  el.innerHTML = DB.partners.map(p => `
+    <div class="item">
+      <div class="partner-item-logo"><img src="${esc(p.logoUrl)}" alt=""></div>
+      <div class="item-body"><h4>${esc(p.name)}</h4></div>
+      <div class="item-actions">
+        <button class="btn btn-ghost btn-xs" data-edit="${p.id}">Düzenle</button>
+        <button class="btn btn-danger btn-xs" data-del="${p.id}">Sil</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openPartnerForm(DB.partners.find(p => p.id === b.dataset.edit)));
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Bu firma silinsin mi?')) return;
+    await deleteDoc(dref('partners', b.dataset.del));
+    DB.partners = DB.partners.filter(p => p.id !== b.dataset.del);
+    renderPartners();
+  });
+}
+
+function openPartnerForm(p) {
+  editingPartner = p || null;
+  pnLogoUrl = p ? p.logoUrl : '';
+  $('partnerFormTitle').textContent = p ? 'Firmayı Düzenle' : 'Yeni Firma';
+  $('pnName').value = p ? p.name : '';
+  $('pnLogoPreview').src = pnLogoUrl || '';
+  $('pnLogoPreview').closest('.logo-preview-wrap').style.display = pnLogoUrl ? '' : 'none';
+  $('partnerFormStatus').textContent = '';
+  $('partnerModal').classList.add('open');
+}
+$('newPartner').onclick = () => openPartnerForm(null);
+
+$('pnFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { alert('Logo 5 MB\'den büyük olamaz'); return; }
+  const st = $('partnerFormStatus');
+  st.textContent = 'Yükleniyor…'; st.className = 'form-status';
+  try {
+    pnLogoUrl = await uploadImage(file, 'partners');
+    $('pnLogoPreview').src = pnLogoUrl;
+    $('pnLogoPreview').closest('.logo-preview-wrap').style.display = '';
+    st.textContent = '';
+  } catch (err) { st.textContent = '⚠ Logo yüklenemedi'; st.className = 'form-status err'; }
+});
+
+$('partnerForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const st = $('partnerFormStatus');
+  st.textContent = 'Kaydediliyor…'; st.className = 'form-status';
+  const payload = { name: $('pnName').value, logoUrl: pnLogoUrl };
+  if (!payload.name) { st.textContent = '⚠ Firma adı gerekli'; st.className = 'form-status err'; return; }
+  if (!payload.logoUrl) { st.textContent = '⚠ Logo yüklemeniz gerekli'; st.className = 'form-status err'; return; }
+  try {
+    if (editingPartner) {
+      await updateDoc(dref('partners', editingPartner.id), payload);
+      Object.assign(editingPartner, payload);
+    } else {
+      const ref = await addDoc(col('partners'), { ...payload, order: Date.now(), createdAt: serverTimestamp() });
+      DB.partners.push({ id: ref.id, ...payload });
+    }
+    $('partnerModal').classList.remove('open');
+    renderPartners();
   } catch (err) { st.textContent = '⚠ ' + err.message; st.className = 'form-status err'; }
 });
 

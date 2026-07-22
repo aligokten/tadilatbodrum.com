@@ -28,6 +28,7 @@ service cloud.firestore {
       match /services/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
       match /projects/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
       match /reviews/{id}      { allow read: if true;          allow write: if isTBAdmin(); }
+      match /partners/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
       match /appointments/{id} { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
       match /messages/{id}     { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
     }

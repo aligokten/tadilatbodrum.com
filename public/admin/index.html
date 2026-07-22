@@ -30,6 +30,7 @@
       <button class="side-link active" data-tab="genel">⚙️ Genel Ayarlar</button>
       <button class="side-link" data-tab="projeler">🏗️ Projeler</button>
       <button class="side-link" data-tab="hizmetler">🛠️ Hizmetler</button>
+      <button class="side-link" data-tab="firmalar">🤝 İşbirliği Yaptığımız Firmalar</button>
       <button class="side-link" data-tab="yorumlar">⭐ Müşteri Yorumları</button>
       <button class="side-link" data-tab="randevular">📅 Keşif Randevuları <span class="badge" id="badgeRandevu"></span></button>
       <button class="side-link" data-tab="mesajlar">✉️ Mesajlar <span class="badge" id="badgeMesaj"></span></button>
@@ -97,6 +98,13 @@
     <section class="tab" id="tab-hizmetler">
       <div class="tab-head"><h2>Hizmetler</h2><button class="btn btn-primary" id="newService">+ Yeni Hizmet</button></div>
       <div id="serviceList" class="item-list"></div>
+    </section>
+
+    <!-- İşbirliği Yaptığımız Firmalar -->
+    <section class="tab" id="tab-firmalar">
+      <div class="tab-head"><h2>İşbirliği Yaptığımız Firmalar</h2><button class="btn btn-primary" id="newPartner">+ Yeni Firma</button></div>
+      <p class="hint" style="margin-bottom:16px">Buraya eklenen logolar, "Neler Yapıyoruz" bölümünden sonra kayan bir şerit halinde gösterilir.</p>
+      <div id="partnerList" class="item-list"></div>
     </section>
 
     <!-- Yorumlar -->
@@ -177,6 +185,25 @@
       <button type="submit" class="btn btn-primary">Kaydet</button>
     </div>
     <p class="form-status" id="reviewFormStatus"></p>
+  </form>
+</div>
+
+<!-- ═══ Firma düzenleme modalı ═══ -->
+<div class="modal-backdrop" id="partnerModal">
+  <form class="modal modal-sm" id="partnerForm">
+    <button type="button" class="modal-close" data-close-modal>✕</button>
+    <h3 id="partnerFormTitle">Yeni Firma</h3>
+    <label>Firma Adı *<input type="text" id="pnName" required maxlength="120" placeholder="Örn: ABC İnşaat"></label>
+    <label>Logo *</label>
+    <div class="logo-preview-wrap">
+      <img id="pnLogoPreview" class="logo-preview" src="" alt="Logo önizleme" style="max-height:70px">
+    </div>
+    <label class="file-btn">📤 Logo Seç (SVG/PNG)<input type="file" id="pnFile" accept="image/png,image/svg+xml,image/webp" hidden></label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Vazgeç</button>
+      <button type="submit" class="btn btn-primary">Kaydet</button>
+    </div>
+    <p class="form-status" id="partnerFormStatus"></p>
   </form>
 </div>
 

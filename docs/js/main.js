@@ -63,9 +63,10 @@ const FALLBACK_SITE = {
     { name: "Zeynep T.", location: "Güllük, Milas", rating: 5,
       text: "Yazlık dairemiz adeta yeniden doğdu. Ekip son derece profesyonel ve titizdi. Sürecin her aşamasında yanımızdaydılar." },
   ],
+  partners: [],
 };
 
-let SITE = { projects: [], services: [], reviews: [] };
+let SITE = { projects: [], services: [], reviews: [], partners: [] };
 let STATIC_MODE = false;
 
 async function fetchCollection(name) {
@@ -78,8 +79,8 @@ async function loadSite() {
   try {
     const cfgSnap = await getDoc(cfgRef());
     const cfg = cfgSnap.exists() ? cfgSnap.data() : {};
-    const [services, projects, reviews] = await Promise.all([
-      fetchCollection('services'), fetchCollection('projects'), fetchCollection('reviews'),
+    const [services, projects, reviews, partners] = await Promise.all([
+      fetchCollection('services'), fetchCollection('projects'), fetchCollection('reviews'), fetchCollection('partners'),
     ]);
     SITE = {
       ticker: cfg.ticker ?? FALLBACK_SITE.ticker,
@@ -89,6 +90,7 @@ async function loadSite() {
       services: services.length ? services : FALLBACK_SITE.services,
       projects: projects.length ? projects : FALLBACK_SITE.projects,
       reviews: reviews.length ? reviews : FALLBACK_SITE.reviews,
+      partners,
     };
   } catch (err) {
     console.warn('Firestore okunamadı, yedek içerik gösteriliyor:', err);
@@ -128,8 +130,22 @@ function renderSite() {
     </div>`).join('');
 
   renderReviews();
+  renderPartners();
   buildCarousel();
   observeReveals();
+}
+
+/* ── işbirliği yaptığımız firmalar (kayan şerit) ── */
+function renderPartners() {
+  const section = document.getElementById('firmalar');
+  const track = document.getElementById('partnersTrack');
+  const list = SITE.partners || [];
+  if (!list.length) { if (section) section.style.display = 'none'; return; }
+  if (section) section.style.display = '';
+  const item = p => `<div class="partner-logo"><img src="${esc(p.logoUrl)}" alt="${esc(p.name || 'İş ortağı')}" loading="lazy"></div>`;
+  // sorunsuz döngü için liste iki kez tekrarlanır (%50 kaydırma ile)
+  track.innerHTML = list.map(item).join('') + list.map(item).join('');
+  track.style.animationDuration = Math.max(18, list.length * 4.5) + 's';
 }
 
 /* ── müşteri yorumları ── */
