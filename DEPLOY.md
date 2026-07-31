@@ -59,6 +59,53 @@ Bittiğinde site `https://<site-id>.web.app` adresinde yayında.
 Console → **Hosting → Add custom domain** → `tadilatbodrum.com` → gösterilen DNS kayıtlarını
 alan adı sağlayıcında (şu an Wix) güncelle. HTTPS otomatik gelir.
 
+## 6) Keşif randevusu bildirimi (telefona anlık push)
+
+Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function
+otomatik tetiklenip **ntfy.sh** üzerinden telefonunuza anlık push bildirimi gönderir.
+Bildirim konusu (topic) bir Secret Manager sırrıdır — repo herkese açık olduğu için
+koda veya Firestore'a asla yazılmaz.
+
+> **Gereksinim:** saggplus projesi **Blaze (kullandıkça öde)** planında olmalı — Cloud
+> Functions'ın dışarıya (ntfy.sh'e) istek atabilmesi için şart. Günlük birkaç bildirim
+> için maliyet pratikte $0'dır.
+
+**a) Telefonunuza ntfy uygulamasını kurun**
+- [Android (Play Store)](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
+- [iOS (App Store)](https://apps.apple.com/us/app/ntfy/id1625396347)
+- Uygulamayı açın → **"+" (Subscribe to topic)** → aşağıdaki gibi **uzun ve tahmin edilemez**
+  bir konu adı girin (herkes bu adı bilirse bildirimlerinizi görebilir/sahte bildirim
+  gönderebilir, bu yüzden gizli tutun):
+  ```
+  tbodrum-kesif-zsszz0ksq2zcl0
+  ```
+  (İsterseniz kendi konu adınızı da seçebilirsiniz — önemli olan aşağıdaki adımda
+  **aynı** metni kullanmak.)
+
+**b) Konu adını Firebase'e sır (secret) olarak kaydedin** — Windows terminalinde, repo
+klasöründe:
+```powershell
+firebase functions:secrets:set NTFY_TOPIC
+```
+İstendiğinde (a) adımındaki konu adını yapıştırıp Enter'a basın.
+
+**c) Fonksiyonu dağıtın:**
+```powershell
+cd functions
+npm install
+cd ..
+firebase deploy --only functions
+```
+
+**d) Test edin:** Sitedeki "Ücretsiz Keşif Al" formunu kendiniz doldurup gönderin —
+birkaç saniye içinde telefonunuza push bildirimi gelmeli. Gelmezse:
+- Firebase Console → **Functions** → `tbNotifyNewAppointment` → **Logs** sekmesinden
+  hata mesajına bakın (genelde "secret tanımlı değil" veya ntfy'ye ulaşamama olur).
+- ntfy uygulamasında doğru konuya abone olduğunuzdan emin olun.
+
+Konu adını daha sonra değiştirmek isterseniz, (a) ve (b) adımlarını yeni bir adla
+tekrarlayıp `firebase deploy --only functions` ile yeniden dağıtmanız yeterli.
+
 ---
 
 ## Notlar
