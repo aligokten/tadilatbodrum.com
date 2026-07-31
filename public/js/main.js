@@ -74,14 +74,26 @@ async function fetchCollection(name) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+/* ── logo/hero önbelleği: sonraki ziyaretlerde Firestore beklenmeden
+   doğru görsel anında gösterilir (eski varsayılan görsel yanıp sönmesin diye) ── */
+const ASSET_CACHE_KEY = 'tb_assets_v1';
+
+function cacheAssets() {
+  try {
+    localStorage.setItem(ASSET_CACHE_KEY, JSON.stringify({
+      logoUrl: SITE.logoUrl || '', logoScale: SITE.logoScale || 1, heroImage: SITE.heroImage || '',
+    }));
+  } catch { /* localStorage kapalıysa sessizce geç */ }
+}
+
 /* ── veri yükle ── */
 async function loadSite() {
   try {
-    const cfgSnap = await getDoc(cfgRef());
-    const cfg = cfgSnap.exists() ? cfgSnap.data() : {};
-    const [services, projects, reviews, partners] = await Promise.all([
+    const [cfgSnap, services, projects, reviews, partners] = await Promise.all([
+      getDoc(cfgRef()),
       fetchCollection('services'), fetchCollection('projects'), fetchCollection('reviews'), fetchCollection('partners'),
     ]);
+    const cfg = cfgSnap.exists() ? cfgSnap.data() : {};
     SITE = {
       ticker: cfg.ticker ?? FALLBACK_SITE.ticker,
       heroImage: cfg.heroImage || FALLBACK_SITE.heroImage,
@@ -92,6 +104,7 @@ async function loadSite() {
       reviews: reviews.length ? reviews : FALLBACK_SITE.reviews,
       partners,
     };
+    cacheAssets();
   } catch (err) {
     console.warn('Firestore okunamadı, yedek içerik gösteriliyor:', err);
     STATIC_MODE = true;

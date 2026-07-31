@@ -10,6 +10,24 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script>
+/* Önbellekten logo/hero: eski varsayılan görsel yanıp sönmesin diye,
+   Firestore yanıtı beklenmeden bir önceki ziyarette kaydedilen görsel
+   hemen uygulanır (bkz. main.js — cacheAssets). */
+window.__tbCache = (function () {
+  try { return JSON.parse(localStorage.getItem('tb_assets_v1') || 'null'); }
+  catch (e) { return null; }
+})();
+if (window.__tbCache && window.__tbCache.logoScale) {
+  document.documentElement.style.setProperty('--logo-scale', window.__tbCache.logoScale);
+}
+function __tbApply(id, prop) {
+  var c = window.__tbCache;
+  if (!c || !c[prop]) return;
+  var el = document.getElementById(id);
+  if (el) el.src = c[prop];
+}
+</script>
 </head>
 <body>
 
@@ -22,6 +40,7 @@
 <header class="nav" id="nav">
   <div class="container nav-inner">
     <a href="#hero" class="nav-logo"><img id="navLogoImg" src="assets/logo.png" alt="TadilatBodrum.com"></a>
+    <script>__tbApply('navLogoImg', 'logoUrl');</script>
     <nav class="nav-links" id="navLinks">
       <a href="#hizmetler">Hizmetlerimiz</a>
       <a href="#surec">Süreç</a>
@@ -41,6 +60,7 @@
 <section class="hero" id="hero">
   <div class="hero-bg">
     <img id="heroImage" src="assets/hero.jpg" alt="Bodrum villa tadilat projesi">
+    <script>__tbApply('heroImage', 'heroImage');</script>
   </div>
   <div class="container">
     <div class="hero-head reveal">
@@ -272,6 +292,7 @@
   <div class="container footer-inner">
     <div class="footer-col">
       <img id="footerLogoImg" src="assets/logo.png" alt="TadilatBodrum.com" class="footer-logo">
+      <script>__tbApply('footerLogoImg', 'logoUrl');</script>
       <p>Bodrum &amp; Milas'ta güvenilir, şeffaf ve kaliteli tadilat hizmeti.</p>
       <div class="footer-social">
         <a href="https://instagram.com/tadilatbodrumcom" target="_blank" rel="noopener" aria-label="Instagram">
