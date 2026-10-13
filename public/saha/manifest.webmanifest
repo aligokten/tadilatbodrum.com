@@ -1,0 +1,17 @@
+{
+  "name": "TadilatBodrum Saha",
+  "short_name": "TB Saha",
+  "description": "Keşif, rölöve, anket, 3D model, render ve teklif — TadilatBodrum.com saha koordinasyonu",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F5F6F7",
+  "theme_color": "#16171A",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -31,6 +31,10 @@ service cloud.firestore {
       match /partners/{id}     { allow read: if true;          allow write: if isTBAdmin(); }
       match /appointments/{id} { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
       match /messages/{id}     { allow create: if tbValidLead(); allow read, update, delete: if isTBAdmin(); }
+
+      // Saha koordinasyon uygulaması (/saha) — müşteri verisi, yalnızca admin
+      match /jobs/{id}         { allow read, write: if isTBAdmin(); }
+      match /saha/{id}         { allow read, write: if isTBAdmin(); }
     }
   }
 }
