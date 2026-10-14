@@ -77,6 +77,7 @@ class LocalBackend {
   getJob(id) { return this.#tx('jobs', 'readonly', s => s.get(id)); }
   async saveJob(job) { await this.#tx('jobs', 'readwrite', s => s.put(clone(job))); return clone(job); }
   watchJob() { return () => {}; }
+  async listPhotoFiles() { return []; }
   async deleteJob(job) {
     for (const p of job.photos || []) await this.deletePhoto(job, p).catch(() => {});
     return this.#tx('jobs', 'readwrite', s => s.delete(job.id));
@@ -152,29 +153,43 @@ class CloudBackend {
     return snap.docs.map(d => d.data()).sort((a, b) => b.updatedAt - a.updatedAt);
   }
   async getJob(id) { const d = await this.fs.getDoc(this.#doc('jobs', id)); return d.exists() ? d.data() : null; }
-  /* base verilirse buluttaki güncel sürümle birleştirerek yazar (başka cihazın eklemeleri korunur).
-   * Çevrimdışıyken işlem yapılamaz → doğrudan yazılır, bağlantı gelince Firestore gönderir. */
+  /* Buluttaki güncel sürümle birleştirerek yazar (başka cihazın eklemeleri korunur).
+   * ASLA körlemesine üzerine yazmaz: birleştirme yapılamazsa hata fırlatır, uygulama tekrar dener.
+   * Tek istisna: cihaz çevrimdışıysa (işlem yapılamaz) Firestore yazmayı kuyruğa alır. */
   async saveJob(job, base) {
     const ref = this.#doc('jobs', job.id);
-    if (base && navigator.onLine !== false) {
-      try {
-        return await Promise.race([
-          this.fs.runTransaction(this.db, async tx => {
-            const snap = await tx.get(ref);
-            const merged = snap.exists() ? mergeJob(base, job, snap.data()) : clone(job);
-            tx.set(ref, merged);
-            return merged;
-          }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 10000)),
-        ]);
-      } catch (e) { console.warn('Birleştirerek kaydetme yapılamadı, doğrudan yazılıyor:', e.message); }
+    if (!base) {                                   // yeni iş: yalnızca henüz yoksa oluştur
+      if (navigator.onLine === false) { await this.fs.setDoc(ref, clone(job), { merge: true }); return clone(job); }
+      await this.fs.runTransaction(this.db, async tx => {
+        const snap = await tx.get(ref);
+        tx.set(ref, snap.exists() ? mergeJob({}, job, snap.data()) : clone(job));
+      });
+      return clone(job);
     }
-    await this.fs.setDoc(ref, clone(job));
-    return clone(job);
+    if (navigator.onLine === false) { await this.fs.setDoc(ref, mergeJob(base, job, base)); return clone(job); }
+    return await Promise.race([
+      this.fs.runTransaction(this.db, async tx => {
+        const snap = await tx.get(ref);
+        const merged = snap.exists() ? mergeJob(base, job, snap.data()) : clone(job);
+        tx.set(ref, merged);
+        return merged;
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Bağlantı yavaş — kayıt tekrar denenecek')), 25000)),
+    ]);
   }
-  /* açık işi canlı dinle — yalnızca sunucudan gelen (başka cihazın) değişiklikler */
+  /* açık işi canlı dinle — yalnızca sunucudan gelen kesin veriler (önbellek ve kendi bekleyen yazmalarımız hariç) */
   watchJob(id, cb) {
-    return this.fs.onSnapshot(this.#doc('jobs', id), s => { if (s.exists() && !s.metadata.hasPendingWrites) cb(s.data()); }, e => console.warn('İş dinlenemiyor', e));
+    return this.fs.onSnapshot(this.#doc('jobs', id), s => {
+      if (s.exists() && !s.metadata.hasPendingWrites && !s.metadata.fromCache) cb(s.data());
+    }, e => console.warn('İş dinlenemiyor', e));
+  }
+  /* Storage'daki iş fotoğrafları (kayıtta referansı kaybolmuş fotoğrafları kurtarmak için) */
+  async listPhotoFiles(jobId) {
+    const res = await this.st.listAll(this.st.ref(this.storage, `tadilatbodrum/saha/${jobId}`));
+    return Promise.all(res.items.map(async it => {
+      const [url, meta] = await Promise.all([this.st.getDownloadURL(it), this.st.getMetadata(it).catch(() => ({}))]);
+      return { path: it.fullPath, name: it.name, url, t: meta.timeCreated ? Date.parse(meta.timeCreated) : Date.now() };
+    }));
   }
   async deleteJob(job) {
     for (const p of job.photos || []) await this.deletePhoto(job, p).catch(() => {});
