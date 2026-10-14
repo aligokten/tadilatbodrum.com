@@ -14,6 +14,14 @@ const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'T
 const S = { be: null, jobs: [], job: null, settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
+/* <base href="/saha/"> varken "#/..." linkleri sayfayı yeniden yüklemesin (adres /saha veya /saha/ olabilir) */
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]');
+  if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  location.hash = a.getAttribute('href');
+});
+
 /* ═════════ açılış ═════════ */
 async function boot() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
