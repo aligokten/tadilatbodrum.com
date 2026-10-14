@@ -65,6 +65,23 @@ Bittiğinde site `https://<site-id>.web.app` adresinde yayında; saha uygulamas�
 Console → **Hosting → Add custom domain** → `tadilatbodrum.com` → gösterilen DNS kayıtlarını
 alan adı sağlayıcında (şu an Wix) güncelle. HTTPS otomatik gelir.
 
+## 5b) Saha uygulaması — kesif.tadilatbodrum.com
+
+Saha uygulaması ayrı bir Hosting sitesinden (`tadilatbodrum-kesif`) **kök adreste** yayınlanır.
+`firebase.json` iki hedef içerir: `main` (ana site) ve `kesif` (yalnızca saha uygulaması;
+ana sitenin sayfaları bu sitede yayınlanmaz, her adres uygulamayı açar).
+
+İlk kurulum (bir kez):
+```powershell
+firebase hosting:sites:create tadilatbodrum-kesif --project saggplus
+firebase deploy --only hosting:kesif --project saggplus
+```
+Ardından Console → **Hosting → tadilatbodrum-kesif → Add custom domain** → `kesif.tadilatbodrum.com`
+ve gösterilen DNS kayıtlarını alan adı sağlayıcısında girin. Alan adı başka bir Firebase
+projesine bağlıysa önce oradan kaldırın (Firebase bir alan adını tek siteye bağlar).
+
+Sonraki güncellemeler: `firebase deploy --only hosting --project saggplus` iki siteyi birlikte yayınlar.
+
 ## 6) Keşif randevusu bildirimi (telefona anlık push)
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function
