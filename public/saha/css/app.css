@@ -529,10 +529,27 @@ polyline.prev{fill:none}
 
 /* ═════════ yazdırma (teklif / rapor) ═════════ */
 #printArea{display:none}
+/* belge önizleme (Yazdır / PDF) */
+body.dv-open{overflow:hidden}
+.docview{position:fixed;inset:0;z-index:150;background:#2B2E33;display:flex;flex-direction:column;padding-left:var(--safe-l);padding-right:var(--safe-r)}
+.dv-bar{display:flex;align-items:center;gap:10px;padding:calc(8px + var(--safe-t)) 12px 8px;background:var(--dark);color:#fff;flex:none}
+.dv-bar .icon-btn{color:#fff}
+.dv-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-act{display:flex;gap:6px}
+.dv-act .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.25)}
+.dv-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#fff;font-size:14px;font-weight:600;flex:none}
+.dv-status .ic{color:var(--teal)}
+.dv-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(24px + var(--safe-b))}
+.dv-page{width:794px;margin:0 auto;background:#fff;padding:38px;box-shadow:0 10px 40px rgba(0,0,0,.35);border-radius:4px}
+.dv-page .pdoc,.pdf-render .pdoc{width:100%}
+.pdf-render{position:fixed;left:-20000px;top:0;width:794px;background:#fff;z-index:-1}
+.pdf-render .p-title h1{background:none;color:#fff;-webkit-text-fill-color:#fff}
+.pdf-render .p-plan img,.dv-page .p-plan img,#printArea .p-plan img{width:100%;height:auto;display:block}
+@media (max-width:860px){.dv-act .btn span{display:none}.dv-act .btn{width:40px;padding:0}.dv-page{padding:26px}}
 @media print{
   @page{size:A4;margin:12mm}
   body{background:#fff}
-  #app,.toasts,.modal-back,.lightbox,.upload-bar{display:none!important}
+  #app,.toasts,.modal-back,.lightbox,.upload-bar,.docview,.pdf-render{display:none!important}
   #printArea{display:block}
 }
 .pdoc{font-family:var(--f);color:var(--ink);font-size:11pt;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact}

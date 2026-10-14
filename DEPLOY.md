@@ -82,6 +82,18 @@ projesine bağlıysa önce oradan kaldırın (Firebase bir alan adını tek site
 
 Sonraki güncellemeler: `firebase deploy --only hosting --project saggplus` iki siteyi birlikte yayınlar.
 
+## 5c) PDF'lerde bulut fotoğrafları (Storage CORS — bir kez)
+
+Saha uygulaması teklif/rapor PDF'ini cihazda üretir; bulut fotoğraflarının PDF'e girebilmesi
+için Storage'ın tarayıcıdan okunmasına izin verilmelidir. Google Cloud Shell'de
+(https://console.cloud.google.com → sağ üstte `>_`, ali@saggplus.com ile) repo içindeki
+`storage-cors.json` dosyasını yükleyip:
+```bash
+gsutil cors set storage-cors.json gs://saggplus.firebasestorage.app
+```
+Bu ayar yalnızca belirtilen sitelerden okuma (GET) izni verir; dosya erişim kuralları değişmez.
+Yapılmazsa PDF yine oluşur, sadece bulut fotoğrafları PDF'te boş görünür (Yazdır seçeneğinde görünür).
+
 ## 6) Keşif randevusu bildirimi (telefona anlık push)
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function

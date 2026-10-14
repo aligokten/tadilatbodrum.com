@@ -6,7 +6,7 @@ import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROO
 import { icon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics } from './quote.js';
-import { PlanEditor, planThumbSvg } from './plan2d.js';
+import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
@@ -910,7 +910,7 @@ async function printReport() {
       <div><small>Sorumlu</small><b>${esc(j.assigned || '—')}</b>${esc(statusOf(j.status).t)}</div>
     </section>
     ${j.summary ? `<p class="p-intro">${esc(j.summary)}</p>` : ''}
-    ${j.plan?.walls?.length ? `<section><h3>Rölöve</h3><div class="p-plan">${planThumbSvg(j.plan, 900, 520)}</div></section>` : ''}
+    ${j.plan?.walls?.length ? `<section><h3>Rölöve</h3><div class="p-plan"><img src="${planImageUrl(j.plan, 900, 520)}" alt="Rölöve planı"></div></section>` : ''}
     ${met.rooms.length ? `<section><h3>Mahal metrajı <small>(${esc(met.src)})</small></h3><table class="p-table"><thead><tr><th>Mahal</th><th class="r">Zemin m²</th><th class="r">Net duvar m²</th><th class="r">Çevre m</th></tr></thead><tbody>
       ${met.rooms.map(r => `<tr><td>${esc(r.name)}</td><td class="r">${fmtNum(r.area)}</td><td class="r">${fmtNum(r.wallArea)}</td><td class="r">${fmtNum(r.perim)}</td></tr>`).join('')}
       <tr class="grp"><td>Toplam</td><td class="r">${fmtNum(met.floor)}</td><td class="r">${fmtNum(met.wall)}</td><td class="r">${fmtNum(met.perim)}</td></tr></tbody></table></section>` : ''}

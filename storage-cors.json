@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["https://kesif.tadilatbodrum.com", "https://tadilatbodrum-kesif.web.app", "https://tadilatbodrum.web.app", "https://tadilatbodrum.com"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]
