@@ -36,6 +36,11 @@ saggplus kurallarındaki `match /databases/{database}/documents {` bloğunun iç
 `match /tadilatbodrum/{allPaths=**} { … }` bloğunu, saggplus storage kurallarındaki
 `match /b/{bucket}/o {` içine yapıştır, `ADMIN_UID_BURAYA` yerine UID'yi yaz. **Yayınla.**
 
+> **Saha uygulaması (/saha) için:** `firestore.rules` içindeki `jobs` ve `saha` eşleşmelerini,
+> `storage.rules` içindeki `tadilatbodrum/saha/...` bloğunu ve genel bloktaki
+> `allow read: if !allPaths.matches('saha/.*')` değişikliğini de birleştirin — müşteri
+> verileri ve keşif fotoğrafları yalnızca admin oturumuyla okunur.
+
 ## 3) Hosting'i dağıt (Windows / Firebase CLI)
 
 Proje klasöründe:
@@ -45,7 +50,8 @@ firebase login              # gerekiyorsa
 firebase deploy --only hosting
 ```
 
-Bittiğinde site `https://<site-id>.web.app` adresinde yayında.
+Bittiğinde site `https://<site-id>.web.app` adresinde yayında; saha uygulaması
+`https://<site-id>.web.app/saha` adresindedir (admin hesabıyla giriş).
 
 ## 4) İçeriği başlat
 

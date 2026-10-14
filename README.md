@@ -43,6 +43,16 @@ python3 server.py 8080     # farklı port
 
 Okunmamış kayıtlar kenar çubuğunda rozetle gösterilir; kutular 60 sn'de bir otomatik yenilenir.
 
+### Saha koordinasyon uygulaması (`/saha`)
+
+Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ayrıntılar: **[public/saha/README.md](public/saha/README.md)**.
+
+- İş/müşteri kaydı, durum akışı (Talep → Keşif → Teklif → Onay → Uygulama → Teslim)
+- Müşteri talepleri, 10 bölümlü koşullu **müşteri anketi**, mahal bazlı **keşif kontrol listesi**, tespitler
+- Fotoğraf çekme/yükleme (mahal ve tespite bağlı), keşif raporu PDF'i
+- **2D rölöve editörü** → otomatik **3D model** → **gerçekçi render** (path tracing)
+- Metrajı plandan alan **teklif aracı** + yazdırılabilir/PDF teklif
+
 ## Dosya yapısı
 
 ```
