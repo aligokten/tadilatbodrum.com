@@ -9,6 +9,10 @@ import {
   offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom,
 } from './plan-geom.js';
 
+const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}
+  .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
+  .rname{font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
+
 const TOOLS = [
   { k: 'select', t: 'Seç / Taşı', ic: 'pointer', key: 'v' },
   { k: 'pan', t: 'Kaydır', ic: 'hand', key: 'h' },
@@ -953,9 +957,7 @@ export class PlanEditor {
     const P = JSON.parse(JSON.stringify(this.plan));
     if (P.meta.bg) P.meta.bg = null;
     const body = this.drawPlan(P, s, false);
-    const css = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}
-      .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
-      .rname{font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
+    const css = PLAN_CSS;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${H}" viewBox="0 0 ${width} ${H}">
       <style>${css}</style><rect width="100%" height="100%" fill="#fff"/>
       <g transform="matrix(${s} 0 0 ${s} ${(pad - b.x0) * s} ${(pad - b.y0) * s + 70})">${body}</g>
@@ -972,11 +974,18 @@ export class PlanEditor {
 }
 
 /* küçük önizleme (iş detayında) — editör örneği oluşturmadan */
-export function planThumbSvg(plan, W = 600, H = 380) {
+export function planThumbSvg(plan, W = 600, H = 380, standalone = false) {
   const b = planBounds(plan); if (!b) return '';
   const pad = 40, bw = Math.max(100, b.x1 - b.x0), bh = Math.max(100, b.y1 - b.y0);
   const s = Math.min((W - pad * 2) / bw, (H - pad * 2) / bh);
   const fake = { opt: { dims: false }, sel: null, bgUrl: '', dimPts: PlanEditor.prototype.dimPts };
   const body = PlanEditor.prototype.drawPlan.call(fake, plan, s, false);
-  return `<svg class="plan-thumb" viewBox="0 0 ${W} ${H}"><g transform="matrix(${s} 0 0 ${s} ${(W - bw * s) / 2 - b.x0 * s} ${(H - bh * s) / 2 - b.y0 * s})">${body}</g></svg>`;
+  const head = standalone ? `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><style>${PLAN_CSS}</style><rect width="100%" height="100%" fill="#fff"/>` : `<svg class="plan-thumb" viewBox="0 0 ${W} ${H}">`;
+  return `${head}<g transform="matrix(${s} 0 0 ${s} ${(W - bw * s) / 2 - b.x0 * s} ${(H - bh * s) / 2 - b.y0 * s})">${body}</g></svg>`;
+}
+
+/* belgeler (rapor/PDF) için: stilleri gömülü, harici CSS'e bağlı olmayan plan görseli (data URI) */
+export function planImageUrl(plan, W = 900, H = 520) {
+  const svg = planThumbSvg(plan, W, H, true); if (!svg) return '';
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }

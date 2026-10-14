@@ -200,14 +200,13 @@ async function libraryPicker(catalog, met, job) {
 }
 
 /* ═══ yazdırma ═══ */
+/* belge önizleme (Yazdır + PDF) — mobilde de çalışır, bkz. docview.js */
 export function printDoc(html, title = 'TadilatBodrum') {
-  let p = $('#printArea');
-  if (!p) { p = h('<div id="printArea"></div>'); document.body.append(p); }
-  p.innerHTML = html;
-  const old = document.title; document.title = title;
-  const imgs = $$('img', p).map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })).filter(Boolean);
-  Promise.all(imgs).then(() => setTimeout(() => { window.print(); document.title = old; }, 60));
+  import('./docview.js').then(m => m.openDocument(html, title));
 }
+
+/* belgelerde ikonlar harici CSS'e bağlı olmasın (PDF çiziminde de doğru görünsün) */
+const docIcon = (k, c) => icon(k).replace('<svg class="ic "', `<svg width="20" height="20" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`);
 
 export function docHeader(settings, title, sub = '') {
   const c = settings.company;
@@ -218,7 +217,7 @@ export function docHeader(settings, title, sub = '') {
   <div class="p-title"><h1>${esc(title)}</h1>${sub}</div>`;
 }
 export const docFooter = () => `<footer class="p-foot">
-  <div class="p-badges"><span>${icon('shield')}Güvenilir Ustalar</span><span>${icon('award')}Kaliteli Malzeme</span><span>${icon('clock')}Zamanında Teslim</span></div>
+  <div class="p-badges"><span>${docIcon('shield', '#00AFB0')}Güvenilir Ustalar</span><span>${docIcon('award', '#EB591F')}Kaliteli Malzeme</span><span>${docIcon('clock', '#00AFB0')}Zamanında Teslim</span></div>
   <div class="p-bar"></div></footer>`;
 
 async function printQuote(job, settings, ctx) {
