@@ -4,6 +4,7 @@
  * İş kaydı tek bir JSON belgedir (bkz. newJob). Fotoğraflar ayrı saklanır.
  */
 import { DEFAULT_SETTINGS } from './catalog.js';
+import { mergeJob } from './merge.js';
 
 const FB_VER = '10.12.2';
 const FB = n => `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${n}.js`;
@@ -74,7 +75,8 @@ class LocalBackend {
     return all.sort((a, b) => b.updatedAt - a.updatedAt);
   }
   getJob(id) { return this.#tx('jobs', 'readonly', s => s.get(id)); }
-  saveJob(job) { return this.#tx('jobs', 'readwrite', s => s.put(clone(job))); }
+  async saveJob(job) { await this.#tx('jobs', 'readwrite', s => s.put(clone(job))); return clone(job); }
+  watchJob() { return () => {}; }
   async deleteJob(job) {
     for (const p of job.photos || []) await this.deletePhoto(job, p).catch(() => {});
     return this.#tx('jobs', 'readwrite', s => s.delete(job.id));
@@ -128,6 +130,12 @@ class CloudBackend {
     } catch { this.db = fs.getFirestore(fapp); }
     this.auth = au.getAuth(fapp);
     this.storage = st.getStorage(fapp);
+    // yalnızca geliştirme/test: localStorage 'tb-emu' açıksa yerel Firebase emülatörlerine bağlan
+    if (localStorage.getItem('tb-emu')) {
+      fs.connectFirestoreEmulator(this.db, 'localhost', 8080);
+      au.connectAuthEmulator(this.auth, 'http://localhost:9099', { disableWarnings: true });
+      st.connectStorageEmulator(this.storage, 'localhost', 9199);
+    }
     this.user = await new Promise(res => { const u = au.onAuthStateChanged(this.auth, x => { u(); res(x); }); });
     return this;
   }
@@ -144,7 +152,30 @@ class CloudBackend {
     return snap.docs.map(d => d.data()).sort((a, b) => b.updatedAt - a.updatedAt);
   }
   async getJob(id) { const d = await this.fs.getDoc(this.#doc('jobs', id)); return d.exists() ? d.data() : null; }
-  saveJob(job) { return this.fs.setDoc(this.#doc('jobs', job.id), clone(job)); }
+  /* base verilirse buluttaki güncel sürümle birleştirerek yazar (başka cihazın eklemeleri korunur).
+   * Çevrimdışıyken işlem yapılamaz → doğrudan yazılır, bağlantı gelince Firestore gönderir. */
+  async saveJob(job, base) {
+    const ref = this.#doc('jobs', job.id);
+    if (base && navigator.onLine !== false) {
+      try {
+        return await Promise.race([
+          this.fs.runTransaction(this.db, async tx => {
+            const snap = await tx.get(ref);
+            const merged = snap.exists() ? mergeJob(base, job, snap.data()) : clone(job);
+            tx.set(ref, merged);
+            return merged;
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 10000)),
+        ]);
+      } catch (e) { console.warn('Birleştirerek kaydetme yapılamadı, doğrudan yazılıyor:', e.message); }
+    }
+    await this.fs.setDoc(ref, clone(job));
+    return clone(job);
+  }
+  /* açık işi canlı dinle — yalnızca sunucudan gelen (başka cihazın) değişiklikler */
+  watchJob(id, cb) {
+    return this.fs.onSnapshot(this.#doc('jobs', id), s => { if (s.exists() && !s.metadata.hasPendingWrites) cb(s.data()); }, e => console.warn('İş dinlenemiyor', e));
+  }
   async deleteJob(job) {
     for (const p of job.photos || []) await this.deletePhoto(job, p).catch(() => {});
     return this.fs.deleteDoc(this.#doc('jobs', job.id));

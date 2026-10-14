@@ -8,10 +8,11 @@ import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
+import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-const S = { be: null, jobs: [], job: null, settings: null, editor: null, p3: null, route: '' };
+const S = { be: null, jobs: [], job: null, base: null, dirty: false, unwatch: null, tab: 'genel', settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
 /* <base href="/saha/"> varken "#/..." linkleri sayfayı yeniden yüklemesin (adres /saha veya /saha/ olabilir) */
@@ -116,17 +117,56 @@ async function route() {
   if (parts[0] === 'is' && parts[1]) {
     if (S.job?.id !== parts[1]) {
       view().innerHTML = splash('İş yükleniyor…');
-      S.job = await S.be.getJob(parts[1]);
+      openJob(await S.be.getJob(parts[1]));
       if (!S.job) { toast('İş bulunamadı', 'err'); location.hash = '#/'; return; }
-      migrate(S.job);
     }
     if (parts[2] === 'plan') return planScreen();
-    return jobView(parts[2] || 'genel');
+    S.tab = parts[2] || 'genel';
+    return jobView(S.tab);
   }
-  S.job = null;
+  openJob(null);
   if (parts[0] === 'ayarlar') return settingsView();
   dashboard();
+  // listeyi buluttan tazele (başka cihazlarda eklenen/değişen işler)
+  S.be.listJobs().then(list => {
+    if (J(list) === J(S.jobs)) return;
+    S.jobs = list;
+    if (!location.hash.replace(/^#\/?/, '')) dashboard();
+  }).catch(() => {});
 }
+const J = v => JSON.stringify(v);
+
+/* işi aç / kapat: canlı dinleme + eşitleme tabanı */
+function openJob(job) {
+  S.unwatch?.(); S.unwatch = null;
+  S.job = job; S.dirty = false;
+  if (!job) { S.base = null; return; }
+  migrate(job);
+  S.base = structuredClone(job);
+  S.unwatch = S.be.watchJob(job.id, remote => applyRemote(remote));
+}
+/* başka cihazdan gelen değişikliği yerel (kaydedilmemiş) değişikliklerle birleştir */
+function applyRemote(remote) {
+  const j = S.job; if (!j || remote.id !== j.id) return;
+  migrate(remote);
+  const merged = mergeJob(S.base, j, remote);
+  S.base = structuredClone(remote);
+  if (J(merged) === J(j)) return;
+  assignInPlace(j, merged);
+  softRefresh();
+}
+/* ekranı, kullanıcı yazı yazmıyorsa yenile */
+function softRefresh() {
+  if (document.body.classList.contains('plan-mode')) { S.editor?.render(); return; }
+  const a = document.activeElement;
+  const busy = (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#view')) || $('.modal-back, .lightbox, .docview');
+  if (busy) { S.refreshLater = true; return; }
+  const y = scrollY; jobView(S.tab); scrollTo(0, y);
+  toast('Başka bir cihazdan güncellendi');
+}
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (S.refreshLater && S.job && !document.activeElement?.closest?.('#view input, #view textarea, #view select')) { S.refreshLater = false; softRefresh(); }
+}, 300));
 function migrate(j) {
   const n = newJob(j.code);
   for (const k of Object.keys(n)) if (j[k] === undefined) j[k] = n[k];
@@ -136,17 +176,26 @@ function migrate(j) {
 /* ═════════ kaydetme ═════════ */
 let saving = Promise.resolve();
 const doSave = async () => {
-  const j = S.job; if (!j) return;
+  await saving;                                   // kayıtlar sırayla gitsin
+  const j = S.job; if (!j || !S.dirty) return;    // değişiklik yoksa yazma (diğer cihazın verisini ezmesin)
+  S.dirty = false;
   j.updatedAt = Date.now();
+  const sent = structuredClone(j), base = S.base;
   const st = $('#saveState'); if (st) { st.textContent = 'Kaydediliyor…'; st.className = 'save-state busy'; }
-  saving = S.be.saveJob(j).then(() => {
+  saving = S.be.saveJob(sent, base).then(result => {
+    if (S.job !== j) return;
+    // buluttan gelen eklemeleri (başka cihaz) kayıt sırasında yapılan yeni yerel değişikliklerle birleştir
+    const merged = mergeJob(sent, j, result);
+    S.base = structuredClone(result);
+    if (J(merged) !== J(j)) { assignInPlace(j, merged); softRefresh(); }
     const i = S.jobs.findIndex(x => x.id === j.id);
     const copy = structuredClone(j); if (i >= 0) S.jobs[i] = copy; else S.jobs.unshift(copy);
     if (st) { st.textContent = 'Kaydedildi'; st.className = 'save-state ok'; }
-  }).catch(e => { console.error(e); if (st) { st.textContent = 'Kaydedilemedi!'; st.className = 'save-state err'; } toast('Kaydedilemedi: ' + e.message, 'err'); });
+  }).catch(e => { S.dirty = true; console.error(e); if (st) { st.textContent = 'Kaydedilemedi!'; st.className = 'save-state err'; } toast('Kaydedilemedi: ' + e.message, 'err'); });
   return saving;
 };
-const save = debounce(doSave, 700);
+const _save = debounce(doSave, 700);
+const save = Object.assign(() => { S.dirty = true; _save(); }, { flush: () => _save.flush() });
 async function flushSave() { if (S.job) { await save.flush(); await saving; } }
 addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save.flush(); });
 addEventListener('beforeunload', () => save.flush());
@@ -240,7 +289,7 @@ async function newJobDialog() {
   if (j.summary) j.requests.push({ id: uid('rq'), category: 'diger', room: '', text: j.summary, priority: 'normal', status: 'acik', t: Date.now() });
   await S.be.saveJob(j);
   S.jobs.unshift(structuredClone(j));
-  S.job = j;
+  openJob(j);
   location.hash = `#/is/${j.id}`;
 }
 
@@ -349,7 +398,7 @@ function tabGenel(tb) {
   $('[data-cancel]', tb).onclick = () => { j.status = j.status === 'iptal' ? 'talep' : 'iptal'; logEvt(j.status === 'iptal' ? 'İş iptal edildi' : 'İptal geri alındı'); jobView('genel'); };
   $('[data-del]', tb).onclick = async () => {
     if (!await confirmDlg(`${j.code} — ${j.customer.name} işi tüm fotoğraf ve çizimleriyle kalıcı olarak silinecek.`)) return;
-    await S.be.deleteJob(j); S.jobs = S.jobs.filter(x => x.id !== j.id); S.job = null; location.hash = '#/'; toast('İş silindi');
+    await S.be.deleteJob(j); S.jobs = S.jobs.filter(x => x.id !== j.id); openJob(null); location.hash = '#/'; toast('İş silindi');
   };
   $('[data-report]', tb).onclick = printReport;
 }
