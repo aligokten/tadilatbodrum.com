@@ -12,10 +12,6 @@
       {
         "source": "/admin",
         "destination": "/admin/index.html"
-      },
-      {
-        "source": "/saha",
-        "destination": "/saha/index.html"
       }
     ],
     "headers": [
@@ -36,6 +32,13 @@
             "value": "no-cache"
           }
         ]
+      }
+    ],
+    "redirects": [
+      {
+        "source": "/saha",
+        "destination": "/saha/",
+        "type": 301
       }
     ]
   },
