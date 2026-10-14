@@ -150,6 +150,7 @@ input[type=color]{width:56px;height:36px;border:1.5px solid var(--line);border-r
 .mode{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 14px;color:#9AA1AA}
 .mode .ic{width:16px;height:16px;color:var(--cyan)}
 .save-state{font-size:12px;padding:0 14px;min-height:16px;color:#7D848D}
+.app-ver{font-size:11px;padding:0 14px;color:#5E656E}
 .save-state.ok{color:#5BD49A} .save-state.err{color:#FF8A6B} .save-state.busy{color:var(--amber)}
 #view{flex:1;min-width:0;padding:calc(28px + var(--safe-t)) clamp(16px,3vw,40px) 60px;max-width:1240px;display:flex;flex-direction:column;gap:18px}
 .bottom-nav{display:none}

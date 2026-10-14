@@ -12,6 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
+export const APP_VERSION = '2026.10.14-4';
 const S = { be: null, jobs: [], job: null, base: null, dirty: false, unwatch: null, tab: 'genel', settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
@@ -25,6 +26,15 @@ document.addEventListener('click', e => {
 
 /* ═════════ açılış ═════════ */
 async function boot() {
+  // yeni sürüm yayınlanınca (yeni servis çalışanı devreye girince) sayfayı bir kez yenile → eski kod çalışmaya devam etmesin
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener('controllerchange', async () => {
+      if (sessionStorage.getItem('tb-sw-reloaded')) return;
+      sessionStorage.setItem('tb-sw-reloaded', '1');
+      await flushSave().catch(() => {});
+      location.reload();
+    });
+  }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js', location.pathname.startsWith('/saha') ? {} : { scope: '/' }).catch(() => {});
   const mode = localStorage.getItem(MODE_KEY);
   if (mode === 'local') return start(await openLocal());
@@ -87,6 +97,7 @@ function shell() {
       <div class="side-foot">
         <div class="mode">${icon(S.be.kind === 'cloud' ? 'cloud' : 'device')}<span>${esc(S.be.label)}</span></div>
         <span class="save-state" id="saveState"></span>
+        <span class="app-ver">Sürüm ${APP_VERSION}</span>
         <button data-logout>${icon('logout')}<span>${S.be.kind === 'cloud' ? 'Çıkış' : 'Mod değiştir'}</span></button>
       </div>
     </aside>
@@ -144,6 +155,22 @@ function openJob(job) {
   migrate(job);
   S.base = structuredClone(job);
   S.unwatch = S.be.watchJob(job.id, remote => applyRemote(remote));
+  recoverPhotos(job);
+}
+/* Storage'da duran ama iş kaydında referansı olmayan fotoğrafları geri ekle
+ * (silme işlemi dosyayı da sildiği için burada bulunan her dosya kaybolmuş bir referanstır) */
+async function recoverPhotos(job) {
+  let files;
+  try { files = await S.be.listPhotoFiles(job.id); } catch (e) { console.warn('Fotoğraf listesi alınamadı', e); return; }
+  if (S.job !== job) return;
+  const known = new Set(job.photos.flatMap(p => [p.path, p.id]));
+  const lost = files.filter(f => !known.has(f.path) && !known.has(f.name.replace(/\.\w+$/, '')));
+  if (!lost.length) return;
+  for (const f of lost.sort((a, b) => a.t - b.t))
+    job.photos.push({ id: f.name.replace(/\.\w+$/, ''), url: f.url, path: f.path, tag: 'kesif', room: '', findingId: '', caption: 'Kurtarılan fotoğraf', t: f.t });
+  logEvt(`${lost.length} kayıp fotoğraf kurtarıldı`);
+  toast(`${lost.length} kayıp fotoğraf geri getirildi`);
+  softRefresh(true);
 }
 /* başka cihazdan gelen değişikliği yerel (kaydedilmemiş) değişikliklerle birleştir */
 function applyRemote(remote) {
@@ -156,13 +183,13 @@ function applyRemote(remote) {
   softRefresh();
 }
 /* ekranı, kullanıcı yazı yazmıyorsa yenile */
-function softRefresh() {
+function softRefresh(silent = false) {
   if (document.body.classList.contains('plan-mode')) { S.editor?.render(); return; }
   const a = document.activeElement;
   const busy = (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#view')) || $('.modal-back, .lightbox, .docview');
   if (busy) { S.refreshLater = true; return; }
   const y = scrollY; jobView(S.tab); scrollTo(0, y);
-  toast('Başka bir cihazdan güncellendi');
+  if (!silent) toast('Başka bir cihazdan güncellendi');
 }
 document.addEventListener('focusout', () => setTimeout(() => {
   if (S.refreshLater && S.job && !document.activeElement?.closest?.('#view input, #view textarea, #view select')) { S.refreshLater = false; softRefresh(); }
@@ -191,7 +218,12 @@ const doSave = async () => {
     const i = S.jobs.findIndex(x => x.id === j.id);
     const copy = structuredClone(j); if (i >= 0) S.jobs[i] = copy; else S.jobs.unshift(copy);
     if (st) { st.textContent = 'Kaydedildi'; st.className = 'save-state ok'; }
-  }).catch(e => { S.dirty = true; console.error(e); if (st) { st.textContent = 'Kaydedilemedi!'; st.className = 'save-state err'; } toast('Kaydedilemedi: ' + e.message, 'err'); });
+  }).catch(e => {
+    console.error(e);
+    if (S.job === j) { S.dirty = true; clearTimeout(S.retryT); S.retryT = setTimeout(() => save(), 5000); }   // veri ezilmez; tekrar denenir
+    if (st) { st.textContent = 'Kaydedilemedi — tekrar deneniyor'; st.className = 'save-state err'; }
+    toast('Kaydedilemedi, tekrar denenecek: ' + e.message, 'err');
+  });
   return saving;
 };
 const _save = debounce(doSave, 700);
