@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "saggplus"
+  },
+  "targets": {
+    "saggplus": {
+      "hosting": {
+        "main": [
+          "tadilatbodrum"
+        ],
+        "kesif": [
+          "tadilatbodrum-kesif"
+        ]
+      }
+    }
   }
 }

@@ -24,7 +24,7 @@ document.addEventListener('click', e => {
 
 /* ═════════ açılış ═════════ */
 async function boot() {
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js', location.pathname.startsWith('/saha') ? {} : { scope: '/' }).catch(() => {});
   const mode = localStorage.getItem(MODE_KEY);
   if (mode === 'local') return start(await openLocal());
   app.innerHTML = splash('Bağlanılıyor…');

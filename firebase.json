@@ -1,48 +1,97 @@
 {
-  "hosting": {
-    "site": "tadilatbodrum",
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "cleanUrls": true,
-    "rewrites": [
-      {
-        "source": "/admin",
-        "destination": "/admin/index.html"
-      },
-      {
-        "source": "/saha",
-        "destination": "/saha/index.html"
-      },
-      {
-        "source": "/saha/**",
-        "destination": "/saha/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "**/*.@(js|css|svg|jpg|jpeg|png|webp)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=3600"
-          }
-        ]
-      },
-      {
-        "source": "/saha/sw.js",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache"
-          }
-        ]
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "main",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "cleanUrls": true,
+      "rewrites": [
+        {
+          "source": "/admin",
+          "destination": "/admin/index.html"
+        },
+        {
+          "source": "/saha",
+          "destination": "/saha/index.html"
+        },
+        {
+          "source": "/saha/**",
+          "destination": "/saha/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(js|css|svg|jpg|jpeg|png|webp)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=3600"
+            }
+          ]
+        },
+        {
+          "source": "/saha/sw.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "kesif",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "index.html",
+        "admin/**",
+        "css/**",
+        "assets/**",
+        "uploads/**",
+        "js/main.js",
+        "js/firebase-init.js",
+        "saha/README.md"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/saha/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/saha/sw.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            },
+            {
+              "key": "Service-Worker-Allowed",
+              "value": "/"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(js|css|svg|jpg|jpeg|png|webp)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=3600"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "functions": {
     "source": "functions",
     "ignore": [
