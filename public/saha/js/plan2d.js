@@ -37,11 +37,13 @@ const HINTS = {
   dim: 'İki noktayı işaretleyin.',
   text: 'Yazı eklemek için plana dokunun.',
   calib: 'Altlık görselde bilinen bir mesafenin iki ucunu işaretleyin.',
+  scale: 'Ölçüsünü bildiğiniz bir mesafenin (ör. bir duvar) iki ucunu işaretleyin; tüm plan gerçek ölçüye göre ölçeklenir.',
 };
 const OPEN_DEF = { door: { w: 90, h: 210, sill: 0 }, window: { w: 120, h: 140, sill: 90 }, gap: { w: 90, h: 220, sill: 0 } };
 
 export class PlanEditor {
-  constructor(host, plan, { onChange, resolvePhoto, pickBackground } = {}) {
+  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage } = {}) {
+    this.addImage = addImage;
     this.host = host;
     this.plan = plan || emptyPlan();
     this.onChange = onChange || (() => {});
@@ -84,6 +86,8 @@ export class PlanEditor {
           <button class="icon-btn info-m" data-a="info" title="Plan bilgisi / metraj">${icon('layers')}</button>
           <button class="btn btn-xs btn-ghost" data-a="addRoom">${icon('plus')}Ölçüyle oda</button>
           <button class="btn btn-xs btn-ghost" data-a="bg">${icon('image')}Altlık</button>
+          <button class="btn btn-xs btn-ghost" data-a="import">${icon('upload')}DXF / PDF aktar</button>
+          <button class="btn btn-xs btn-ghost" data-a="scale">${icon('ruler')}Ölçekle</button>
         </div>
         <div class="pe-canvas">
           <svg class="pe-svg" tabindex="0"><g class="w"></g><g class="ui"></g></svg>
@@ -103,7 +107,7 @@ export class PlanEditor {
     $('.pe-bar', this.el).onclick = e => {
       const a = e.target.closest('[data-a]')?.dataset.a, o = e.target.closest('button[data-o]')?.dataset.o;
       if (a === 'undo') this.undo(); else if (a === 'redo') this.redo(); else if (a === 'fit') this.fit();
-      else if (a === 'addRoom') this.addRoomDialog(); else if (a === 'info') this.el.classList.toggle('show-insp'); else if (a === 'bg') this.bgDialog();
+      else if (a === 'addRoom') this.addRoomDialog(); else if (a === 'import') this.importDialog(); else if (a === 'scale') this.setTool('scale'); else if (a === 'info') this.el.classList.toggle('show-insp'); else if (a === 'bg') this.bgDialog();
       if (o) { this.opt[o] = !this.opt[o]; e.target.closest('button').classList.toggle('on', this.opt[o]); this.saveOpt(); this.render(); }
     };
     $('select[data-o="step"]', this.el).onchange = e => { this.opt.step = +e.target.value; this.saveOpt(); };
@@ -364,7 +368,7 @@ export class PlanEditor {
   /* önizleme noktası hesapla */
   aim(wp) {
     const t = this.tool;
-    if (t === 'wall' || t === 'poly' || t === 'dim' || t === 'calib') {
+    if (t === 'wall' || t === 'poly' || t === 'dim' || t === 'calib' || t === 'scale') {
       const from = this.chain?.pts.at(-1) || null;
       this.preview = this.snapPt(wp, from);
     } else if (t === 'door' || t === 'window') {
@@ -381,7 +385,7 @@ export class PlanEditor {
 
   place(wp, e) {
     const t = this.tool, p = this.preview;
-    if (t === 'wall' || t === 'poly' || t === 'dim' || t === 'calib') {
+    if (t === 'wall' || t === 'poly' || t === 'dim' || t === 'calib' || t === 'scale') {
       if (!p) return;
       if (!this.chain) { this.chain = { pts: [p] }; this.renderHud(); this.renderUI(); return; }
       this.addChainPt(p);
@@ -425,6 +429,7 @@ export class PlanEditor {
       this.chain = null; this.changed(); this.renderHud(); return;
     }
     if (t === 'calib') { this.chain = null; this.calibrate(last, p); return; }
+    if (t === 'scale') { this.chain = null; this.scalePlan(last, p); return; }
     const closes = c.pts.length >= 3 && V.eq(p, c.pts[0], 1);
     if (t === 'wall') {
       if (!c.started) { this.snap(); c.started = true; }
@@ -626,6 +631,28 @@ export class PlanEditor {
       this.changed();
       if (r.k === 'cal') this.setTool('calib');
     }
+  }
+  async importDialog() {
+    const { openImportDialog } = await import('./importui.js');
+    return openImportDialog(this, { addImage: this.addImage });
+  }
+  /* tüm planı iki nokta arasındaki gerçek ölçüye göre ölçekle (içe aktarılan PDF/DXF ölçeği için) */
+  async scalePlan(a, b) {
+    const d = V.dist(a, b);
+    const v = await promptDlg(`İşaretlenen mesafe planda ${fmtNum(d, 1)} cm. Gerçek ölçü (cm)?`, Math.round(d));
+    this.setTool('select');
+    const real = parseFloat(String(v).replace(',', '.'));
+    if (!(real > 0) || d < 1) return;
+    const f = real / d, P = this.plan, sp = p => ({ x: +(a.x + (p.x - a.x) * f).toFixed(1), y: +(a.y + (p.y - a.y) * f).toFixed(1) });
+    this.snap();
+    P.walls.forEach(w => { w.a = sp(w.a); w.b = sp(w.b); });
+    P.openings.forEach(o => { o.pos *= f; o.w = Math.round(o.w * f); });
+    P.rooms.forEach(r => { r.pts = r.pts.map(sp); });
+    P.items.forEach(i => Object.assign(i, sp(i)));
+    P.dims.forEach(dm => { dm.a = sp(dm.a); dm.b = sp(dm.b); });
+    P.labels.forEach(l => Object.assign(l, sp(l)));
+    if (P.meta.bg) { const o = sp(P.meta.bg); P.meta.bg.x = o.x; P.meta.bg.y = o.y; P.meta.bg.w *= f; }
+    this.changed(); this.fit();
   }
   async calibrate(a, b) {
     const d = V.dist(a, b);

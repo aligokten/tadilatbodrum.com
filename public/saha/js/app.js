@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.14-4';
+export const APP_VERSION = '2026.10.15-1';
 const S = { be: null, jobs: [], job: null, base: null, dirty: false, unwatch: null, tab: 'genel', settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
@@ -658,7 +658,7 @@ function tabRolove(tb) {
         <div class="met-chips"><span><small>Mahal</small><b>${met.rooms.length}</b></span><span><small>Toplam zemin</small><b>${fmtNum(met.floor)} m²</b></span><span><small>Net duvar</small><b>${fmtNum(met.wall)} m²</b></span><span><small>Çevre</small><b>${fmtNum(met.perim)} m</b></span></div>
         <div class="row wrap"><a class="btn btn-ghost" href="#/is/${j.id}/plan?v=3d">${icon('cube')}3D model</a><a class="btn btn-ghost" href="#/is/${j.id}/plan?v=3d&r=1">${icon('sparkle')}Render oluştur</a></div>`
         : `<div class="empty"><div class="empty-ic">${icon('ruler')}</div><p class="muted">Ölçtüğünüz mahalleri duvar, kapı, pencere ve donatılarıyla çizin; plan otomatik olarak 3D modele dönüşür ve gerçekçi render alınabilir.</p>
-          <div class="row wrap center"><button class="btn btn-ghost" data-tpl>${icon('layers')}Örnek daire planıyla başla</button></div></div>`}
+          <div class="row wrap center"><a class="btn btn-primary" href="#/is/${j.id}/plan?import=1">${icon('upload')}DXF / PDF çizimden aktar</a><button class="btn btn-ghost" data-tpl>${icon('layers')}Örnek daire planıyla başla</button></div></div>`}
     </div>
     <div class="card">
       <div class="row-between"><h3>${icon('image')}Kroki, rölöve fotoğrafları ve renderlar</h3>
@@ -853,6 +853,7 @@ function planScreen() {
     onChange: p => { j.plan = p; save(); if (mode !== '2d') sync3d(); },
     resolvePhoto: id => { const p = j.photos.find(x => x.id === id); return p ? S.be.photoUrl(p) : ''; },
     pickBackground: pickPhoto,
+    addImage: (blob, caption) => addBlobPhoto(blob, { tag: 'rolove', caption }),
   });
   const setMode = async m => {
     mode = m; root.dataset.mode = m;
@@ -870,7 +871,7 @@ function planScreen() {
     return p;
   };
   $('[data-render]').onclick = async () => { if (mode === '2d') await setMode('3d'); renderDialog(); };
-  setMode(mode).then(() => { if (qs.get('r')) renderDialog(); });
+  setMode(mode).then(() => { if (qs.get('r')) renderDialog(); if (qs.get('import')) S.editor.importDialog(); });
 }
 
 async function ensure3d() {
