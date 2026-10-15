@@ -608,3 +608,27 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .ptable td{padding:5px 8px;border-bottom:1px solid var(--line);font-weight:600}
 .blank{display:inline-block;width:100%;border-bottom:1px dotted #bbb;height:14px}
 .p-break{break-before:page}
+
+/* ── DXF / PDF içe aktarma ── */
+.imp{display:flex;flex-direction:column;gap:12px}
+.imp-drop{flex-direction:column;align-items:center;gap:4px;padding:18px;border:2px dashed var(--line);border-radius:16px;cursor:pointer;text-align:center;color:var(--muted)}
+.imp-drop:hover{border-color:var(--teal);color:var(--teal-d)}
+.imp-drop .ic{width:28px;height:28px;color:var(--orange)}
+.imp-drop b{color:var(--ink);font-size:15px}
+.imp-msg{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;padding:12px 14px;border-radius:12px;background:var(--bg);font-size:14px;line-height:1.45}
+.imp-msg.warn{background:var(--orange-50);color:#7A3413}
+.imp-msg.err{background:#FDECEA;color:#A0281C}
+.imp-msg ul{margin:6px 0 0 18px}
+.imp-msg code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:5px}
+.imp-main{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start}
+.imp-opts{display:flex;flex-direction:column;gap:10px}
+.imp-opts .check{font-size:13.5px}
+.imp-layers summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--ink-2)}
+.imp-layer-list{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;margin-top:6px}
+.imp-layer-list small{color:var(--muted);margin-left:auto}
+.imp-prev{display:flex;flex-direction:column;gap:8px;min-width:0}
+.imp-canvas{background:#FAFBFB;border:1px solid var(--line);border-radius:14px;overflow:hidden;aspect-ratio:3/2}
+.imp-canvas svg{width:100%;height:100%;display:block}
+.imp-stats{font-size:14px;color:var(--ink-2)}
+.imp-stats b{font-family:var(--fd);font-size:16px}
+@media (max-width:860px){.imp-main{grid-template-columns:1fr}}

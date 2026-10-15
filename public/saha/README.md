@@ -30,6 +30,16 @@ Adres: **`/saha`** (ör. `https://tadilatbodrum.com/saha`). Telefonda tarayıcı
 - Izgaraya/uçlara yaslama, 0-45-90° yakalama, geri al/yinele, PNG dışa aktarma, oda bazlı metraj.
 - Kısayollar: V seç, W duvar, R oda, D kapı, P pencere, M mobilya, O ölçü, T yazı, Ctrl+Z / Ctrl+Y, Del, Esc.
 
+### Çizimden aktarma (DXF / PDF)
+Rölöve ekranında **DXF / PDF aktar**: mevcut projenin AutoCAD DXF'i veya plan PDF'i otomatik olarak çizime dönüşür.
+- **Duvarlar** paralel çift çizgilerden kalınlığıyla, **kapılar** açılım yayından, **pencereler** boşluktaki cam çizgilerinden,
+  **odalar** duvarlarla kapalı alanlardan tanınır; oda adları çizimdeki yazılardan alınır.
+- DXF birimi dosyadan okunur (mm/cm/m); PDF ölçeği duvar kalınlıklarından tahmin edilir, gerekirse değiştirilir.
+  Ölçek şüpheliyse **Ölçekle** aracıyla bilinen bir ölçünün iki ucu işaretlenip gerçek değeri girilir.
+- Katman seçimi (DXF), önizleme, orijinal çizimi altlık olarak ekleme, mevcut planın yerine koyma / yanına ekleme.
+- **Taranmış PDF** (görüntü): otomatik dönüşüm yapılamaz; sayfa altlık olarak eklenip ölçeklenir, üzerinden çizilir.
+- **DWG**: kapalı format — AutoCAD'de *Farklı Kaydet → DXF* (veya ücretsiz ODA File Converter) ile DXF'e çevirip yükleyin.
+
 ### 3D ve render
 - Plan otomatik olarak 3D'ye çevrilir (duvar açıklıkları, kapı kanadı, cam, zemin dokuları, mobilya).
 - Kuşbakışı / üstten / **iç mekan** (zemine dokunarak yürüme), kesit görünümü, güneş yönü ve yüksekliği.
@@ -39,4 +49,4 @@ Adres: **`/saha`** (ör. `https://tadilatbodrum.com/saha`). Telefonda tarayıcı
 ## Teknik
 Derleme adımı yok — saf ES modülleri. three.js ve three-gpu-pathtracer `vendor/` altında gömülüdür
 (çevrimdışı çalışır). Service worker uygulama kabuğunu önbelleğe alır.
-Lisanslar: `vendor/three/LICENSE`, `vendor/LICENSE-pathtracer`, `vendor/LICENSE-bvh` (MIT).
+Lisanslar: `vendor/three/LICENSE`, `vendor/LICENSE-pathtracer`, `vendor/LICENSE-bvh`, `vendor/LICENSE-dxf-parser`, `vendor/LICENSE-html2canvas`, `vendor/LICENSE-jspdf` (MIT), `vendor/pdfjs/LICENSE` (Apache-2.0).
