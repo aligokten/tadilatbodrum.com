@@ -225,6 +225,7 @@ export function recognize(raw, opt) {
   const sel = new Set(opt.layers);
   const allSegs = raw.segs.map(s => ({ a: sc(s.a), b: sc(s.b), layer: s.layer })).filter(s => dist(s.a, s.b) >= 1);
   const curves = raw.curves.map(c => ({ pts: c.pts.map(sc), layer: c.layer, closed: c.closed })).filter(c => !c.closed);
+  if (opt.openings) curves.push(...arcsFromChains(allSegs));
   const texts = raw.texts.map(t => ({ ...t, ...sc(t) }));
   let segs = mergeCollinear(allSegs.filter(s => sel.has(s.layer)), 0.8, 1.5).filter(s => dist(s.a, s.b) >= opt.minLen);
   const tMin = opt.minT, tMax = opt.maxT;
@@ -296,7 +297,7 @@ export function recognize(raw, opt) {
     const gaps = [];
     for (const x of L.iv.slice(1)) {
       const g = x[0] - cur[1];
-      if (g <= 2) { cur[1] = Math.max(cur[1], x[1]); continue; }
+      if (g < opt.minGap * 0.8) { cur[1] = Math.max(cur[1], x[1]); continue; }      // kesişimlerden kaynaklı küçük kopuklukları köprüle
       if (opt.openings && g >= opt.minGap && g <= opt.maxGap) { gaps.push([cur[1], x[0]]); cur[1] = Math.max(cur[1], x[1]); continue; }
       runs.push({ iv: cur, gaps: gaps.splice(0) }); cur = [...x];
     }
@@ -352,6 +353,41 @@ export function recognize(raw, opt) {
     }
   }
 
+  /* 3b) ana bina: birbirine bağlı duvar kümelerinden en büyüğü (ölçü çizgisi, aks, mobilya kümeleri elenir) */
+  const kept = mainStructure(outWalls);
+  outWalls.length = 0; outWalls.push(...kept);
+
+  /* 3c) kapıları doğrudan açılım yaylarından kur (boşluk kasa/eşik çizgisiyle kapalı olsa bile) */
+  if (opt.openings) for (const c of curves) {
+    const p0 = c.pts[0], p1 = c.pts.at(-1), cc = circum(p0, c.pts[Math.floor(c.pts.length / 2)], p1);
+    if (!cc || cc.r < 55 || cc.r > 135) continue;
+    const sweep = Math.abs(angleBetween(sub(p0, cc), sub(p1, cc))) / D2R;
+    if (sweep < 60 || sweep > 120) continue;
+    let best = null;
+    for (const w of outWalls) {
+      const u = norm(sub(w.b, w.a)), n = { x: -u.y, y: u.x }, L = dist(w.a, w.b);
+      const tc = dot(sub(cc, w.a), u), oc = dot(sub(cc, w.a), n);
+      if (Math.abs(oc) > w.t / 2 + 20 || tc < -10 || tc > L + 10) continue;
+      // uçlardan biri duvar doğrultusunda (kapalı kanat konumu), diğeri duvardan uzakta (açık kanat)
+      const [pw, pl] = Math.abs(dot(sub(p0, w.a), n)) < Math.abs(dot(sub(p1, w.a), n)) ? [p0, p1] : [p1, p0];
+      if (Math.abs(dot(sub(pw, w.a), n)) > w.t / 2 + 20 || Math.abs(dot(sub(pl, w.a), n)) < cc.r * 0.6) continue;
+      const score = Math.abs(oc);
+      if (!best || score < best.score) best = { w, u, n, tc, tw: dot(sub(pw, w.a), u), pl, score, L };
+    }
+    if (!best) continue;
+    const { w, n, tc, tw, pl, L } = best;
+    const t0 = Math.max(0, Math.min(tc, tw)), t1 = Math.min(L, Math.max(tc, tw));
+    if (t1 - t0 < 50) continue;
+    const door = { id: uid('o'), wallId: w.id, type: 'door', pos: (t0 + t1) / 2, w: Math.round(t1 - t0), h: 210, sill: 0, flip: tc > tw, side: dot(sub(pl, w.a), n) >= 0 ? 1 : -1 };
+    // aynı yerdeki tanınmış açıklıkları kapıyla değiştir
+    for (let i = openings.length - 1; i >= 0; i--) {
+      const o = openings[i]; if (o.wallId !== w.id) continue;
+      const ov = Math.min(o.pos + o.w / 2, t1) - Math.max(o.pos - o.w / 2, t0);
+      if (ov > Math.min(o.w, door.w) * 0.4) openings.splice(i, 1);
+    }
+    openings.push(door);
+  }
+
   /* 4) odalar: duvarlarla kapalı alanlar (ızgara taraması) */
   const plan = emptyPlan();
   plan.meta.wallT = Math.round(median(outWalls.map(w => w.t)) || 15);
@@ -369,6 +405,64 @@ export function recognize(raw, opt) {
   }
   plan.openings.forEach(o => { o.pos = +o.pos.toFixed(1); });
   return { plan, stats: { segs: segs.length, walls: plan.walls.length, doors: plan.openings.filter(o => o.type === 'door').length, windows: plan.openings.filter(o => o.type === 'window').length, gaps: plan.openings.filter(o => o.type === 'gap').length, rooms: plan.rooms.length } };
+}
+
+/* kısa düz parçalardan oluşan zincirler → yay (PDF/DXF'te parçalanmış kapı açılım yayları) */
+export function arcsFromChains(segs, dbg) {
+  // ardışık parçalar aynı koordinatı paylaşır → ince ızgarada eşle; iki ucu aynı noktaya düşen minik parçaları at
+  const key = p => Math.round(p.x * 20) + ',' + Math.round(p.y * 20);
+  const short = segs.filter(s => dist(s.a, s.b) < 30 && key(s.a) !== key(s.b));
+  const adj = new Map();
+  short.forEach((s, i) => { for (const p of [s.a, s.b]) { const k = key(p); (adj.get(k) || adj.set(k, []).get(k)).push(i); } });
+  const used = new Uint8Array(short.length), out = [];
+  for (let i = 0; i < short.length; i++) {
+    if (used[i]) continue;
+    // zinciri iki yöne de uzat
+    const chain = [short[i].a, short[i].b]; used[i] = 1;
+    for (const dir of [1, -1]) {
+      for (let guard = 0; guard < 400; guard++) {
+        const end = dir === 1 ? chain.at(-1) : chain[0];
+        const nb = (adj.get(key(end)) || []).filter(j => !used[j]);
+        if (nb.length !== 1) break;
+        const j = nb[0]; used[j] = 1;
+        const nxt = key(short[j].a) === key(end) ? short[j].b : short[j].a;
+        dir === 1 ? chain.push(nxt) : chain.unshift(nxt);
+      }
+    }
+    if (dbg) dbg.chains.push(chain.length);
+    if (chain.length < 6) continue;
+    const c = circum(chain[0], chain[Math.floor(chain.length / 2)], chain.at(-1));
+    if (dbg && c) dbg.r.push(+c.r.toFixed(0));
+    if (!c || c.r < 45 || c.r > 140) continue;
+    if (!chain.every(p => Math.abs(dist(p, c) - c.r) <= Math.max(1.5, c.r * 0.04))) continue;
+    const sweep = Math.abs(angleBetween(sub(chain[0], c), sub(chain.at(-1), c)));
+    if (sweep < 55 * D2R) continue;
+    out.push({ pts: chain, layer: 'arc' });
+  }
+  return out;
+}
+const angleBetween = (a, b) => Math.atan2(cross(a, b), dot(a, b));
+
+/* duvar bağlantı grafiği → toplam uzunluğu en büyük küme(ler) */
+function mainStructure(walls) {
+  if (walls.length < 4) return walls;
+  const n = walls.length, parent = walls.map((_, i) => i);
+  const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  const segSeg = (w, v) => Math.min(segDist(w.a, v.a, v.b), segDist(w.b, v.a, v.b), segDist(v.a, w.a, w.b), segDist(v.b, w.a, w.b), intersects(w, v) ? 0 : Infinity);
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const w = walls[i], v = walls[j];
+    if (Math.max(Math.abs(w.a.x - v.a.x), Math.abs(w.a.y - v.a.y)) > dist(w.a, w.b) + dist(v.a, v.b) + 100) continue;
+    if (segSeg(w, v) <= Math.max(w.t, v.t) / 2 + 12) parent[find(i)] = find(j);
+  }
+  const tot = new Map();
+  walls.forEach((w, i) => { const r = find(i); tot.set(r, (tot.get(r) || 0) + dist(w.a, w.b)); });
+  const max = Math.max(...tot.values());
+  return walls.filter((w, i) => tot.get(find(i)) >= max * 0.3);
+}
+function intersects(w, v) {
+  const d = sub(w.b, w.a), e = sub(v.b, v.a), den = cross(d, e); if (Math.abs(den) < 1e-9) return false;
+  const t = cross(sub(v.a, w.a), e) / den, u = cross(sub(v.a, w.a), d) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
 }
 
 const median = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
