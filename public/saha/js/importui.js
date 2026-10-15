@@ -18,7 +18,7 @@ export async function openImportDialog(ed, { addImage } = {}) {
         <div class="imp-unit"></div>
         <label>Duvar algılama<select class="inp sm" data-o="mode"><option value="auto">Çift çizgi (mimari çizim)</option><option value="single">Tek çizgi (kroki)</option></select></label>
         <div class="grid2"><label>Min. kalınlık<div class="inp-unit sm"><input type="number" data-o="minT" value="7"><span>cm</span></div></label>
-        <label>Maks. kalınlık<div class="inp-unit sm"><input type="number" data-o="maxT" value="60"><span>cm</span></div></label></div>
+        <label>Maks. kalınlık<div class="inp-unit sm"><input type="number" data-o="maxT" value="40"><span>cm</span></div></label></div>
         <label class="check"><input type="checkbox" data-o="openings" checked> Kapı / pencere tanı</label>
         <label class="check"><input type="checkbox" data-o="rooms" checked> Odaları bul (yazılardan ad al)</label>
         <label class="check"><input type="checkbox" data-o="underlay" checked> Orijinal çizimi altlık olarak ekle</label>
@@ -32,7 +32,7 @@ export async function openImportDialog(ed, { addImage } = {}) {
       </div>
     </div>
   </div>`);
-  const opt = { unitCm: 1, layers: [], mode: 'auto', minT: 7, maxT: 60, minLen: 10, defT: 15, openings: true, rooms: true, minGap: 50, maxGap: 320, underlay: true, replace: !ed.plan.walls.length };
+  const opt = { unitCm: 1, layers: [], mode: 'auto', minT: 7, maxT: 40, minLen: 10, defT: 15, openings: true, rooms: true, minGap: 50, maxGap: 320, underlay: true, replace: !ed.plan.walls.length };
   let view = 'res';
   const msg = (html, kind = '') => { const m = $('.imp-msg', body); m.hidden = !html; m.className = 'imp-msg ' + kind; m.innerHTML = html; };
 
