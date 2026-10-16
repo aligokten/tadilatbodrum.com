@@ -2,7 +2,7 @@
  * Dünya birimi: cm. Ekran = dünya * s + (ox, oy).
  */
 import { uid } from './store.js';
-import { icon, esc, h, $, $$, fmtNum, promptDlg, modal } from './ui.js';
+import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
@@ -71,7 +71,10 @@ export class PlanEditor {
     this.pickBackground = pickBackground;
     this.s = 0.5; this.ox = 40; this.oy = 40;
     this.tool = 'select';
-    this.sel = null;              // { kind, id }
+    this.sel = null;              // { kind, id } — tek seçim (özellik paneli)
+    this.msel = [];               // çoklu seçim [{ kind, id }] (2+ nesne)
+    this.inst = uid('ed');        // bu editör örneği (yapıştırmada kaydırma için)
+    this.pasteN = 0;
     this.chain = null;            // duvar/çokgen çizimi: { pts: [] , start }
     this.polyWalls = pref('tb-pe-polywalls', true);   // çokgen oda: duvarları da oluştur
     this.wallFace = pref('tb-pe-wallface', true);     // duvar aracı: çizgi = iç yüz, kalınlık dışa
@@ -110,6 +113,12 @@ export class PlanEditor {
           <button class="btn btn-xs btn-ghost" data-a="bg">${icon('image')}Altlık</button>
           <button class="btn btn-xs btn-ghost" data-a="import">${icon('upload')}DXF / PDF aktar</button>
           <button class="btn btn-xs btn-ghost" data-a="scale">${icon('ruler')}Ölçekle</button>
+          <span class="sep"></span>
+          <button class="tgl ${this.opt.box ? 'on' : ''}" data-o="box" title="Çoklu seçim: boş alanda sürükleyerek alan seçin, dokunarak ekleyin/çıkarın (Shift ile de olur)">${icon('layers')}<span>Çoklu seç</span></button>
+          <button class="icon-btn" data-a="copy" title="Kopyala (Ctrl+C)">${icon('copy')}</button>
+          <button class="icon-btn" data-a="cut" title="Kes (Ctrl+X)">${icon('cut')}</button>
+          <button class="icon-btn" data-a="paste" title="Yapıştır (Ctrl+V)">${icon('paste')}</button>
+          <button class="btn btn-xs btn-ghost danger-t" data-a="clear" title="Tüm çizimi temizle">${icon('trash')}Tümünü temizle</button>
         </div>
         <div class="pe-canvas">
           <svg class="pe-svg" tabindex="0"><g class="w"></g><g class="ui"></g></svg>
@@ -129,6 +138,7 @@ export class PlanEditor {
     $('.pe-bar', this.el).onclick = e => {
       const a = e.target.closest('[data-a]')?.dataset.a, o = e.target.closest('button[data-o]')?.dataset.o;
       if (a === 'undo') this.undo(); else if (a === 'redo') this.redo(); else if (a === 'fit') this.fit();
+      else if (a === 'copy') this.copySel(); else if (a === 'cut') this.cutSel(); else if (a === 'paste') this.paste(); else if (a === 'clear') this.clearAll();
       else if (a === 'addRoom') this.addRoomDialog(); else if (a === 'import') this.importDialog(); else if (a === 'scale') this.setTool('scale'); else if (a === 'info') this.el.classList.toggle('show-insp'); else if (a === 'bg') this.bgDialog();
       if (o) { this.opt[o] = !this.opt[o]; e.target.closest('button').classList.toggle('on', this.opt[o]); this.saveOpt(); this.render(); }
     };
@@ -161,7 +171,7 @@ export class PlanEditor {
   setTool(t) {
     if (this.chain && this.tool !== t) this.finishChain();
     this.tool = t; this.dir = null; this.preview = null;
-    if (t !== 'select') this.sel = null;
+    if (t !== 'select') { this.sel = null; this.msel = []; }
     $$('.pe-tools .tool', this.el).forEach(b => b.classList.toggle('on', b.dataset.tool === t));
     this.svg.dataset.tool = t;
     this.renderHud(); this.renderInsp(); this.render();
@@ -321,7 +331,18 @@ export class PlanEditor {
 
     if (this.tool === 'select') {
       const ht = this.hit(wp);
+      const multi = e.shiftKey || this.opt.box;
+      // çoklu seçimdeki bir nesneyi tutup sürükleme → hepsini taşı
+      if (ht && !ht.handle && this.msel.length && this.isSel(ht) && !e.shiftKey) {
+        this.g = { type: 'mmove', sp, w0: wp, before: JSON.stringify(this.plan), moved: false, ht };
+        return;
+      }
+      if (multi) {
+        if (ht && !ht.handle) { this.g = { type: 'tapsel', sp, ht, moved: false }; return; }
+        if (!ht) { this.g = { type: 'box', sp, p0: wp, p1: wp, add: e.shiftKey || this.opt.box, moved: false }; return; }
+      }
       if (ht) {
+        this.msel = [];
         const same = this.sel && this.sel.kind === ht.kind && this.sel.id === ht.id;
         this.sel = { kind: ht.kind, id: ht.id };
         if (!same) this.renderInsp();
@@ -357,6 +378,8 @@ export class PlanEditor {
     if (g.type === 'pan') { if (g.moved) { this.ox = g.ox + sp.x - g.sp.x; this.oy = g.oy + sp.y - g.sp.y; this.render(); } return; }
     if (g.type === 'rect') { g.p1 = this.snapPt(wp); this.render(); return; }
     if (g.type === 'aim') { this.aim(wp); return; }
+    if (g.type === 'box') { g.p1 = wp; this.renderUI(); return; }
+    if (g.type === 'mmove' && g.moved) { this.dragMulti(g, wp); return; }
     if (g.type === 'move' && g.moved) this.drag(g, wp);
   }
 
@@ -369,9 +392,20 @@ export class PlanEditor {
     this.g = null;
     if (cancel) { if (g.before && g.moved) { this.plan = JSON.parse(g.before); this.render(); } return; }
     const wp = this.toW(...Object.values(this.evPt(e)));
-    if (g.type === 'pan') { if (g.tap && !g.moved && this.sel) { this.sel = null; this.renderInsp(); this.render(); } return; }
+    if (g.type === 'pan') { if (g.tap && !g.moved && (this.sel || this.msel.length)) this.setSel([]); return; }
     if (g.type === 'move') {
       if (g.moved) { this.undoS.push(g.before); this.redoS = []; this.changed(); }
+      return;
+    }
+    if (g.type === 'mmove') {
+      if (g.moved) { this.undoS.push(g.before); this.redoS = []; this.changed(); }
+      else if (!this.opt.box) { this.setSel([g.ht]); }   // dokunup bırakınca yalnız onu seç
+      return;
+    }
+    if (g.type === 'tapsel') { if (!g.moved) this.toggleSel(g.ht); return; }
+    if (g.type === 'box') {
+      if (!g.moved) { if (!this.opt.box) this.setSel([]); return; }
+      this.boxSelect(g.p0, g.p1, g.add);
       return;
     }
     if (g.type === 'rect') {
@@ -564,9 +598,14 @@ export class PlanEditor {
     if (ctrl && k.toLowerCase() === 'y') { e.preventDefault(); this.redo(); return; }
     if (e.target.closest('.pe-hud')) return;
     if (k === ' ') { this.space = true; e.preventDefault(); return; }
-    if (k === 'Escape') { if (this.chain) this.finishChain(); else if (this.sel) { this.sel = null; this.renderInsp(); this.render(); } else this.setTool('select'); return; }
+    if (k === 'Escape') { if (this.chain) this.finishChain(); else if (this.sel || this.msel.length) this.setSel([]); else this.setTool('select'); return; }
     if (k === 'Enter' && this.chain) { this.finishChain(); return; }
-    if ((k === 'Delete' || k === 'Backspace') && this.sel) { e.preventDefault(); this.del(); return; }
+    if (ctrl && !this.chain && ['c', 'x', 'v', 'a'].includes(k.toLowerCase())) {
+      e.preventDefault();
+      ({ c: () => this.copySel(), x: () => this.cutSel(), v: () => this.paste(), a: () => this.selectAll() })[k.toLowerCase()]();
+      return;
+    }
+    if ((k === 'Delete' || k === 'Backspace') && (this.sel || this.msel.length)) { e.preventDefault(); this.del(); return; }
     if (this.chain && /^[0-9]$/.test(k)) { const i = $('#peLen', this.hud); if (i) { i.focus(); i.value = k; e.preventDefault(); } return; }
     if (this.chain && k.startsWith('Arrow')) {
       e.preventDefault();
@@ -580,15 +619,139 @@ export class PlanEditor {
 
   /* ───────────── düzenleme işlemleri ───────────── */
   del() {
-    const s = this.sel; if (!s) return;
+    const list = this.selList(); if (!list.length) return;
     this.snap();
-    const c = this.coll(s.kind);
-    this.plan[c] = this.plan[c].filter(o => o.id !== s.id);
-    if (s.kind === 'wall') {
-      this.plan.openings = this.plan.openings.filter(o => o.wallId !== s.id);
-      this.plan.rooms.forEach(r => { if (r.walls) r.walls = r.walls.map(id => id === s.id ? null : id); });
+    this.removeObjs(list);
+    this.sel = null; this.msel = []; this.changed();
+  }
+  removeObjs(list) {
+    const P = this.plan, ids = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
+    const W = ids('wall');
+    for (const k of ['wall', 'opening', 'room', 'item', 'dim', 'label']) { const S = ids(k), c = this.coll(k); if (S.size) P[c] = P[c].filter(o => !S.has(o.id)); }
+    if (W.size) {
+      P.openings = P.openings.filter(o => !W.has(o.wallId));
+      P.rooms.forEach(r => { if (r.walls) r.walls = r.walls.map(id => W.has(id) ? null : id); });
     }
-    this.sel = null; this.changed();
+  }
+
+  /* ───────────── seçim (tek / çoklu) ───────────── */
+  selList() { return this.msel.length ? this.msel : (this.sel ? [this.sel] : []); }
+  isSel(ht) { return this.selList().some(s => s.kind === ht.kind && s.id === ht.id); }
+  setSel(list) {
+    list = list.filter(s => this.obj(s));
+    if (list.length === 1) { this.sel = list[0]; this.msel = []; } else { this.sel = null; this.msel = list; }
+    this.renderInsp(); this.render();
+  }
+  toggleSel(ht) {
+    const cur = this.selList().map(s => ({ kind: s.kind, id: s.id }));
+    const i = cur.findIndex(s => s.kind === ht.kind && s.id === ht.id);
+    if (i >= 0) cur.splice(i, 1); else cur.push({ kind: ht.kind, id: ht.id });
+    this.setSel(cur);
+  }
+  selectAll() {
+    const P = this.plan, all = [];
+    for (const k of ['wall', 'room', 'item', 'dim', 'label']) P[this.coll(k)].forEach(o => all.push({ kind: k, id: o.id }));
+    if (this.tool !== 'select') this.setTool('select');
+    this.setSel(all);
+  }
+  /* alanın tamamen içinde kalan nesneleri seç */
+  boxSelect(p0, p1, add) {
+    const x0 = Math.min(p0.x, p1.x), x1 = Math.max(p0.x, p1.x), y0 = Math.min(p0.y, p1.y), y1 = Math.max(p0.y, p1.y);
+    const inB = q => q.x >= x0 && q.x <= x1 && q.y >= y0 && q.y <= y1;
+    const P = this.plan, found = [];
+    P.walls.forEach(w => { if (inB(w.a) && inB(w.b)) found.push({ kind: 'wall', id: w.id }); });
+    P.rooms.forEach(r => { if (r.pts.every(inB)) found.push({ kind: 'room', id: r.id }); });
+    P.items.forEach(i => { if (inB(i)) found.push({ kind: 'item', id: i.id }); });
+    P.labels.forEach(l => { if (inB(l)) found.push({ kind: 'label', id: l.id }); });
+    P.dims.forEach(d => { if (inB(d.a) && inB(d.b)) found.push({ kind: 'dim', id: d.id }); });
+    const cur = add ? this.selList().slice() : [];
+    for (const f of found) if (!cur.some(s => s.kind === f.kind && s.id === f.id)) cur.push(f);
+    this.setSel(cur);
+  }
+  /* seçili nesnelerin taşınacak geometrisi: odaların duvarları da dahil */
+  moveSet(list) {
+    const W = new Set(list.filter(s => s.kind === 'wall').map(s => s.id));
+    list.filter(s => s.kind === 'room').forEach(s => (this.obj(s)?.walls || []).forEach(id => id && W.add(id)));
+    return W;
+  }
+  dragMulti(g, wp) {
+    this.plan = JSON.parse(g.before);
+    const d = V.sub(wp, g.w0), sd = { x: this.snapLen(d.x), y: this.snapLen(d.y) };
+    this.translate(this.selList(), sd);
+    this.render();
+  }
+  translate(list, sd) {
+    const P = this.plan, W = this.moveSet(list), has = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
+    P.walls.forEach(w => { if (W.has(w.id)) { w.a = V.add(w.a, sd); w.b = V.add(w.b, sd); } });
+    const R = has('room'), I = has('item'), L = has('label'), D = has('dim');
+    P.rooms.forEach(r => { if (R.has(r.id)) r.pts = r.pts.map(q => V.add(q, sd)); });
+    P.items.forEach(i => { if (I.has(i.id)) { i.x += sd.x; i.y += sd.y; } });
+    P.labels.forEach(l => { if (L.has(l.id)) { l.x += sd.x; l.y += sd.y; } });
+    P.dims.forEach(m => { if (D.has(m.id)) { m.a = V.add(m.a, sd); m.b = V.add(m.b, sd); } });
+  }
+
+  /* ───────────── kopyala / kes / yapıştır / temizle ───────────── */
+  copySel(quiet = false) {
+    const list = this.selList();
+    if (!list.length) { toast('Önce kopyalanacak nesneleri seçin', 'err'); return false; }
+    const P = this.plan, W = this.moveSet(list), has = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
+    const O = has('opening');
+    const clip = {
+      src: this.inst, at: Date.now(),
+      walls: P.walls.filter(w => W.has(w.id)),
+      openings: P.openings.filter(o => W.has(o.wallId)),
+      rooms: P.rooms.filter(r => has('room').has(r.id)),
+      items: P.items.filter(i => has('item').has(i.id)),
+      dims: P.dims.filter(d => has('dim').has(d.id)),
+      labels: P.labels.filter(l => has('label').has(l.id)),
+    };
+    // yalnız kapı/pencere seçildiyse: kendi duvarlarıyla birlikte değil, ayrı kopyalanamaz → uyar
+    if (O.size && !clip.walls.length && list.every(s => s.kind === 'opening')) { toast('Kapı / pencere duvarıyla birlikte kopyalanır — duvarı da seçin', 'err'); return false; }
+    clip.n = clip.walls.length + clip.rooms.length + clip.items.length + clip.dims.length + clip.labels.length;
+    const json = JSON.stringify(clip);
+    this.clip = json; this.pasteN = 0;
+    try { localStorage.setItem('tb-plan-clip', json); } catch { /* büyük olabilir; bellekte kalır */ }
+    if (!quiet) toast(`${clip.n} nesne kopyalandı`);
+    return true;
+  }
+  cutSel() {
+    if (!this.copySel(true)) return;
+    const n = JSON.parse(this.clip).n;
+    this.del();
+    toast(`${n} nesne kesildi — yapıştırmak için Ctrl+V`);
+  }
+  paste() {
+    let json = null;
+    try { json = localStorage.getItem('tb-plan-clip'); } catch { /* yok */ }
+    json = json || this.clip;
+    if (!json) { toast('Panoda çizim yok — önce kopyalayın', 'err'); return; }
+    const c = JSON.parse(json), P = this.plan;
+    // aynı çizimde her yapıştırmada biraz kaydır; başka işten geldiyse aynı konuma koy
+    const k = c.src === this.inst ? ++this.pasteN * 50 : 0, sd = { x: k, y: k };
+    const map = {}, nid = (p, old) => (map[old] = uid(p));
+    this.snap();
+    const sel = [];
+    c.walls.forEach(w => { const n = { ...w, id: nid('w', w.id), a: V.add(w.a, sd), b: V.add(w.b, sd) }; P.walls.push(n); sel.push({ kind: 'wall', id: n.id }); });
+    c.openings.forEach(o => { if (map[o.wallId]) P.openings.push({ ...o, id: uid('o'), wallId: map[o.wallId] }); });
+    c.rooms.forEach(r => { const n = { ...r, id: uid('r'), pts: r.pts.map(q => V.add(q, sd)), walls: (r.walls || []).map(id => map[id] || null) }; P.rooms.push(n); sel.push({ kind: 'room', id: n.id }); });
+    c.items.forEach(i => { const n = { ...i, id: uid('i'), x: i.x + sd.x, y: i.y + sd.y }; P.items.push(n); sel.push({ kind: 'item', id: n.id }); });
+    c.dims.forEach(d => { const n = { ...d, id: uid('d'), a: V.add(d.a, sd), b: V.add(d.b, sd) }; P.dims.push(n); sel.push({ kind: 'dim', id: n.id }); });
+    c.labels.forEach(l => { const n = { ...l, id: uid('l'), x: l.x + sd.x, y: l.y + sd.y }; P.labels.push(n); sel.push({ kind: 'label', id: n.id }); });
+    if (this.tool !== 'select') this.setTool('select');
+    this.onChange(this.plan);
+    this.setSel(sel);
+    toast(`${c.n} nesne yapıştırıldı — seçili; sürükleyerek yerleştirin`);
+  }
+  async clearAll() {
+    const P = this.plan, n = P.walls.length + P.rooms.length + P.items.length + P.dims.length + P.labels.length;
+    if (!n) { toast('Çizim zaten boş'); return; }
+    if (!await confirmDlg(`Tüm çizimi silmek istediğinize emin misiniz? ${P.walls.length} duvar, ${P.rooms.length} oda, ${P.openings.length} kapı/pencere, ${P.items.length} donatı, ${P.dims.length + P.labels.length} ölçü/yazı silinecek. Altlık görseli ve plan ayarları korunur; "Geri al" ile geri getirebilirsiniz.`, 'Tümünü sil')) return;
+    if (this.chain) { this.chain = null; this.renderHud(); }
+    this.snap();
+    Object.assign(P, { walls: [], openings: [], rooms: [], items: [], dims: [], labels: [] });
+    this.sel = null; this.msel = []; this.pasteN = 0;
+    this.changed();
+    toast('Çizim temizlendi');
   }
   nextRoomName() { return `Oda ${this.plan.rooms.length + 1}`; }
 
@@ -821,7 +984,19 @@ export class PlanEditor {
         o += `<line class="rotln" x1="${so.x}" y1="${so.y}" x2="${hp.x}" y2="${hp.y}" stroke-width="${px(1.5)}"/><circle class="hdl rot" cx="${hp.x}" cy="${hp.y}" r="${px(7)}" stroke-width="${px(2)}"/>`;
       }
     }
+    for (const ms of this.msel) {
+      const m = this.obj(ms); if (!m) continue;
+      if (ms.kind === 'wall') o += `<line class="selline" x1="${m.a.x}" y1="${m.a.y}" x2="${m.b.x}" y2="${m.b.y}" stroke-width="${this.T(m) + px(6)}"/>`;
+      else if (ms.kind === 'room') o += `<polygon class="selpoly" points="${m.pts.map(p => `${p.x},${p.y}`).join(' ')}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
+      else if (ms.kind === 'item') o += `<rect class="selpoly" x="${m.x - m.w / 2}" y="${m.y - m.d / 2}" width="${m.w}" height="${m.d}" transform="rotate(${m.rot || 0} ${m.x} ${m.y})" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
+      else if (ms.kind === 'label') o += `<circle class="selpoly" cx="${m.x}" cy="${m.y}" r="${(m.size || 25) * 1.2}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
+      else if (ms.kind === 'dim') { const [a, b] = this.dimPts(m); o += `<line class="selline" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke-width="${px(8)}"/>`; }
+    }
     const g = this.g;
+    if (g?.type === 'box' && g.moved) {
+      const x = Math.min(g.p0.x, g.p1.x), y = Math.min(g.p0.y, g.p1.y);
+      o += `<rect class="boxsel" x="${x}" y="${y}" width="${Math.abs(g.p1.x - g.p0.x)}" height="${Math.abs(g.p1.y - g.p0.y)}" stroke-width="${px(1.5)}" stroke-dasharray="${px(5)} ${px(4)}"/>`;
+    }
     if (g?.type === 'rect') {
       const x = Math.min(g.p0.x, g.p1.x), y = Math.min(g.p0.y, g.p1.y), w = Math.abs(g.p1.x - g.p0.x), l = Math.abs(g.p1.y - g.p0.y);
       o += `<rect class="prev" x="${x}" y="${y}" width="${w}" height="${l}" stroke-width="${px(2)}"/>`;
@@ -911,6 +1086,19 @@ export class PlanEditor {
     const s = this.sel, o = this.obj(s), P = this.plan;
     const num = (k, label, v, unit = 'cm', step = 1) => `<label>${label}<div class="inp-unit sm"><input type="number" inputmode="decimal" step="${step}" data-k="${k}" value="${v}"><span>${unit}</span></div></label>`;
     let body = '';
+    if (this.msel.length) {
+      const cnt = k => this.msel.filter(x => x.kind === k).length;
+      const parts = [['wall', 'duvar'], ['room', 'oda'], ['item', 'donatı'], ['dim', 'ölçü'], ['label', 'yazı']].map(([k, t]) => cnt(k) ? `${cnt(k)} ${t}` : '').filter(Boolean).join(' · ');
+      this.insp.innerHTML = `<h4>${this.msel.length} nesne seçili</h4><p class="muted small">${parts}</p>
+        <div class="row wrap"><button class="btn btn-xs btn-ghost" data-m="copy">${icon('copy')}Kopyala</button><button class="btn btn-xs btn-ghost" data-m="cut">${icon('cut')}Kes</button><button class="btn btn-xs btn-ghost" data-m="paste">${icon('paste')}Yapıştır</button></div>
+        <div class="row wrap"><button class="btn btn-xs btn-danger" data-m="del">${icon('trash')}Seçilenleri sil</button><button class="btn btn-xs btn-ghost" data-m="none">Seçimi kaldır</button></div>
+        <p class="muted small">Seçili bir nesneyi tutup sürükleyerek hepsini birlikte taşıyın. Shift + tıklama ya da "Çoklu seç" açıkken dokunma ile ekleyin / çıkarın.</p>`;
+      this.insp.onclick = e => {
+        const m = e.target.closest('[data-m]')?.dataset.m; if (!m) return;
+        if (m === 'copy') this.copySel(); else if (m === 'cut') this.cutSel(); else if (m === 'paste') this.paste(); else if (m === 'del') this.del(); else if (m === 'none') this.setSel([]);
+      };
+      return;
+    }
     if (!o) {
       const m = P.rooms.map(r => ({ r, m: roomMetrics(P, r) }));
       const tot = m.reduce((a, x) => a + x.m.area, 0);
