@@ -12,7 +12,11 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.16-3';
+export const APP_VERSION = '2026.10.16-4';
+export const LICENSE = {
+  owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
+  developer: 'SAGG+ App',
+};
 const S = { be: null, jobs: [], job: null, base: null, dirty: false, unwatch: null, tab: 'genel', settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
@@ -24,18 +28,38 @@ document.addEventListener('click', e => {
   location.hash = a.getAttribute('href');
 });
 
+function updateBanner() {
+  if ($('.upd-banner')) return;
+  const b = h(`<div class="upd-banner" role="status">${icon('sparkle')}<span>Uygulamanın yeni sürümü hazır.</span><button class="btn btn-primary btn-xs">Yenile</button><button class="icon-btn sm" aria-label="Sonra">${icon('x')}</button></div>`);
+  $('.btn', b).onclick = async () => { await flushSave().catch(() => {}); location.reload(); };
+  $('.icon-btn', b).onclick = () => b.remove();
+  document.body.append(b);
+}
+
 /* ═════════ açılış ═════════ */
 async function boot() {
   // yeni sürüm yayınlanınca (yeni servis çalışanı devreye girince) sayfayı bir kez yenile → eski kod çalışmaya devam etmesin
+  // Açılışta gelirse hemen yenile; uygulama uzun süredir açıkken (ör. Windows uygulaması) gelirse
+  // çalışmayı bölmemek için "Yeni sürüm hazır — Yenile" bildirimi göster.
+  const bootAt = Date.now();
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.addEventListener('controllerchange', async () => {
-      if (sessionStorage.getItem('tb-sw-reloaded')) return;
-      sessionStorage.setItem('tb-sw-reloaded', '1');
-      await flushSave().catch(() => {});
-      location.reload();
+      if (Date.now() - bootAt < 15000) {
+        if (sessionStorage.getItem('tb-sw-reloaded')) return;
+        sessionStorage.setItem('tb-sw-reloaded', '1');
+        await flushSave().catch(() => {});
+        location.reload();
+      } else updateBanner();
     });
   }
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js', location.pathname.startsWith('/saha') ? {} : { scope: '/' }).catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js', location.pathname.startsWith('/saha') ? {} : { scope: '/' }).then(reg => {
+      // yeni yayınları açık pencerede de yakala: 30 dakikada bir ve pencereye dönüldüğünde denetle
+      const check = () => reg.update().catch(() => {});
+      setInterval(check, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    }).catch(() => {});
+  }
   const mode = localStorage.getItem(MODE_KEY);
   if (mode === 'local') return start(await openLocal());
   app.innerHTML = splash('Bağlanılıyor…');
@@ -1049,7 +1073,23 @@ function settingsView() {
         <p class="muted small">Tüm iş kayıtlarını JSON olarak indirin (fotoğraf dosyaları hariç) ya da yedekten geri yükleyin.</p>
         <div class="row wrap"><button class="btn btn-ghost btn-sm" data-exp>${icon('download')}Yedek indir</button><label class="btn btn-ghost btn-sm">${icon('upload')}Yedekten yükle<input type="file" accept="application/json" hidden data-imp></label></div>
       </div>
+    </div>
+    <div class="card about">
+      <h3>${icon('shield')}Hakkında</h3>
+      <dl class="about-dl">
+        <dt>Program</dt><dd>TadilatBodrum Saha · Sürüm ${APP_VERSION}${window.tbDesktop ? ` · Windows uygulaması ${esc(window.tbDesktop.version)}` : ''}</dd>
+        <dt>Lisans sahibi</dt><dd>${esc(LICENSE.owner)}</dd>
+        <dt>Geliştirici</dt><dd>${esc(LICENSE.developer)}</dd>
+        <dt>İletişim</dt><dd><a href="https://www.saggplus.com" target="_blank" rel="noopener">www.saggplus.com</a> · <a href="mailto:info@saggplus.com">info@saggplus.com</a></dd>
+      </dl>
+      <p class="muted small">© ${new Date().getFullYear()} ${esc(LICENSE.owner)}. Tüm hakları saklıdır.</p>
+      ${window.tbDesktop ? `<div class="row wrap"><button class="btn btn-ghost btn-sm" data-dupd>${icon('download')}Güncellemeleri denetle</button><span class="muted small" id="dupdS"></span></div>` : `<p class="muted small">Windows uygulaması: <a href="https://github.com/aligokten/tadilatbodrum.com/releases/latest" target="_blank" rel="noopener">kurulum dosyasını indir</a></p>`}
     </div>`;
+  const du = $('[data-dupd]');
+  if (du) du.onclick = async () => {
+    const st = $('#dupdS'); st.textContent = 'Denetleniyor…';
+    try { st.textContent = await window.tbDesktop.checkUpdates(); } catch (e) { st.textContent = 'Denetlenemedi: ' + (e.message || e); }
+  };
   const persist = debounce(() => S.be.saveSettings(S.settings).then(() => toast('Ayarlar kaydedildi')).catch(e => toast(e.message, 'err')), 900);
   bindFields(view(), st, persist);
   const drawCat = () => {

@@ -1,0 +1,38 @@
+# Windows uygulamasını derler ve GitHub Releases'e yayımlar.
+# Yeni sürüm: desktop/package.json içindeki "version" artırılır, ardından
+#   git tag desktop-v1.0.1 && git push origin desktop-v1.0.1
+# Kurulu uygulamalar bu sürümü otomatik bulur, indirir ve kurar.
+name: Windows uygulaması
+
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Etiket ile sürüm aynı mı?
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "desktop-v$v" = "${GITHUB_REF_NAME}" ] || { echo "package.json sürümü ($v) etiketle (${GITHUB_REF_NAME}) aynı değil"; exit 1; }
+      - run: npm ci
+      - name: Derle ve yayımla
+        run: npx electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

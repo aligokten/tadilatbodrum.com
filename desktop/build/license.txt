@@ -1,0 +1,19 @@
+﻿TadilatBodrum Saha — Kullanım Lisansı
+
+Program lisans sahibi:
+Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.
+
+Program geliştirici:
+SAGG+ App
+
+www.saggplus.com - info@saggplus.com
+
+© 2026 Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti. Tüm hakları saklıdır.
+
+Bu program ve içerdiği tüm yazılım, tasarım, görsel ve belgeler lisans sahibinin mülkiyetindedir. Program yalnızca lisans sahibinin izin verdiği kişi ve cihazlarda, lisans sahibinin iş süreçleri için kullanılabilir. Lisans sahibinin yazılı izni olmadan programın tamamı veya bir bölümü kopyalanamaz, çoğaltılamaz, dağıtılamaz, değiştirilemez, kaynak kodu çözülemez, kiralanamaz veya üçüncü kişilere devredilemez.
+
+Program, kurulduğu bilgisayarda yeni sürümleri internet üzerinden otomatik olarak denetler ve indirir. Programla girilen veriler, kullanıcının seçtiği çalışma moduna göre bu bilgisayarda veya lisans sahibinin bulut hesabında saklanır.
+
+Program "olduğu gibi" sunulmaktadır. Yürürlükteki mevzuatın izin verdiği ölçüde, programın kullanımından doğabilecek doğrudan veya dolaylı zararlardan geliştirici sorumlu tutulamaz.
+
+Kurulumu sürdürerek bu koşulları kabul etmiş olursunuz.
