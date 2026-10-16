@@ -143,6 +143,35 @@ tekrarlayıp `firebase deploy --only functions` ile yeniden dağıtmanız yeterl
 
 ---
 
+## 7) Windows uygulaması (TadilatBodrum Saha .exe)
+
+Windows uygulaması `desktop/` klasöründedir. İçeriği canlı siteden (`kesif.tadilatbodrum.com`)
+açtığı için **web'e yaptığınız her `firebase deploy` Windows uygulamasında da hemen geçerlidir**;
+açık pencerede "Yeni sürüm hazır — Yenile" bildirimi çıkar.
+
+Uygulamanın kendisi (pencere, menü, kurulum) değiştiğinde yeni Windows sürümü yayımlanır.
+Kurulu uygulamalar bunu açılışta ve 4 saatte bir denetler, arka planda indirir ve kurar.
+
+**Yeni Windows sürümü yayımlama:**
+1. `desktop/package.json` içindeki `"version"` değerini artırın (ör. `1.0.0` → `1.0.1`) ve main'e gönderin.
+2. GitHub → **Actions** → **Windows uygulaması** → **Run workflow** (main) ile çalıştırın.
+   Ya da etiketle: `git tag desktop-v1.0.1` ve `git push origin desktop-v1.0.1`.
+3. Birkaç dakika sonra kurulum dosyası **Releases** sayfasında yayımlanır:
+   https://github.com/aligokten/tadilatbodrum.com/releases/latest
+
+**Kurulum:** Releases sayfasından `TadilatBodrum-Saha-Kurulum-<sürüm>.exe` indirilir.
+Dosya kod imzalı olmadığı için Windows ilk çalıştırmada "Windows bilgisayarınızı korudu"
+uyarısı verebilir: **Ek bilgi → Yine de çalıştır**.
+
+**Yerelde derleme (isteğe bağlı, Windows'ta):**
+```powershell
+cd $HOME\Desktop\tadilatbodrum-guncel\desktop
+npm ci
+npm run dist        # dist\TadilatBodrum-Saha-Kurulum-<sürüm>.exe
+```
+
+---
+
 ## Notlar
 
 - **Hosting site ID** (`.web.app` adresi) ile **SITE_ID** (Firestore namespace, `tadilatbodrum`)
