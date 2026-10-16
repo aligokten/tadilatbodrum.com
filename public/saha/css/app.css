@@ -545,6 +545,12 @@ body.dv-open{overflow:hidden}
 .dv-page .pdoc,.pdf-render .pdoc{width:100%}
 .pdf-render{position:fixed;left:-20000px;top:0;width:794px;background:#fff;z-index:-1}
 .pdf-render .p-title h1{background:none;color:#fff;-webkit-text-fill-color:#fff}
+.pdf-page{width:794px;display:flex;flex-direction:column;background:#fff;overflow:hidden}
+.pdf-body{flex:1;min-height:0;overflow:hidden;display:flow-root}
+.pdf-foot{flex:none}
+.pdf-foot .p-foot{margin-top:8px}
+.pdf-num{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:8pt;color:var(--muted);padding:4px 0 8px;line-height:1.3}
+.pdf-num b{color:var(--ink);font-size:9pt;white-space:nowrap}
 .pdf-render .p-plan img,.dv-page .p-plan img,#printArea .p-plan img{width:100%;height:auto;display:block}
 @media (max-width:860px){.dv-act .btn span{display:none}.dv-act .btn{width:40px;padding:0}.dv-page{padding:26px}}
 @media print{
@@ -552,6 +558,13 @@ body.dv-open{overflow:hidden}
   body{background:#fff}
   #app,.toasts,.modal-back,.lightbox,.upload-bar,.docview,.pdf-render{display:none!important}
   #printArea{display:block}
+  /* tarayıcıdan yazdırmada da: başlık sonraki içerikle kalsın, satırlar bölünmesin, alt bilgi her sayfada */
+  .pdoc h1,.pdoc h2,.pdoc h3,.pdoc h4{break-after:avoid;page-break-after:avoid}
+  .pdoc tr,.pdoc li,.pdoc p,.pdoc figure,.p-cust,.p-plan{break-inside:avoid;page-break-inside:avoid}
+  .pdoc p{orphans:3;widows:3}
+  .pr-wrap{width:100%;border-collapse:collapse}
+  .pr-wrap>tfoot .p-foot{margin-top:10px}
+  @page{@bottom-right{content:counter(page) " / " counter(pages);font:8pt sans-serif;color:#555}}
 }
 .pdoc{font-family:var(--f);color:var(--ink);font-size:11pt;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .p-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding-bottom:10px}
