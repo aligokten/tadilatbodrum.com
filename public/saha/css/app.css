@@ -463,6 +463,7 @@ body.plan-mode #view{padding:0;max-width:none;height:100dvh;gap:0}
 .prev{fill:rgba(0,175,176,.08);stroke:var(--teal);stroke-dasharray:6 4}
 polyline.prev{fill:none}
 .prevwall{stroke:var(--teal);stroke-opacity:.55;stroke-linecap:square}
+.prevface{stroke:var(--orange);stroke-dasharray:6 4}
 .prevop{stroke:var(--orange);stroke-opacity:.6}
 .prevtxt{fill:var(--ink);font-weight:800;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
 .cross{stroke:var(--orange)}
