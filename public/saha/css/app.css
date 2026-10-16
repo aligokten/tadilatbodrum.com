@@ -646,3 +646,12 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .imp-stats{font-size:14px;color:var(--ink-2)}
 .imp-stats b{font-family:var(--fd);font-size:16px}
 @media (max-width:860px){.imp-main{grid-template-columns:1fr}}
+
+/* yeni sürüm bildirimi + hakkında */
+.upd-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-b));z-index:140;display:flex;align-items:center;gap:10px;background:var(--dark);color:#fff;padding:8px 8px 8px 14px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);font-weight:600;font-size:14px;max-width:calc(100% - 24px)}
+.upd-banner .ic{color:var(--orange)}
+.upd-banner .icon-btn{color:#fff}
+@media (min-width:861px){.upd-banner{bottom:24px}}
+.about-dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:4px 0 10px;font-size:14px}
+.about-dl dt{color:var(--muted);font-weight:600}
+.about-dl dd{margin:0;font-weight:600}

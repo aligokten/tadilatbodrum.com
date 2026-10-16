@@ -1,0 +1,56 @@
+{
+  "name": "tadilatbodrum-saha",
+  "productName": "TadilatBodrum Saha",
+  "version": "1.0.0",
+  "description": "TadilatBodrum.com keşif, rölöve, anket, 3D model, render ve teklif uygulaması",
+  "main": "main.js",
+  "homepage": "https://www.saggplus.com",
+  "author": { "name": "SAGG+ App", "email": "info@saggplus.com", "url": "https://www.saggplus.com" },
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "release": "electron-builder --win nsis --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.saggplus.tadilatbodrum.saha",
+    "productName": "TadilatBodrum Saha",
+    "copyright": "© 2026 Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti. Tüm hakları saklıdır.",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "offline.html", "license.json", "build/icon.png"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "legalTrademarks": "SAGG+ App",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "license": "build/license.txt",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "TadilatBodrum Saha",
+      "menuCategory": "SAGG+ App",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "TadilatBodrum Saha",
+      "artifactName": "TadilatBodrum-Saha-Kurulum-${version}.${ext}",
+      "language": "1055",
+      "installerLanguages": ["tr_TR"],
+      "multiLanguageInstaller": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [{ "provider": "github", "owner": "aligokten", "repo": "tadilatbodrum.com", "releaseType": "release" }]
+  }
+}
