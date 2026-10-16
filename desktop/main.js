@@ -78,8 +78,13 @@ function buildMenu() {
       { label: 'Çıkış', role: 'quit' },
     ] },
     { label: 'Düzen', submenu: [
-      { label: 'Geri al', role: 'undo' }, { label: 'Yinele', role: 'redo' }, { type: 'separator' },
-      { label: 'Kes', role: 'cut' }, { label: 'Kopyala', role: 'copy' }, { label: 'Yapıştır', role: 'paste' }, { label: 'Tümünü seç', role: 'selectAll' },
+      // kısayollar sayfaya bırakılır: rölöve editörü Ctrl+Z/Y/X/C/V/A ile kendi geri al / kopyala / yapıştır işlemlerini yapar
+      { label: 'Geri al', role: 'undo', accelerator: 'Ctrl+Z', registerAccelerator: false },
+      { label: 'Yinele', role: 'redo', accelerator: 'Ctrl+Y', registerAccelerator: false }, { type: 'separator' },
+      { label: 'Kes', role: 'cut', accelerator: 'Ctrl+X', registerAccelerator: false },
+      { label: 'Kopyala', role: 'copy', accelerator: 'Ctrl+C', registerAccelerator: false },
+      { label: 'Yapıştır', role: 'paste', accelerator: 'Ctrl+V', registerAccelerator: false },
+      { label: 'Tümünü seç', role: 'selectAll', accelerator: 'Ctrl+A', registerAccelerator: false },
     ] },
     { label: 'Görünüm', submenu: [
       { label: 'Yakınlaştır', role: 'zoomIn', accelerator: 'Ctrl+=' }, { label: 'Uzaklaştır', role: 'zoomOut' }, { label: 'Gerçek boyut', role: 'resetZoom' },

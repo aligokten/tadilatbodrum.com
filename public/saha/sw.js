@@ -1,5 +1,5 @@
 /* TadilatBodrum Saha — çevrimdışı kabuk önbelleği (stale-while-revalidate) */
-const CACHE = 'tb-saha-v10';
+const CACHE = 'tb-saha-v11';
 const CORE = ['./', 'index.html', 'css/app.css', 'manifest.webmanifest', 'assets/logo.png', 'assets/icon-192.png',
   'js/app.js', 'js/store.js', 'js/ui.js', 'js/catalog.js', 'js/survey.js', 'js/quote.js', 'js/plan2d.js', 'js/plan-geom.js', 'js/plan3d.js', 'js/textures.js', 'js/docview.js', 'js/merge.js', 'js/importer.js', 'js/importui.js',
   'vendor/three/three.module.js', 'vendor/three/three.core.js', 'vendor/three/addons/controls/OrbitControls.js', 'vendor/three/addons/environments/RoomEnvironment.js'];
