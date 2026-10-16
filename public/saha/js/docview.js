@@ -154,6 +154,14 @@ function paginate(src, makePage) {
     target().append(c);
     if (fits()) { placed.push({ clone: c, src: el }); return; }
     c.remove();
+    // birlikte kalması istenen kutu (tespit, mahal, not…): önce yeni sayfada bütün olarak dene,
+    // ancak tek sayfaya hiç sığmıyorsa böl
+    if (placed.length && getComputedStyle(el).breakInside === 'avoid') {
+      nextPage(chain);
+      const c1 = el.cloneNode(true); target().append(c1);
+      if (fits()) { placed.push({ clone: c1, src: el }); return; }
+      c1.remove();
+    }
     const splittable = el.matches(SPLIT) && !el.matches(KEEP) && el.children.length > 0;
     if (splittable) {
       const sc = shallowClone(el); target().append(sc); map.set(el, sc);
@@ -185,7 +193,8 @@ export async function buildPdf(html, title, onProgress) {
     }));
     await waitImages(el);
     // kopyalar ölçülürken görseller henüz yüklenmemiş olsa da doğru yer kaplasın
-    $$('img', el).forEach(i => { if (i.naturalWidth) { i.setAttribute('width', i.naturalWidth); i.setAttribute('height', i.naturalHeight); } });
+    // (yalnızca en-boy oranı; genişlik/yükseklik CSS'te nasılsa öyle kalır — logo vb. bozulmasın)
+    $$('img', el).forEach(i => { if (i.naturalWidth && getComputedStyle(i).aspectRatio.startsWith('auto')) i.style.aspectRatio = `${i.naturalWidth} / ${i.naturalHeight}`; });
     if (document.fonts?.ready) await document.fonts.ready;
     onProgress?.(0.1);
 
