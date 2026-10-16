@@ -25,10 +25,30 @@ const TOOLS = [
   { k: 'dim', t: 'Ölçü çizgisi', ic: 'dim', key: 'o' },
   { k: 'text', t: 'Yazı', ic: 'text', key: 't' },
 ];
+/* kullanıcının araç seçimleri cihazda hatırlanır */
+function pref(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch { return def; } }
+function setPref(k, v) { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* yok say */ } }
+
+/* açık çoklu çizgiyi d kadar öteler (d>0: kapanış yönüne göre içe); köşeler birleşik */
+function offsetOpen(pts, d, ccw) {
+  const n = pts.length;
+  const segs = pts.slice(0, -1).map((a, i) => { const u = V.norm(V.sub(pts[i + 1], a)); return { u, nrm: { x: -u.y * ccw, y: u.x * ccw } }; });
+  return pts.map((p, i) => {
+    if (i === 0) return V.add(p, V.mul(segs[0].nrm, d));
+    if (i === n - 1) return V.add(p, V.mul(segs[n - 2].nrm, d));
+    const A = segs[i - 1], B = segs[i];
+    const pa = V.add(p, V.mul(A.nrm, d)), pb = V.add(p, V.mul(B.nrm, d));
+    const den = V.cross(A.u, B.u);
+    if (Math.abs(den) < 1e-9) return pa;
+    return V.add(pa, V.mul(A.u, V.cross(V.sub(pb, pa), B.u) / den));
+  });
+}
+const chainSide = (pts, flip) => (Math.sign(polyArea(pts)) || 1) * (flip ? -1 : 1);
+
 const HINTS = {
   select: 'Nesneye dokunup sürükleyin. Boş alanı sürükleyerek kaydırın, iki parmakla yakınlaştırın.',
   pan: 'Sürükleyerek görünümü kaydırın.',
-  wall: 'Noktaları sırayla işaretleyin. Uzunluğu yazıp Enter / yön oku ile tam ölçü girin. Başlangıca dönünce oda kapanır.',
+  wall: 'Noktaları sırayla işaretleyin. Uzunluğu yazıp Enter / yön oku ile tam ölçü girin. Başlangıca dönünce oda kapanır (iç ölçüyle).',
   rect: 'Köşeden köşeye sürükleyin (iç ölçü). Ya da "Ölçüyle oda" ile en/boy girin.',
   poly: 'Köşeleri sırayla işaretleyin, ilk noktaya dokunarak ya da Bitir ile kapatın.',
   door: 'Bir duvara dokunun — kapı o konuma yerleşir.',
@@ -53,6 +73,8 @@ export class PlanEditor {
     this.tool = 'select';
     this.sel = null;              // { kind, id }
     this.chain = null;            // duvar/çokgen çizimi: { pts: [] , start }
+    this.polyWalls = pref('tb-pe-polywalls', true);   // çokgen oda: duvarları da oluştur
+    this.wallFace = pref('tb-pe-wallface', true);     // duvar aracı: çizgi = iç yüz, kalınlık dışa
     this.preview = null;          // imleç önizleme noktası
     this.snapInd = null;
     this.ptrs = new Map();
@@ -432,15 +454,18 @@ export class PlanEditor {
     if (t === 'scale') { this.chain = null; this.scalePlan(last, p); return; }
     const closes = c.pts.length >= 3 && V.eq(p, c.pts[0], 1);
     if (t === 'wall') {
-      if (!c.started) { this.snap(); c.started = true; }
-      this.plan.walls.push({ id: uid('w'), a: { ...last }, b: { ...p }, t: this.plan.meta.wallT, h: 0 });
+      if (!c.started) { this.snap(); c.started = true; c.wallIds = []; c.face = this.wallFace; }
+      const w = { id: uid('w'), a: { ...last }, b: { ...p }, t: this.plan.meta.wallT, h: 0 };
+      this.plan.walls.push(w); c.wallIds.push(w.id);
       if (closes) {
-        // kapalı duvar zinciri → içten oda oluştur
-        const room = { id: uid('r'), name: this.nextRoomName(), pts: offsetPoly(c.pts, this.plan.meta.wallT / 2), floor: 'parke', wallColor: '', h: 0, walls: [] };
+        c.closed = true; this.layoutChain(c);
+        // kapalı duvar zinciri → oda: iç yüz çizildiyse çizilen çokgen zaten net iç ölçüdür
+        const pts = c.face ? c.pts.map(q => ({ ...q })) : offsetPoly(c.pts, this.plan.meta.wallT / 2);
+        const room = { id: uid('r'), name: this.nextRoomName(), pts, floor: 'parke', wallColor: '', h: 0, walls: [...c.wallIds] };
         if (Math.abs(polyArea(c.pts)) > 1e4) this.plan.rooms.push(room);
         this.chain = null; this.dir = null; this.changed(); this.renderHud(); return;
       }
-      c.pts.push(p); this.dir = null; this.changed(); this.renderHud(); return;
+      c.pts.push(p); this.layoutChain(c); this.dir = null; this.changed(); this.renderHud(); return;
     }
     if (t === 'poly') {
       if (closes) { this.finishChain(); return; }
@@ -448,11 +473,27 @@ export class PlanEditor {
     }
   }
 
+  /* çizilen zincirin duvar eksenlerini yerleştir: iç yüz modunda kalınlık dışa (kapanış yönünün tersine) */
+  layoutChain(c) {
+    if (!c.wallIds?.length) return;
+    const walls = c.wallIds.map(id => this.wall(id)).filter(Boolean);
+    if (!c.face) return;
+    const off = -this.plan.meta.wallT / 2;
+    if (c.closed) {
+      const q = offsetPoly(c.pts, off);
+      walls.forEach((w, i) => { w.a = q[i]; w.b = q[(i + 1) % q.length]; });
+    } else {
+      const q = offsetOpen(c.pts, off, chainSide(c.pts, c.flip));
+      walls.forEach((w, i) => { w.a = q[i]; w.b = q[i + 1]; });
+    }
+    walls.forEach(w => { w.t = this.plan.meta.wallT; ['a', 'b'].forEach(k => { w[k] = { x: +w[k].x.toFixed(2), y: +w[k].y.toFixed(2) }; }); });
+  }
+
   finishChain() {
     const c = this.chain; if (!c) return;
     if (this.tool === 'poly' && c.pts.length >= 3) {
       this.snap();
-      const r = polyRoom(this.plan, c.pts, this.nextRoomName(), $('#peWalls', this.hud)?.checked ?? true);
+      const r = polyRoom(this.plan, c.pts, this.nextRoomName(), this.polyWalls);
       this.sel = { kind: 'room', id: r.id };
       this.chain = null; this.setTool('select'); this.changed(); return;
     }
@@ -793,7 +834,13 @@ export class PlanEditor {
       if (p && !p.wallId) {
         const L = V.dist(last, p);
         const tw = this.tool === 'wall' ? this.plan.meta.wallT : px(2);
-        o += `<line class="prevwall" x1="${last.x}" y1="${last.y}" x2="${p.x}" y2="${p.y}" stroke-width="${tw}"/>`;
+        let A = last, B = p;
+        if (this.tool === 'wall' && (c.started ? c.face : this.wallFace) && L > 0.5) {   // kalınlık dışa: önizleme de kaydırılmış
+          const pts = [...c.pts, p], q = offsetOpen(pts, -tw / 2, chainSide(pts, c.flip));
+          A = q.at(-2); B = q.at(-1);
+          o += `<line class="prevface" x1="${last.x}" y1="${last.y}" x2="${p.x}" y2="${p.y}" stroke-width="${px(1.5)}"/>`;
+        }
+        o += `<line class="prevwall" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${tw}"/>`;
         const m = V.lerp(last, p, 0.5);
         o += `<text class="prevtxt" x="${m.x}" y="${m.y - px(14)}" font-size="${px(14)}">${fmtNum(L, 1)} cm</text>`;
       }
@@ -827,7 +874,10 @@ export class PlanEditor {
         ${['l', 'u', 'd', 'r'].map(d => `<button class="icon-btn sm" data-dir="${d}" ${this.chain ? '' : 'disabled'} title="Bu yönde ilerle">${{ l: '←', u: '↑', d: '↓', r: '→' }[d]}</button>`).join('')}
         ${this.chain ? `<button class="btn btn-xs btn-primary" data-fin>${icon('check')}Bitir</button>` : ''}
       </div>
-      ${t === 'wall' ? `<div class="hud-row"><label class="mini-l">Kalınlık <input id="peT" type="number" value="${this.plan.meta.wallT}"> cm</label></div>` : `<label class="mini-l"><input type="checkbox" id="peWalls" checked> Duvarları da oluştur</label>`}`;
+      ${t === 'wall' ? `<div class="hud-row"><label class="mini-l">Kalınlık <input id="peT" type="number" value="${this.plan.meta.wallT}"> cm</label>
+          <label class="mini-l"><input type="checkbox" id="peFace" ${this.wallFace ? 'checked' : ''} ${this.chain?.started ? 'disabled' : ''}> Çizgi iç yüz, kalınlık dışa</label>
+          ${this.chain?.started && this.chain.face && !this.chain.closed ? `<button class="btn btn-xs btn-ghost" data-flip title="Duvar kalınlığını çizginin diğer tarafına al">${icon('rotate')}Tarafı çevir</button>` : ''}</div>`
+        : `<label class="mini-l"><input type="checkbox" id="peWalls" ${this.polyWalls ? 'checked' : ''}> Duvarları da oluştur</label>`}`;
     } else if (t === 'item') {
       extra = `<div class="hud-row"><select class="inp sm" id="peItem">${FURNITURE.map(f => `<option value="${f.k}" ${f.k === this.itemType ? 'selected' : ''}>${f.t} (${f.w}×${f.d})</option>`).join('')}</select></div>`;
     }
@@ -851,6 +901,9 @@ export class PlanEditor {
     const fin = $('[data-fin]', this.hud); if (fin) fin.onclick = () => this.finishChain();
     const th = $('#peT', this.hud); if (th) th.onchange = () => { this.plan.meta.wallT = Math.max(2, +th.value || 15); this.onChange(this.plan); };
     const it = $('#peItem', this.hud); if (it) it.onchange = () => { this.itemType = it.value; };
+    const pw = $('#peWalls', this.hud); if (pw) pw.onchange = () => { this.polyWalls = pw.checked; setPref('tb-pe-polywalls', pw.checked); };
+    const pf = $('#peFace', this.hud); if (pf) pf.onchange = () => { this.wallFace = pf.checked; setPref('tb-pe-wallface', pf.checked); this.renderUI(); };
+    const fl = $('[data-flip]', this.hud); if (fl) fl.onclick = () => { const c = this.chain; if (!c) return; c.flip = !c.flip; this.layoutChain(c); this.changed(); this.renderHud(); };
   }
 
   /* ───────────── özellik paneli ───────────── */
