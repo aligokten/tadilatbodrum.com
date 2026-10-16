@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.16-1';
+export const APP_VERSION = '2026.10.16-2';
 const S = { be: null, jobs: [], job: null, base: null, dirty: false, unwatch: null, tab: 'genel', settings: null, editor: null, p3: null, route: '' };
 const app = $('#app');
 
