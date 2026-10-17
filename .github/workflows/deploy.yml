@@ -1,0 +1,62 @@
+# Siteyi (tadilatbodrum.com + kesif.tadilatbodrum.com) Firebase Hosting'e otomatik yayınlar.
+# main dalına her birleştirmede çalışır; Actions sekmesinden elle de çalıştırılabilir.
+# Kimlik doğrulama anahtarsızdır (Workload Identity Federation): repoda gizli anahtar tutulmaz.
+# Kurulum: DEPLOY.md → "0) Otomatik yayın (GitHub Actions)".
+name: Siteyi yayınla
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-hosting
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: saggplus
+  # Cloud Shell kurulum komutunun en son yazdırdığı satır:
+  WIF_PROVIDER: ''
+  SERVICE_ACCOUNT: github-deploy@saggplus.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kurulum yapıldı mı?
+        id: check
+        run: |
+          if [ -z "$WIF_PROVIDER" ]; then
+            echo "::warning::Otomatik yayın henüz kurulmadı (WIF_PROVIDER boş) — yayın atlandı. DEPLOY.md → '0) Otomatik yayın'."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.ok == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Firebase Hosting'e yayınla
+        if: steps.check.outputs.ok == 'true'
+        run: npx --yes firebase-tools@13.29.1 deploy --only hosting --project "$PROJECT_ID" --non-interactive --message "GitHub ${GITHUB_SHA::7}"
+      - name: Özet
+        if: steps.check.outputs.ok == 'true'
+        run: |
+          v=$(grep -o "APP_VERSION = '[^']*'" public/saha/js/app.js | cut -d"'" -f2)
+          echo "### Yayınlandı ✓" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Saha uygulaması sürümü: **$v**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- https://kesif.tadilatbodrum.com · https://tadilatbodrum.com" >> "$GITHUB_STEP_SUMMARY"
