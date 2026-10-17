@@ -720,3 +720,23 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
   .cd-act .btn-primary span{display:inline}
   .cd-svg svg{max-height:52vh}
 }
+
+/* ═════════ çizimler (rölöve + proje) ═════════ */
+.dw-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px}
+.dw-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.dw-card.main{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset}
+.dw-card .thumb-wrap{display:block;background:var(--bg);border:0;border-radius:0;border-bottom:1px solid var(--line)}
+.dw-card .thumb-wrap svg{width:100%;height:auto;display:block}
+.dw-empty{height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-weight:600}
+.dw-empty .ic{width:28px;height:28px}
+.dw-info{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.dw-t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dw-t b{font-size:15px}
+.dw-kind{font-size:11px;font-weight:800;border-radius:99px;padding:2px 9px;background:var(--bg);color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.dw-kind.k-rolove{background:var(--teal-50,#E6F7F7);color:var(--teal-d,#00898A)}
+.dw-kind.k-proje{background:#FDEBE3;color:#C2410C}
+.met-chips.sm span{padding:4px 8px}
+.met-chips.sm b{font-size:13px}
+.danger-t{color:#C2410C}
+.ps-dw{display:block;max-width:100%;margin-top:2px;background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.35);color:#C9CDD3;font:inherit;font-size:12px;font-weight:700;padding:1px 18px 1px 0;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#C9CDD3 50%),linear-gradient(135deg,#C9CDD3 50%,transparent 50%);background-position:right 6px top 55%,right 2px top 55%;background-size:4px 4px;background-repeat:no-repeat;cursor:pointer}
+.ps-dw option{color:#111}

@@ -11,7 +11,7 @@ const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 
 /* kimlikli diziler; log kimliksiz olduğundan t+metin anahtar olarak kullanılır */
-const KEYED = { photos: 'id', requests: 'id', findings: 'id', log: x => `${x.t}|${x.text}`, rooms: 'id' };
+const KEYED = { photos: 'id', requests: 'id', findings: 'id', log: x => `${x.t}|${x.text}`, rooms: 'id', drawings: 'id' };
 const keyFn = k => typeof KEYED[k] === 'function' ? KEYED[k] : x => x?.[KEYED[k]];
 
 function mergeKeyed(base = [], local = [], remote = [], key) {

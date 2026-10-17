@@ -66,8 +66,9 @@ const HINTS = {
 const OPEN_DEF = { door: { w: 90, h: 210, sill: 0 }, window: { w: 120, h: 140, sill: 90 }, gap: { w: 90, h: 220, sill: 0 } };
 
 export class PlanEditor {
-  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab } = {}) {
+  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab, ghost } = {}) {
     this.addImage = addImage;
+    this.ghost = ghost || null;   // proje çiziminde rölöve (mevcut durum) altlığı
     this.cabCtx = cab || {};      // mutfak/dolap tasarlayıcı: teklife ekleme, PDF, fiyatlar
     this.host = host;
     this.plan = plan || emptyPlan();
@@ -110,6 +111,7 @@ export class PlanEditor {
           <button class="tgl ${this.opt.snap ? 'on' : ''}" data-o="snap" title="Izgaraya yasla">${icon('magnet')}<span>Yasla</span></button>
           <button class="tgl ${this.opt.ortho ? 'on' : ''}" data-o="ortho" title="Açı yakalama (0/45/90°)">${icon('grid')}<span>Orto</span></button>
           <button class="tgl ${this.opt.dims ? 'on' : ''}" data-o="dims" title="Duvar ölçülerini göster">${icon('ruler')}<span>Ölçüler</span></button>
+          ${this.ghost ? `<button class="tgl ${this.opt.ghost !== false ? 'on' : ''}" data-o="ghost" title="Rölöveyi (mevcut durumu) soluk altlık olarak göster">${icon('layers')}<span>Rölöve altlığı</span></button>` : ''}
           <select class="mini" data-o="step" title="Yaslama adımı">${[1, 5, 10, 25, 50].map(n => `<option value="${n}" ${n === this.opt.step ? 'selected' : ''}>${n} cm</option>`).join('')}</select>
           <span class="sep"></span>
           <button class="icon-btn" data-a="fit" title="Sığdır">${icon('fit')}</button>
@@ -147,7 +149,7 @@ export class PlanEditor {
       else if (a === 'cab') this.cabFromSelection();
       else if (a === 'copy') this.copySel(); else if (a === 'cut') this.cutSel(); else if (a === 'paste') this.paste(); else if (a === 'clear') this.clearAll();
       else if (a === 'addRoom') this.addRoomDialog(); else if (a === 'import') this.importDialog(); else if (a === 'scale') this.setTool('scale'); else if (a === 'info') this.el.classList.toggle('show-insp'); else if (a === 'bg') this.bgDialog();
-      if (o) { this.opt[o] = !this.opt[o]; e.target.closest('button').classList.toggle('on', this.opt[o]); this.saveOpt(); this.render(); }
+      if (o) { this.opt[o] = o === 'ghost' ? this.opt.ghost === false : !this.opt[o]; e.target.closest('button').classList.toggle('on', this.opt[o]); this.saveOpt(); this.render(); }
     };
     $('select[data-o="step"]', this.el).onchange = e => { this.opt.step = +e.target.value; this.saveOpt(); };
 
@@ -1002,10 +1004,26 @@ export class PlanEditor {
   render() {
     const r = this.svg.getBoundingClientRect();
     this.gW.setAttribute('transform', `matrix(${this.s} 0 0 ${this.s} ${this.ox} ${this.oy})`);
-    this.gW.innerHTML = this.grid(r) + this.drawPlan(this.plan, this.s, true);
+    this.gW.innerHTML = this.grid(r) + this.drawPlan(this.plan, this.s, true) + this.ghostSvg();
     this.renderUI();
     const z = $('.pe-zoom', this.el);
     if (z) z.innerHTML = this.scaleBar();
+  }
+  /* rölöve altlığı: mevcut duvarların dış hatları kesik çizgiyle (yıkılan / korunan duvarlar görünsün) */
+  ghostSvg() {
+    const G = this.ghost; if (!G || this.opt.ghost === false) return '';
+    const px = n => n / this.s, T = G.meta?.wallT || 15;
+    let o = '';
+    for (const w of G.walls) {
+      const n = wallNormal(w), t = (w.t || T) / 2, a1 = V.add(w.a, V.mul(n, t)), b1 = V.add(w.b, V.mul(n, t)), a2 = V.sub(w.a, V.mul(n, t)), b2 = V.sub(w.b, V.mul(n, t));
+      o += `<path d="M${a1.x} ${a1.y}L${b1.x} ${b1.y}L${b2.x} ${b2.y}L${a2.x} ${a2.y}Z"/>`;
+    }
+    for (const op of G.openings || []) {
+      const w = G.walls.find(x => x.id === op.wallId); if (!w) continue;
+      const u = wallDir(w), c = V.add(w.a, V.mul(u, op.pos)), A = V.sub(c, V.mul(u, op.w / 2)), B = V.add(c, V.mul(u, op.w / 2));
+      o += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${px(3)}" stroke-dasharray="none"/>`;
+    }
+    return `<g class="ghost" fill="none" stroke="#7B5CC4" stroke-opacity=".55" stroke-width="${px(1.4)}" stroke-dasharray="${px(6)} ${px(4)}" pointer-events="none">${o}</g>`;
   }
   scaleBar() {
     const target = 90 / this.s, steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];

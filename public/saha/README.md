@@ -21,6 +21,15 @@ Adres: **`/saha`** (ör. `https://tadilatbodrum.com/saha`). Telefonda tarayıcı
 | Fotoğraflar | Kamera/galeriden yükleme (otomatik küçültme), etiket, mahal, açıklama |
 | Teklif | Fiyat kütüphanesinden kalem ekleme, metrajın plandan otomatik gelmesi, iskonto/KDV, PDF ve WhatsApp |
 
+### Çizimler: rölöve + proje
+Her işte birden fazla çizim olabilir (Rölöve & 3D sekmesi → **Yeni çizim**):
+- **Rölöve (mevcut durum):** işin ana çizimi; metraj, keşif mahalleri ve teklif buradan beslenir.
+- **Proje / tasarım:** müşterinin isteklerine göre hazırlanan yeni düzen — genellikle rölövenin kopyasından başlatılır;
+  birden fazla seçenek (Proje 1, Proje 2…) hazırlanabilir. Proje çiziminde rölöve **soluk kesik çizgili altlık** olarak
+  görünür (yıkılan / yeni duvarlar karşılaştırılır; araç çubuğunda *Rölöve altlığı* ile açılıp kapanır).
+- Çizim ekranının başlığındaki listeden çizimler arasında geçilir; çizimler kopyalanabilir, yeniden adlandırılabilir, silinebilir.
+- Keşif raporunda tüm çizimler (rölöve ve projeler) yer alır. Cihazlar arası eşitlemede her çizim ayrı birleştirilir.
+
 ### 2D rölöve editörü
 - **Duvar:** noktaları işaretleyin ya da uzunluğu yazıp yön okuna basın (→ ↓ ← ↑) — sahada ölçülen
   değerleri birebir girmek için. Başlangıç noktasına dönünce oda otomatik oluşur.
