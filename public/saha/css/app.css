@@ -658,3 +658,65 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .about-dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:4px 0 10px;font-size:14px}
 .about-dl dt{color:var(--muted);font-weight:600}
 .about-dl dd{margin:0;font-weight:600}
+
+/* ═════════ mutfak / dolap tasarlayıcı ═════════ */
+.cd{position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;padding-left:var(--safe-l);padding-right:var(--safe-r)}
+.cd-bar{display:flex;align-items:center;gap:10px;padding:calc(8px + var(--safe-t)) 12px 8px;background:var(--dark);color:#fff;flex:none;flex-wrap:wrap}
+.cd-bar .icon-btn{color:#fff}
+.cd-title{display:flex;flex-direction:column;min-width:0;flex:1 1 160px}
+.cd-title small{color:var(--teal);font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.cd-name{background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.3);color:#fff;font:inherit;font-weight:800;font-size:17px;padding:2px 0;min-width:0;width:100%}
+.cd-tabs{display:flex;gap:4px;background:rgba(255,255,255,.08);border-radius:12px;padding:3px}
+.cd-tabs button{display:flex;align-items:center;gap:6px;color:#C9CDD3;border-radius:9px;padding:6px 10px;font-weight:700;font-size:13px}
+.cd-tabs button.on{background:#fff;color:var(--ink)}
+.cd-tabs .ic{width:16px;height:16px}
+.cd-act{display:flex;gap:6px;flex-wrap:wrap}
+.cd-act .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.25)}
+.cd-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}
+.cd-stage{display:flex;flex-direction:column;min-width:0;min-height:0}
+.cd-view{flex:1;min-height:0;overflow:auto;padding:14px}
+.cd-svg{background:#fff;border-radius:14px;box-shadow:var(--sh);padding:8px}
+.cd-svg svg{width:100%;height:auto;max-height:calc(100vh - 220px);display:block}
+.cd-hit{cursor:pointer}
+.cd-hit:hover{fill:rgba(0,175,176,.08)}
+.cd-hint{margin:8px 4px 0}
+.cd-3d{position:relative;height:100%;min-height:360px;border-radius:14px;overflow:hidden;background:#E9F1F2}
+.cd-3d .p3-canvas{width:100%;height:100%;display:block}
+.cd-under{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px calc(10px + var(--safe-b));border-top:1px solid var(--line);background:#fff;flex:none}
+.cd-fit{margin-left:auto;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cd-fit b{color:var(--ink)} .cd-fit .ok{color:#1F9D55;font-weight:700} .cd-fit .warn{color:#C2410C;font-weight:700}
+.cd-side{overflow:auto;border-left:1px solid var(--line);background:#fff;padding:12px;display:flex;flex-direction:column;gap:10px}
+.cd-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.cd-box summary{cursor:pointer;list-style:none}
+.cd-box summary::-webkit-details-marker{display:none}
+.cd-box h4{margin:0;font-size:14px}
+.cd-box details[open] summary,.cd-box[open] summary{margin-bottom:6px}
+.cd-box label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.cd-modh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cd-modh b{background:var(--teal);color:#fff;border-radius:8px;padding:1px 8px}
+.cd-modh small{color:var(--muted);margin-left:auto}
+.cd-btns{display:flex;flex-wrap:wrap;gap:6px}
+.cd-chk{display:flex;flex-direction:column;gap:4px}
+.cd-chk label{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:13px}
+.cd-sw button{width:26px;height:26px}
+.cd-list{background:#fff;border-radius:14px;box-shadow:var(--sh);padding:14px}
+.cd-list h4{margin:14px 0 6px}
+.cd-table-wrap{overflow:auto;max-height:52vh;border:1px solid var(--line);border-radius:10px}
+.cd-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.cd-table th{position:sticky;top:0;background:var(--ink);color:#fff;text-align:left;padding:6px 8px;font-weight:700}
+.cd-table td{padding:5px 8px;border-bottom:1px solid var(--line)}
+.cd-table .r{text-align:right;white-space:nowrap}
+.cab-open{align-self:flex-start}
+@media (max-width:900px){
+  .cd-main{display:block;overflow:auto;-webkit-overflow-scrolling:touch}
+  .cd-stage{display:block}
+  .cd-view{overflow:visible;padding:10px}
+  .cd-3d{height:58vh}
+  .cd-under{position:sticky;bottom:0;z-index:2;padding-bottom:8px}
+  .cd-side{border-left:0;border-top:1px solid var(--line);overflow:visible;padding-bottom:calc(16px + var(--safe-b))}
+  .cd-act .btn span,.cd-tabs button span{display:none}
+  .cd-act .btn{width:38px;padding:0;justify-content:center}
+  .cd-act .btn-primary{width:auto;padding:0 12px}
+  .cd-act .btn-primary span{display:inline}
+  .cd-svg svg{max-height:52vh}
+}

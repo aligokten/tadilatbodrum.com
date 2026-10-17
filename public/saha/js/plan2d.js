@@ -4,6 +4,7 @@
 import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
+import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
 
 /* mobilya seçim listesi: kategorilere göre gruplu */
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
@@ -65,8 +66,9 @@ const HINTS = {
 const OPEN_DEF = { door: { w: 90, h: 210, sill: 0 }, window: { w: 120, h: 140, sill: 90 }, gap: { w: 90, h: 220, sill: 0 } };
 
 export class PlanEditor {
-  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage } = {}) {
+  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab } = {}) {
     this.addImage = addImage;
+    this.cabCtx = cab || {};      // mutfak/dolap tasarlayıcı: teklife ekleme, PDF, fiyatlar
     this.host = host;
     this.plan = plan || emptyPlan();
     this.onChange = onChange || (() => {});
@@ -116,6 +118,7 @@ export class PlanEditor {
           <button class="btn btn-xs btn-ghost" data-a="bg">${icon('image')}Altlık</button>
           <button class="btn btn-xs btn-ghost" data-a="import">${icon('upload')}DXF / PDF aktar</button>
           <button class="btn btn-xs btn-ghost" data-a="scale">${icon('ruler')}Ölçekle</button>
+          <button class="btn btn-xs btn-ghost" data-a="cab" title="Seçili duvara mutfak ya da giysi dolabı diz">${icon('kitchen')}Mutfak / dolap</button>
           <span class="sep"></span>
           <button class="tgl ${this.opt.box ? 'on' : ''}" data-o="box" title="Çoklu seçim: boş alanda sürükleyerek alan seçin, dokunarak ekleyin/çıkarın (Shift ile de olur)">${icon('layers')}<span>Çoklu seç</span></button>
           <button class="icon-btn" data-a="copy" title="Kopyala (Ctrl+C)">${icon('copy')}</button>
@@ -141,6 +144,7 @@ export class PlanEditor {
     $('.pe-bar', this.el).onclick = e => {
       const a = e.target.closest('[data-a]')?.dataset.a, o = e.target.closest('button[data-o]')?.dataset.o;
       if (a === 'undo') this.undo(); else if (a === 'redo') this.redo(); else if (a === 'fit') this.fit();
+      else if (a === 'cab') this.cabFromSelection();
       else if (a === 'copy') this.copySel(); else if (a === 'cut') this.cutSel(); else if (a === 'paste') this.paste(); else if (a === 'clear') this.clearAll();
       else if (a === 'addRoom') this.addRoomDialog(); else if (a === 'import') this.importDialog(); else if (a === 'scale') this.setTool('scale'); else if (a === 'info') this.el.classList.toggle('show-insp'); else if (a === 'bg') this.bgDialog();
       if (o) { this.opt[o] = !this.opt[o]; e.target.closest('button').classList.toggle('on', this.opt[o]); this.saveOpt(); this.render(); }
@@ -154,7 +158,13 @@ export class PlanEditor {
     sv.addEventListener('pointercancel', e => this.pUp(e, true));
     sv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !this.g) { this.preview = null; this.renderUI(); } });
     sv.addEventListener('wheel', e => { e.preventDefault(); const r = sv.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
-    sv.addEventListener('dblclick', () => { if (this.chain) this.finishChain(); });
+    sv.addEventListener('dblclick', e => {
+      if (this.chain) return this.finishChain();
+      if (this.tool !== 'select') return;
+      const r = sv.getBoundingClientRect(), ht = this.hit(this.toW(e.clientX - r.left, e.clientY - r.top));
+      const o = ht && ht.kind === 'item' && this.obj(ht);
+      if (o?.type === 'cabinet') this.openCab(o);
+    });
     sv.addEventListener('contextmenu', e => e.preventDefault());
     this.onKey = e => this.key(e);
     this.onKeyUp = e => { if (e.key === ' ') this.space = false; };
@@ -807,6 +817,71 @@ export class PlanEditor {
   }
   nextRoomName() { return `Oda ${this.plan.rooms.length + 1}`; }
 
+  /* ───────────── mutfak / giysi dolabı ───────────── */
+  async cabFromSelection() {
+    const w = this.sel?.kind === 'wall' ? this.obj(this.sel) : null;
+    if (!w) { toast('Önce dolabın yerleşeceği duvarı seçin (Seç aracıyla duvara dokunun)', 'err'); if (this.tool !== 'select') this.setTool('select'); return; }
+    const r = await modal({ title: 'Bu duvara ne dizilsin?', body: '<p class="muted">Dolaplar duvarın oda tarafındaki iç yüzüne, kapı ve pencereler gözetilerek otomatik dizilir; ardından tasarlayıcı açılır.</p>',
+      actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'wardrobe', t: 'Giysi dolabı' }, { k: 'kitchen', t: 'Mutfak', cls: 'btn-primary' }] });
+    if (r?.k === 'kitchen' || r?.k === 'wardrobe') this.createCab(r.k, w);
+  }
+  /* duvarın oda tarafındaki iç yüzüne dolap dizisi oluştur */
+  createCab(kind, w) {
+    const P = this.plan, t = this.T(w) / 2, u = wallDir(w), n = wallNormal(w), mid = V.lerp(w.a, w.b, 0.5);
+    const inRoom = sg => P.rooms.some(r => pointInPoly(V.add(mid, V.mul(n, sg * (t + 40))), r.pts));
+    const side = !inRoom(1) && inRoom(-1) ? -1 : 1, nin = V.mul(n, side);
+    const trim = p => { const o = this.endsAt(p).filter(([x]) => x.id !== w.id); return o.length ? Math.max(...o.map(([x]) => this.T(x))) / 2 : 0; };
+    let A = V.add(V.add(w.a, V.mul(nin, t)), V.mul(u, trim(w.a))), B = V.add(V.add(w.b, V.mul(nin, t)), V.mul(u, -trim(w.b))), dir = u;
+    if (-dir.y * nin.x + dir.x * nin.y < 0) { [A, B] = [B, A]; dir = V.mul(u, -1); }
+    const L = Math.round(V.dist(A, B) * 2) / 2;
+    if (L < 30) { toast('Duvar dolap dizmek için çok kısa', 'err'); return; }
+    const obstacles = P.openings.filter(o => o.wallId === w.id).map(o => {
+      const c = V.add(w.a, V.mul(u, o.pos)), x = V.dot(V.sub(c, A), dir);
+      return { x0: x - o.w / 2, x1: x + o.w / 2, type: o.type, sill: o.sill, h: o.h };
+    });
+    const cab = newCabinet(kind, L); autoFill(cab, L, obstacles); cab.avail = L;
+    const d = itemDims(cab);
+    const c = V.add(V.add(A, V.mul(dir, d.w / 2)), V.mul(nin, d.d / 2));
+    const rot = ((Math.atan2(dir.y, dir.x) * 180 / Math.PI) % 360 + 360) % 360;
+    const it = { id: uid('i'), type: 'cabinet', label: kind === 'wardrobe' ? 'Giysi dolabı' : 'Mutfak', x: +c.x.toFixed(2), y: +c.y.toFixed(2), w: d.w, d: d.d, h: d.h, z: 0, rot: +rot.toFixed(2), color: cabPick(FRONTS, cab.mat.front).c, cab };
+    this.snap(); P.items.push(it);
+    if (this.tool !== 'select') this.setTool('select');
+    this.sel = { kind: 'item', id: it.id }; this.msel = [];
+    this.changed();
+    this.openCab(it);
+  }
+  /* nesnenin arkasındaki duvarda kalan kapı / pencereler (dizi koordinatında) */
+  cabObstacles(it) {
+    const a = it.rot * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a), out = [];
+    for (const o of this.plan.openings) {
+      const w = this.wall(o.wallId); if (!w) continue;
+      const u = wallDir(w); if (Math.abs(u.x * cs + u.y * sn) < 0.95) continue;
+      const c = V.add(w.a, V.mul(u, o.pos)), rx = c.x - it.x, ry = c.y - it.y;
+      const lx = cs * rx + sn * ry, ly = -sn * rx + cs * ry, T = this.T(w);
+      if (Math.abs(ly + it.d / 2 + T / 2) > T / 2 + 8) continue;
+      const x = lx + it.w / 2;
+      if (x + o.w / 2 < -5 || x - o.w / 2 > it.w + 5) continue;
+      out.push({ x0: x - o.w / 2, x1: x + o.w / 2, type: o.type, sill: o.sill, h: o.h });
+    }
+    return out;
+  }
+  async openCab(it) {
+    if (!it?.cab) return;
+    const { openCabinetDesigner } = await import('./cabdesign.js');
+    const r = await openCabinetDesigner(it, { obstacles: this.cabObstacles(it), wallH: this.plan.meta.wallH, avail: it.cab.avail || it.w, ...this.cabCtx });
+    if (!r) return;
+    const o = this.plan.items.find(x => x.id === it.id); if (!o) return;
+    this.snap();
+    // dizinin sol-arka köşesi sabit kalsın
+    const a = o.rot * Math.PI / 180, u = { x: Math.cos(a), y: Math.sin(a) }, nf = { x: -u.y, y: u.x };
+    const corner = V.sub(V.sub({ x: o.x, y: o.y }, V.mul(u, o.w / 2)), V.mul(nf, o.d / 2));
+    const d = itemDims(r.cab);
+    Object.assign(o, { cab: { ...r.cab, avail: it.cab.avail || it.w }, label: r.label, w: d.w, d: d.d, h: d.h, color: cabPick(FRONTS, r.cab.mat.front).c });
+    const c = V.add(V.add(corner, V.mul(u, d.w / 2)), V.mul(nf, d.d / 2));
+    o.x = +c.x.toFixed(2); o.y = +c.y.toFixed(2);
+    this.changed();
+  }
+
   async addRoomDialog() {
     const sr = this.sel?.kind === 'room' ? this.obj(this.sel) : null;
     const r = await modal({ title: 'Ölçüyle oda ekle', body: `
@@ -988,6 +1063,10 @@ export class PlanEditor {
     // mobilyalar
     for (const it of P.items) {
       const isSel = live && this.sel?.id === it.id;
+      if (it.type === 'cabinet' && it.cab) {
+        o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${planSymbol(it, px)}${isSel ? `<rect class="item sel" x="${-it.w / 2}" y="${-it.d / 2}" width="${it.w}" height="${it.d}" fill="none" stroke-width="${px(1.6)}"/>` : ''}</g>`;
+        continue;
+      }
       const fs = Math.min(px(11), it.w / 5, 22);
       o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})"><rect class="item ${isSel ? 'sel' : ''}" x="${-it.w / 2}" y="${-it.d / 2}" width="${it.w}" height="${it.d}" rx="${Math.min(6, it.w / 10)}" fill="${it.color}" fill-opacity="0.55" stroke-width="${px(1.2)}"/>
         <line x1="${-it.w / 2}" y1="${-it.d / 2 + Math.min(10, it.d / 5)}" x2="${it.w / 2}" y2="${-it.d / 2 + Math.min(10, it.d / 5)}" class="itemback" stroke-width="${px(1)}"/>
@@ -1177,7 +1256,8 @@ export class PlanEditor {
         ${num('h', 'Yükseklik', o.h || P.meta.wallH)}
         <label>Renk (3D)<div class="swatches" data-k="color">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.color || '') === c ? 'on' : ''}" title="${c ? c : 'Varsayılan'}"></button>`).join('')}</div></label>
         <p class="muted small">${ops.length} açıklık. Uç noktaları sürükleyerek uzatın; gövdeyi sürükleyince duvar paralel kayar.</p>
-        <div class="row"><button class="btn btn-xs btn-ghost" data-act="split">Ortadan böl</button><button class="btn btn-xs btn-ghost" data-act="addDoor">+ Kapı</button><button class="btn btn-xs btn-ghost" data-act="addWin">+ Pencere</button></div>`;
+        <div class="row"><button class="btn btn-xs btn-ghost" data-act="split">Ortadan böl</button><button class="btn btn-xs btn-ghost" data-act="addDoor">+ Kapı</button><button class="btn btn-xs btn-ghost" data-act="addWin">+ Pencere</button></div>
+        <div class="row"><button class="btn btn-xs btn-primary" data-act="cabK">${icon('kitchen')}Bu duvara mutfak diz</button><button class="btn btn-xs btn-ghost" data-act="cabW">Giysi dolabı diz</button></div>`;
     } else if (s.kind === 'opening') {
       const w = this.wall(o.wallId), L = wallLen(w);
       body = `<h4>${o.type === 'door' ? 'Kapı' : o.type === 'window' ? 'Pencere' : 'Boşluk'}</h4>
@@ -1198,6 +1278,16 @@ export class PlanEditor {
         <label>Zemin kaplaması<select class="inp sm" data-k="floor">${FLOORS.map(f => `<option value="${f.k}" ${o.floor === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
         <label>Duvar rengi (3D)<div class="swatches" data-k="wallColor">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.wallColor || '') === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>`;
+    } else if (s.kind === 'item' && o.type === 'cabinet' && o.cab) {
+      const c = o.cab, isW = c.kind === 'wardrobe';
+      const nb = isW ? c.ward.filter(m => !CAB_MT[m.type].empty).length : c.base.filter(m => !CAB_MT[m.type].empty).length, nu = isW ? 0 : c.upper.filter(m => !CAB_MT[m.type].empty).length;
+      body = `<h4>${isW ? 'Giysi dolabı' : 'Mutfak'}</h4>
+        <button class="btn btn-primary btn-sm cab-open" data-act="cabEdit">${icon('edit')}Tasarla</button>
+        <label>Ad<input class="inp sm" data-k="label" value="${esc(o.label)}"></label>
+        <div class="mtable"><div><span>Uzunluk</span><b>${fmtNum(runLength(c), 1)} cm</b></div><div><span>${isW ? 'Modül' : 'Alt / boy modül'}</span><b>${nb}</b></div>${isW ? '' : `<div><span>Üst modül</span><b>${nu}</b></div>`}<div><span>Kapak</span><b>${esc(cabPick(FRONTS, c.mat.front).t)}</b></div></div>
+        ${num('rot', 'Dönüş', o.rot, '°', 15)}
+        <div class="row"><button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button><button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
+        <p class="muted small">Modülleri, ölçüleri, malzemeyi, kesim listesini ve teklif kalemlerini "Tasarla" ekranında düzenleyin (çift tıklama da açar).</p>`;
     } else if (s.kind === 'item') {
       body = `<h4>Mobilya / Donatı</h4>
         <label>Tür<select class="inp sm" data-k="type">${furnOptions(o.type, false)}</select></label>
@@ -1256,6 +1346,8 @@ export class PlanEditor {
     $$('[data-act]', this.insp).forEach(b => b.onclick = () => {
       const a = b.dataset.act, x = this.obj(this.sel);
       if (a === 'del') return this.del();
+      if (a === 'cabEdit') return this.openCab(x);
+      if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
       this.snap();
       if (a === 'flip') x.flip = !x.flip;
       if (a === 'side') x.side = -(x.side || 1);

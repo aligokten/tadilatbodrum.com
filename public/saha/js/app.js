@@ -5,14 +5,14 @@ import { openLocal, openCloud, MODE_KEY, newJob, uid, compressImage } from './st
 import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
-import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics } from './quote.js';
+import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
 import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.17-1';
+export const APP_VERSION = '2026.10.17-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -878,6 +878,17 @@ function planScreen() {
     resolvePhoto: id => { const p = j.photos.find(x => x.id === id); return p ? S.be.photoUrl(p) : ''; },
     pickBackground: pickPhoto,
     addImage: (blob, caption) => addBlobPhoto(blob, { tag: 'rolove', caption }),
+    cab: {
+      // mutfak / dolap tasarlayıcı → teklif kalemleri, çizim PDF'i, fiyat kütüphanesi
+      addQuoteItems: items => {
+        if (!j.quote) j.quote = newQuote(j, S.settings);
+        j.quote.items.push(...items.map(i => ({ id: uid('q'), qtyKey: '', ...i })));
+        if (['talep', 'kesif'].includes(j.status)) { j.status = 'teklif'; logEvt('Teklif hazırlanıyor'); }
+        save();
+      },
+      printSheet: (title, body) => printDoc(`<div class="pdoc">${docHeader(S.settings, title, `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `${title} ${j.code}`),
+      priceOf: (k, def) => S.settings.catalog?.find(c => c.id === k)?.price ?? def,
+    },
   });
   const setMode = async m => {
     mode = m; root.dataset.mode = m;

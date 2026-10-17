@@ -165,6 +165,13 @@ export const UNITS = ['m²', 'm', 'adet', 'takım', 'nokta', 'gün', 'saat', 'kg
 /* qty: plandan / keşiften otomatik metraj alınırken kullanılacak ölçü
  * floor = zemin alanı, wall = net duvar alanı, ceil = tavan alanı, perim = çevre */
 export const DEFAULT_CATALOG = [
+  { id: 'mf-alt', cat: 'mutfak', desc: 'Mutfak alt dolap (gövde + kapak, tezgah hariç)', unit: 'm', price: 9500 },
+  { id: 'mf-ust', cat: 'mutfak', desc: 'Mutfak üst dolap', unit: 'm', price: 7000 },
+  { id: 'mf-boy', cat: 'mutfak', desc: 'Mutfak boy dolabı / cihaz kolonu', unit: 'adet', price: 16000 },
+  { id: 'mf-tez', cat: 'mutfak', desc: 'Mutfak tezgahı', unit: 'm', price: 6500 },
+  { id: 'mf-gola', cat: 'mutfak', desc: 'Gola profil + aksesuar', unit: 'm', price: 900 },
+  { id: 'gd-dolap', cat: 'diger', desc: 'Giysi dolabı (gövde + kapak, ön yüz alanı)', unit: 'm²', price: 7500 },
+  { id: 'gd-surgu', cat: 'diger', desc: 'Sürgülü kapak sistemi farkı', unit: 'm²', price: 1500 },
   { id: 'c1',  cat: 'yikim',    desc: 'Mevcut seramik/fayans söküm ve moloz atımı', unit: 'm²', price: 180, qty: 'wall' },
   { id: 'c2',  cat: 'yikim',    desc: 'Mevcut zemin kaplaması söküm', unit: 'm²', price: 120, qty: 'floor' },
   { id: 'c3',  cat: 'boya',     desc: 'Duvar alçı + saten alçı + 2 kat iç cephe boyası', unit: 'm²', price: 260, qty: 'wall' },
