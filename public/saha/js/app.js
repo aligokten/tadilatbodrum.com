@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.16-5';
+export const APP_VERSION = '2026.10.17-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -982,10 +982,12 @@ async function renderDialog() {
         ctrl = new AbortController();
         const t0 = performance.now();
         try {
+          const notes = [];
           blob = await p3.renderImage({ w, h: hh, quality: q, samples: n, signal: ctrl.signal,
+            onNote: m => { notes.push(m); toast(m); },
             onProgress: (v, smp) => { $('.bar i', prog).style.width = Math.round(v * 100) + '%'; $('span', prog).textContent = smp ? `Örnek ${smp}/${n} · ${Math.round((performance.now() - t0) / 1000)} sn` : 'Sahne hazırlanıyor…'; } });
           $('img', out).src = URL.createObjectURL(blob); out.hidden = false;
-          $('span', prog).textContent = `Tamamlandı · ${Math.round((performance.now() - t0) / 1000)} sn`;
+          $('span', prog).textContent = `Tamamlandı · ${Math.round((performance.now() - t0) / 1000)} sn${notes.length ? ' · ' + notes.at(-1) : ''}`;
           btn('dl').hidden = btn('save').hidden = false;
         } catch (e) {
           console.error(e);
