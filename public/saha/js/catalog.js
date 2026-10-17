@@ -208,6 +208,7 @@ export const DEFAULT_SETTINGS = {
     address: 'Bodrum / Muğla', web: 'tadilatbodrum.com', taxNo: '', iban: '',
   },
   vat: 20,
+  profit: 0,
   validDays: 15,
   terms: [
     'Teklif, belirtilen geçerlilik süresi boyunca geçerlidir.',

@@ -152,7 +152,7 @@ export class Plan3D {
     // zemin (dış)
     const b = this.bounds();
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), this.std('#D9D2C3', 1));
-    ground.rotation.x = -Math.PI / 2; ground.position.set(b.cx, -0.02, b.cz); ground.receiveShadow = true;
+    ground.rotation.x = -Math.PI / 2; ground.position.set(b.cx, -0.02, b.cz); ground.receiveShadow = true; ground.userData.noExport = true;
     g.add(ground);
 
     // odalar: zemin + tavan
@@ -164,12 +164,12 @@ export class Plan3D {
       const tx = floorTexture(THREE, r.floor);
       const fm = this.mat('floor' + r.floor, () => new THREE.MeshStandardMaterial({ map: tx.map, roughness: tx.rough }));
       const fl = new THREE.Mesh(geo, fm);
-      fl.position.y = 0.002; fl.receiveShadow = true; fl.userData.room = r.id;
+      fl.position.y = 0.002; fl.receiveShadow = true; fl.userData.room = r.id; fl.name = 'Zemin ' + (r.name || '');
       g.add(fl); this.floors.push(fl);
       if (this.opt.ceiling && !this.opt.cut) {
         const cg = new THREE.ShapeGeometry(shape); cg.rotateX(Math.PI / 2);
         const c = new THREE.Mesh(cg, this.std('#FAFAF8', 0.95));
-        c.position.y = M(r.h || meta.wallH); c.receiveShadow = true;
+        c.position.y = M(r.h || meta.wallH); c.receiveShadow = true; c.name = 'Tavan';
         g.add(c);
         if (this.opt.lights) {
           const ctr = polyCentroid(r.pts);
@@ -177,7 +177,7 @@ export class Plan3D {
           L.position.set(M(ctr.x), M(r.h || meta.wallH) - 0.25, M(ctr.y));
           g.add(L);
           const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.02, 24), new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#FFE7C2', emissiveIntensity: 2.5 }));
-          bulb.position.set(M(ctr.x), M(r.h || meta.wallH) - 0.012, M(ctr.y));
+          bulb.position.set(M(ctr.x), M(r.h || meta.wallH) - 0.012, M(ctr.y)); bulb.userData.noExport = true;
           g.add(bulb);
         }
       }
@@ -197,7 +197,7 @@ export class Plan3D {
         const m = new THREE.Mesh(new THREE.BoxGeometry(M(s1 - s0), M(y1 - y0), M(t)), mw);
         const c = V.add(w.a, V.mul(u, (s0 + s1) / 2));
         m.position.set(M(c.x), M((y0 + y1) / 2), M(c.y)); m.rotation.y = ang;
-        m.castShadow = m.receiveShadow = true;
+        m.castShadow = m.receiveShadow = true; m.name = 'Duvar';
         g.add(m);
       };
       let s = -t / 2;
@@ -222,7 +222,7 @@ export class Plan3D {
 
   opening(o, w, u, ang, t, topClip) {
     if (o.type === 'gap') return;
-    const g = new THREE.Group();
+    const g = new THREE.Group(); g.name = o.type === 'window' ? 'Pencere' : 'Kapi';
     const c = V.add(w.a, V.mul(u, o.pos));
     g.position.set(M(c.x), 0, M(c.y)); g.rotation.y = ang;
     const fr = this.std('#F4F4F2', 0.5), W = M(o.w), T = M(t), f = 0.05;
@@ -254,7 +254,7 @@ export class Plan3D {
   }
 
   furniture(it) {
-    const g = new THREE.Group();
+    const g = new THREE.Group(); g.name = it.label || it.type;
     g.position.set(M(it.x), M(it.z || 0), M(it.y));
     g.rotation.y = -it.rot * Math.PI / 180;
     const W = M(it.w), D = M(it.d), H = M(it.h), col = it.color;
@@ -525,6 +525,25 @@ export class Plan3D {
     if (k === 'sunAz' || k === 'sunEl') this.placeSun();
     else if (k === 'exposure') { this.renderer.toneMappingExposure = v; this.dirty = true; }
     else this.build();
+  }
+
+  async exportGLB() {
+    const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
+    const prev = { cut: this.opt.cut, ceiling: this.opt.ceiling };
+    this.opt.cut = false; this.opt.ceiling = false; this.build();
+    const hide = []; this.root.traverse(o => { if (o.userData?.noExport && o.visible) { o.visible = false; hide.push(o); } });
+    try { const r = await new GLTFExporter().parseAsync(this.root, { binary: true, onlyVisible: true }); return new Blob([r], { type: 'model/gltf-binary' }); }
+    finally { hide.forEach(o => { o.visible = true; }); Object.assign(this.opt, prev); this.build(); this.dirty = true; }
+  }
+
+  /* dışa aktarma için tam model: kesit ve tavan kapalı, tam duvar yüksekliği */
+  async exportGroups() {
+    const { collectMeshes } = await import('./exporters.js');
+    const prev = { cut: this.opt.cut, ceiling: this.opt.ceiling };
+    this.opt.cut = false; this.opt.ceiling = false; this.build();
+    const hide = []; this.root.traverse(o => { if (o.userData?.noExport && o.visible) { o.visible = false; hide.push(o); } });
+    try { return collectMeshes(this.root); }
+    finally { hide.forEach(o => { o.visible = true; }); Object.assign(this.opt, prev); this.build(); this.dirty = true; }
   }
 
   /* ───────────── yüksek çözünürlüklü render ─────────────
