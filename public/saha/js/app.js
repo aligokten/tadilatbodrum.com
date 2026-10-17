@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.17-2';
+export const APP_VERSION = '2026.10.17-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -316,7 +316,7 @@ function jobCard(j) {
       ${j.kesifDate ? `<span>${icon('calendar')}${fmtDate(j.kesifDate)}</span>` : ''}
       <span>${icon('list')}${(j.requests || []).length} talep</span>
       <span>${icon('camera')}${(j.photos || []).length}</span>
-      ${j.plan?.walls?.length ? `<span>${icon('ruler')}Rölöve</span>` : ''}
+      ${j.plan?.walls?.length ? `<span>${icon('ruler')}Rölöve</span>` : ''}${(j.drawings || []).some(d => hasContent(d.plan)) ? `<span>${icon('layers')}Proje</span>` : ''}
       ${tot ? `<span class="money">${fmtMoney(tot)}</span>` : ''}
     </div>
     <div class="bar" title="Anket %${pr.pct}"><i style="width:${pr.pct}%"></i></div>
@@ -671,18 +671,70 @@ async function findingDialog(f) {
 }
 
 /* ── Rölöve & 3D (özet) ── */
+/* ── çizimler ──
+ * Rölöve (mevcut durum) işin ana planıdır: j.plan (metraj, keşif ve teklif buradan beslenir).
+ * Proje / tasarım ve diğer çizimler j.drawings içinde ayrı planlar olarak tutulur.
+ */
+const DRAW_KINDS = [{ k: 'proje', t: 'Proje / tasarım' }, { k: 'rolove', t: 'Rölöve (ek)' }, { k: 'diger', t: 'Diğer' }];
+const kindOf = k => DRAW_KINDS.find(x => x.k === k) || DRAW_KINDS[0];
+function drawingsOf(j) { return [{ id: 'rolove', name: 'Rölöve (mevcut durum)', kind: 'rolove', main: true, plan: j.plan }, ...(j.drawings || [])]; }
+function drawingOf(j, id) { const all = drawingsOf(j); return all.find(d => d.id === id) || all[0]; }
+function setDrawingPlan(j, id, p) {
+  if (id === 'rolove') { j.plan = p; return; }
+  const d = (j.drawings || []).find(x => x.id === id); if (d) { d.plan = p; d.updatedAt = Date.now(); }
+}
+const hasContent = p => !!(p?.walls?.length || p?.rooms?.length || p?.items?.length);
+const clonePlan = p => p ? JSON.parse(JSON.stringify(p)) : emptyPlan();
+
+async function newDrawingDialog(j, then) {
+  const n = (j.drawings || []).filter(d => d.kind === 'proje').length + 1;
+  const srcs = drawingsOf(j).filter(d => hasContent(d.plan));
+  const r = await modal({ title: 'Yeni çizim', body: `
+    <div class="grid2">
+      <label>Ad<input class="inp" id="dwn" value="Proje ${n}"></label>
+      <label>Tür<select class="inp" id="dwk">${DRAW_KINDS.map(k => `<option value="${k.k}">${k.t}</option>`).join('')}</select></label>
+    </div>
+    <label>Başlangıç<select class="inp" id="dws">
+      ${srcs.map((d, i) => `<option value="${d.id}" ${i === 0 ? 'selected' : ''}>"${esc(d.name)}" çiziminin kopyasından</option>`).join('')}
+      <option value="" ${srcs.length ? '' : 'selected'}>Boş çizim</option></select></label>
+    <p class="muted small">Proje çizimini rölövenin kopyasından başlatın; duvar yıkıp ekleyin, mahalleri ve mutfak / dolapları yeniden düzenleyin. Rölöve çizimi değişmeden kalır ve projede soluk altlık olarak görünür.</p>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Oluştur', cls: 'btn-primary' }] });
+  if (r?.k !== 'ok') return;
+  const src = $('#dws', r.el).value;
+  const d = { id: uid('dw'), name: $('#dwn', r.el).value.trim() || `Proje ${n}`, kind: $('#dwk', r.el).value, plan: src ? clonePlan(drawingOf(j, src).plan) : emptyPlan(), createdAt: Date.now(), updatedAt: Date.now() };
+  if (d.plan.meta) d.plan.meta.bg = src ? d.plan.meta.bg : null;
+  (j.drawings ||= []).push(d);
+  logEvt(`Yeni çizim: ${d.name}`); save();
+  then ? then(d) : (location.hash = `#/is/${j.id}/plan?d=${d.id}`);
+}
+
 function tabRolove(tb) {
-  const j = S.job, P = j.plan, met = planMetrics(P);
+  const j = S.job, P = j.plan;
   const rl = j.photos.filter(p => p.tag === 'rolove' || p.tag === 'render');
+  const list = drawingsOf(j);
+  const card = d => {
+    const has = hasContent(d.plan), met = planMetrics(d.plan), url = `#/is/${j.id}/plan?d=${d.id}`;
+    return `<div class="dw-card ${d.main ? 'main' : ''}" data-dw="${d.id}">
+      <a class="thumb-wrap" href="${url}">${has ? planThumbSvg(d.plan) : `<div class="dw-empty">${icon('ruler')}<span>Boş çizim</span></div>`}</a>
+      <div class="dw-info">
+        <div class="dw-t"><b>${esc(d.name)}</b><span class="dw-kind k-${d.kind}">${d.main ? 'Rölöve' : kindOf(d.kind).t}</span></div>
+        ${has ? `<div class="met-chips sm"><span><small>Mahal</small><b>${met.rooms.length}</b></span><span><small>Zemin</small><b>${fmtNum(met.floor)} m²</b></span><span><small>Net duvar</small><b>${fmtNum(met.wall)} m²</b></span></div>` : `<p class="muted small">${d.main ? 'Ölçtüğünüz mahalleri duvar, kapı, pencere ve donatılarıyla çizin; plan otomatik olarak 3D modele dönüşür.' : 'Henüz çizim yok.'}</p>`}
+        <div class="row wrap">
+          <a class="btn btn-primary btn-sm" href="${url}">${icon('edit')}${has ? 'Aç' : 'Çizime başla'}</a>
+          ${has ? `<a class="btn btn-ghost btn-sm" href="${url}&v=3d">${icon('cube')}3D</a><a class="btn btn-ghost btn-sm" href="${url}&v=3d&r=1">${icon('sparkle')}Render</a>` : ''}
+          ${d.main && !has ? `<a class="btn btn-ghost btn-sm" href="${url}&import=1">${icon('upload')}DXF / PDF aktar</a><button class="btn btn-ghost btn-sm" data-tpl>${icon('layers')}Örnek plan</button>` : ''}
+          ${has ? `<button class="btn btn-ghost btn-sm" data-dwa="copy" title="Kopyasını oluştur">${icon('copy')}</button>` : ''}
+          ${d.main ? '' : `<button class="btn btn-ghost btn-sm" data-dwa="ren" title="Yeniden adlandır">${icon('edit')}</button><button class="btn btn-ghost btn-sm danger-t" data-dwa="del" title="Sil">${icon('trash')}</button>`}
+        </div>
+      </div>
+    </div>`;
+  };
   tb.innerHTML = `
     <div class="card plan-card">
-      <div class="row-between"><h3>${icon('ruler')}Rölöve çizimi</h3>
-        <a class="btn btn-primary" href="#/is/${j.id}/plan">${icon('edit')}${P?.walls?.length ? 'Çizimi aç' : 'Çizime başla'}</a></div>
-      ${P?.walls?.length || P?.rooms?.length ? `<a class="thumb-wrap" href="#/is/${j.id}/plan">${planThumbSvg(P)}</a>
-        <div class="met-chips"><span><small>Mahal</small><b>${met.rooms.length}</b></span><span><small>Toplam zemin</small><b>${fmtNum(met.floor)} m²</b></span><span><small>Net duvar</small><b>${fmtNum(met.wall)} m²</b></span><span><small>Çevre</small><b>${fmtNum(met.perim)} m</b></span></div>
-        <div class="row wrap"><a class="btn btn-ghost" href="#/is/${j.id}/plan?v=3d">${icon('cube')}3D model</a><a class="btn btn-ghost" href="#/is/${j.id}/plan?v=3d&r=1">${icon('sparkle')}Render oluştur</a></div>`
-        : `<div class="empty"><div class="empty-ic">${icon('ruler')}</div><p class="muted">Ölçtüğünüz mahalleri duvar, kapı, pencere ve donatılarıyla çizin; plan otomatik olarak 3D modele dönüşür ve gerçekçi render alınabilir.</p>
-          <div class="row wrap center"><a class="btn btn-primary" href="#/is/${j.id}/plan?import=1">${icon('upload')}DXF / PDF çizimden aktar</a><button class="btn btn-ghost" data-tpl>${icon('layers')}Örnek daire planıyla başla</button></div></div>`}
+      <div class="row-between"><h3>${icon('ruler')}Çizimler <small class="muted">${list.length}</small></h3>
+        <button class="btn btn-primary btn-sm" data-newdw>${icon('plus')}Yeni çizim</button></div>
+      <p class="muted small">Rölöve mevcut durumu gösterir (metraj ve teklif buradan alınır). Müşterinin isteklerine göre hazırlanan tasarım için "Proje" çizimi ekleyin; birden fazla seçenek de hazırlayabilirsiniz.</p>
+      <div class="dw-list">${list.map(card).join('')}</div>
     </div>
     <div class="card">
       <div class="row-between"><h3>${icon('image')}Kroki, rölöve fotoğrafları ve renderlar</h3>
@@ -690,6 +742,17 @@ function tabRolove(tb) {
       <div class="gallery">${rl.map(p => `<button class="gimg" data-ph="${p.id}"><img data-src="${p.id}" alt=""><span>${esc(p.caption || PHOTO_TAGS.find(t => t.k === p.tag)?.t)}</span></button>`).join('') || '<p class="muted small">Elle çizilmiş krokilerin fotoğrafını ekleyin; çizim editöründe "Altlık" olarak kullanıp üzerinden ölçekli çizebilirsiniz.</p>'}</div>
     </div>`;
   hydratePhotos(tb);
+  $('[data-newdw]', tb).onclick = () => newDrawingDialog(j);
+  $$('[data-dwa]', tb).forEach(b => b.onclick = async () => {
+    const id = b.closest('[data-dw]').dataset.dw, d = drawingOf(j, id), a = b.dataset.dwa;
+    if (a === 'del') {
+      if (!await confirmDlg(`"${d.name}" çizimi silinecek.`)) return;
+      j.drawings = j.drawings.filter(x => x.id !== id); logEvt(`Çizim silindi: ${d.name}`);
+    }
+    if (a === 'ren') { const n = await promptDlg('Çizimin adı', d.name); if (!n?.trim()) return; d.name = n.trim(); d.updatedAt = Date.now(); }
+    if (a === 'copy') { (j.drawings ||= []).push({ id: uid('dw'), name: `${d.name} (kopya)`, kind: d.main ? 'proje' : d.kind, plan: clonePlan(d.plan), createdAt: Date.now(), updatedAt: Date.now() }); }
+    save(); tabRolove(tb);
+  });
   $('[data-up]', tb).onchange = async e => { await addPhotos(e.target.files, { tag: 'rolove' }); tabRolove(tb); };
   $$('[data-ph]', tb).forEach(b => b.onclick = () => lightbox(b.dataset.ph, () => tabRolove(tb)));
   $('[data-tpl]', tb)?.addEventListener('click', () => {
@@ -805,7 +868,7 @@ async function lightbox(id, onChange) {
     const p = j.photos[i];
     await S.be.deletePhoto(j, p).catch(() => {});
     j.photos.splice(i, 1);
-    if (j.plan?.meta?.bg?.photoId === p.id) j.plan.meta.bg = null;
+    for (const d of drawingsOf(j)) if (d.plan?.meta?.bg?.photoId === p.id) d.plan.meta.bg = null;
     save();
     if (!j.photos.length) return close();
     i = Math.min(i, j.photos.length - 1); show();
@@ -843,11 +906,15 @@ function planScreen() {
   const j = S.job;
   j.plan ??= emptyPlan();
   const qs = new URLSearchParams(location.hash.split('?')[1] || '');
+  const dw = drawingOf(j, qs.get('d') || 'rolove');
+  if (!dw.plan) setDrawingPlan(j, dw.id, dw.plan = emptyPlan());
+  S.dw = dw;
   let mode = qs.get('v') === '3d' ? '3d' : '2d';
   view().innerHTML = `<div class="plan-screen" data-mode="${mode}">
     <header class="ps-head">
       <a href="#/is/${j.id}/rolove" class="icon-btn" aria-label="Geri">${icon('back')}</a>
-      <div class="ps-t"><b>${esc(j.customer.name || j.code)}</b><small>Rölöve · ${esc(j.code)}</small></div>
+      <div class="ps-t"><b>${esc(j.customer.name || j.code)}</b>
+        <select class="ps-dw" id="psDw" aria-label="Çizim">${drawingsOf(j).map(d => `<option value="${d.id}" ${d.id === dw.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}<option value="+">+ Yeni çizim…</option></select></div>
       <div class="seg big" id="psMode"><button data-m="2d">2D Plan</button><button data-m="3d">${icon('cube')}3D</button><button data-m="split" class="hide-m">Yan yana</button></div>
       <div class="ps-act">
         <button class="btn btn-ghost btn-sm" data-png title="Planı PNG olarak fotoğraflara kaydet">${icon('download')}<span>Plan görseli</span></button>
@@ -873,8 +940,10 @@ function planScreen() {
   </div>`;
   const root = $('.plan-screen');
   const sync3d = debounce(() => S.p3?.setPlan(S.editor.plan), 350);
-  S.editor = new PlanEditor($('#ps2d'), j.plan, {
-    onChange: p => { j.plan = p; save(); if (mode !== '2d') sync3d(); },
+  S.editor = new PlanEditor($('#ps2d'), dw.plan, {
+    onChange: p => { setDrawingPlan(j, dw.id, p); save(); if (mode !== '2d') sync3d(); },
+    // proje çiziminde rölöve (mevcut durum) soluk altlık olarak görünür
+    ghost: !dw.main && hasContent(j.plan) ? j.plan : null,
     resolvePhoto: id => { const p = j.photos.find(x => x.id === id); return p ? S.be.photoUrl(p) : ''; },
     pickBackground: pickPhoto,
     addImage: (blob, caption) => addBlobPhoto(blob, { tag: 'rolove', caption }),
@@ -897,11 +966,16 @@ function planScreen() {
     setTimeout(() => { S.editor?.render(); S.p3?.resize(); }, 50);
   };
   $('#psMode').onclick = e => { const b = e.target.closest('[data-m]'); if (b) setMode(b.dataset.m); };
+  $('#psDw').onchange = e => {
+    const v = e.target.value;
+    if (v === '+') { e.target.value = dw.id; return newDrawingDialog(j); }
+    location.hash = `#/is/${j.id}/plan${v === 'rolove' ? '' : '?d=' + v}${mode !== '2d' ? (v === 'rolove' ? '?' : '&') + 'v=3d' : ''}`;
+  };
   $('[data-png]').onclick = async () => {
-    const blob = await S.editor.exportPng({ title: `${j.code} ${j.customer.name || ''}` });
+    const blob = await S.editor.exportPng({ title: `${j.code} ${j.customer.name || ''} — ${dw.name}` });
     if (!blob) return toast('Plan boş', 'err');
-    const p = await addBlobPhoto(blob, { tag: 'rolove', caption: 'Rölöve planı ' + new Date().toLocaleDateString('tr-TR') });
-    downloadBlob(blob, `${j.code}-rolove.png`);
+    const p = await addBlobPhoto(blob, { tag: 'rolove', caption: `${dw.main ? 'Rölöve planı' : dw.name} ` + new Date().toLocaleDateString('tr-TR') });
+    downloadBlob(blob, `${j.code}-${dw.main ? 'rolove' : dw.name.replace(/[^\wçğıöşüÇĞİÖŞÜ-]+/g, '-')}.png`);
     toast('Plan görseli fotoğraflara kaydedildi');
     return p;
   };
@@ -981,7 +1055,7 @@ async function renderDialog() {
         if (k === 'dl' && blob) downloadBlob(blob, `${j.code}-render-${Date.now()}.png`);
         if (k === 'save' && blob) {
           const jpg = await toJpeg(blob);
-          await addBlobPhoto(jpg, { tag: 'render', caption: `Render · ${p3.opt.mode === 'interior' ? (S.editor.plan.rooms.find(r => r.id === p3.opt.roomId)?.name || 'iç mekan') : 'genel görünüm'}` });
+          await addBlobPhoto(jpg, { tag: 'render', caption: `Render${S.dw && !S.dw.main ? ' · ' + S.dw.name : ''} · ${p3.opt.mode === 'interior' ? (S.editor.plan.rooms.find(r => r.id === p3.opt.roomId)?.name || 'iç mekan') : 'genel görünüm'}` });
           toast('Render projeye kaydedildi'); btn('save').hidden = true;
         }
       };
@@ -1029,7 +1103,7 @@ async function printReport() {
       <div><small>Sorumlu</small><b>${esc(j.assigned || '—')}</b>${esc(statusOf(j.status).t)}</div>
     </section>
     ${j.summary ? `<p class="p-intro">${esc(j.summary)}</p>` : ''}
-    ${j.plan?.walls?.length ? `<section><h3>Rölöve</h3><div class="p-plan"><img src="${planImageUrl(j.plan, 900, 520)}" alt="Rölöve planı"></div></section>` : ''}
+    ${drawingsOf(j).filter(d => d.plan?.walls?.length).map(d => `<section><h3>${d.main ? 'Rölöve (mevcut durum)' : esc(d.name)} ${d.main ? '' : `<small>(${kindOf(d.kind).t})</small>`}</h3><div class="p-plan"><img src="${planImageUrl(d.plan, 900, 520)}" alt="${esc(d.name)}"></div></section>`).join('')}
     ${met.rooms.length ? `<section><h3>Mahal metrajı <small>(${esc(met.src)})</small></h3><table class="p-table"><thead><tr><th>Mahal</th><th class="r">Zemin m²</th><th class="r">Net duvar m²</th><th class="r">Çevre m</th></tr></thead><tbody>
       ${met.rooms.map(r => `<tr><td>${esc(r.name)}</td><td class="r">${fmtNum(r.area)}</td><td class="r">${fmtNum(r.wallArea)}</td><td class="r">${fmtNum(r.perim)}</td></tr>`).join('')}
       <tr class="grp"><td>Toplam</td><td class="r">${fmtNum(met.floor)}</td><td class="r">${fmtNum(met.wall)}</td><td class="r">${fmtNum(met.perim)}</td></tr></tbody></table></section>` : ''}
