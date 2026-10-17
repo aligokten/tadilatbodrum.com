@@ -6,6 +6,7 @@
  */
 import { V, wallLen, wallDir, polyCentroid, pointInPoly } from './plan-geom.js';
 import { floorTexture } from './textures.js';
+import { build3D } from './cabinet.js';
 
 let THREE, OrbitControls, RoomEnvironment;
 async function loadThree() {
@@ -277,6 +278,7 @@ export class Plan3D {
       for (let i = 0; i < n; i++) box(cw - 0.02, 0.12, d * 0.7, -w / 2 + arm + cw * (i + 0.5), H * 0.45 + 0.12, d * 0.08, cush);
     };
     switch (it.type) {
+      case 'cabinet': build3D(THREE, g, it, (c, r, mt) => this.std(c, r, mt)); break;
       case 'ikili': sofa(W, D); break;
       case 'lkanepe': {
         const sd = Math.min(0.95, D * 0.45);

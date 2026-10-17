@@ -40,6 +40,23 @@ Rölöve ekranında **DXF / PDF aktar**: mevcut projenin AutoCAD DXF'i veya plan
 - **Taranmış PDF** (görüntü): otomatik dönüşüm yapılamaz; sayfa altlık olarak eklenip ölçeklenir, üzerinden çizilir.
 - **DWG**: kapalı format — AutoCAD'de *Farklı Kaydet → DXF* (veya ücretsiz ODA File Converter) ile DXF'e çevirip yükleyin.
 
+### Mutfak ve giysi dolabı tasarlayıcı
+Rölövede bir duvar seçip **Mutfak / dolap** (ya da duvar panelindeki *Bu duvara mutfak diz / Giysi dolabı diz*):
+- Dizi duvarın oda tarafındaki iç yüzüne, köşelerdeki duvar kalınlıkları düşülerek yerleşir; pencere ve kapılar duvardan okunur.
+- **Otomatik diz:** evye pencere altına, bulaşık makinesi evye yanına, ocak evyeden ve pencereden uzağa (üstüne davlumbaz),
+  buzdolabı / fırın kolonu köşeye; kalan boşluk standart 60-45-40-30 modüllerle, artık dolgu paneliyle tamamlanır.
+- **Modüller:** alt (kapaklı, çekmeceli, evye, ocak, ocak + fırın, bulaşık / çamaşır makinesi, köşe, dolgu, boşluk),
+  boy (kiler, fırın + mikrodalga kolonu, ankastre / solo buzdolabı), üst (kapaklı, camlı, yukarı açılır, açık raf, davlumbaz);
+  giysi dolabında askılık, çift askı, uzun askı, raflı, çekmece + askı, ayakkabılık; menteşeli veya sürgülü kapak.
+- Her modülün türü, genişliği, kapak sayısı ve menteşe yönü değiştirilir; sola/sağa taşıma, çoğaltma, ikiye bölme.
+- **Ölçüler:** baza, gövde, tezgah kalınlığı/derinliği, üst dolap kotu ve yüksekliği, boy dolap yüksekliği, gövde kalınlığı.
+- **Malzeme:** kapak rengi, gövde, tezgah, kulp tipi (çubuk, gola, düğme, tak-aç) ve rengi.
+- **Ön görünüş** (kotlu; kapak açılım işaretli), giysi dolabında **iç düzen**, **3D önizleme**.
+- **Kesim listesi** (parça, malzeme, boy × en mm, adet, kenar bandı) ve donanım listesi (menteşe, ray, kulp, ayak…).
+- Çıktılar: çizim + kesim listesi **PDF**, ön görünüş **DXF** (AutoCAD), kesim listesi **CSV** (Excel), **teklife ekle**
+  (alt/üst dolap mtül, boy dolap adet, tezgah mtül; birim fiyatlar Ayarlar → fiyat kütüphanesinden).
+- Planda üstten sembol (tezgah, evye, ocak, üst dolaplar kesik çizgi), 3D görünümde ve render'da tam model.
+
 ### 3D ve render
 - Plan otomatik olarak 3D'ye çevrilir (duvar açıklıkları, kapı kanadı, cam, zemin dokuları, mobilya).
 - Kuşbakışı / üstten / **iç mekan** (zemine dokunarak yürüme), kesit görünümü, güneş yönü ve yüksekliği.
