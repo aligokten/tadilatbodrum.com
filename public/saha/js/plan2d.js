@@ -3,7 +3,10 @@
  */
 import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
-import { FLOORS, FURNITURE, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
+import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
+
+/* mobilya seçim listesi: kategorilere göre gruplu */
+const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
   offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom,
@@ -228,17 +231,66 @@ export class PlanEditor {
     return r;
   }
 
-  /* ───────────── yaslama ───────────── */
+  /* ───────────── yaslama ─────────────
+   * Öncelik: köşe noktaları (duvar iç/dış yüz köşeleri, duvar uçları, oda köşeleri) →
+   * duvar iç/dış yüzeyi (ortogonal çizimde yüzeyle kesişim) → yön/uzunluk → duvar ekseni → ızgara.
+   */
+  wallFaces() {
+    const W = this.plan.walls;
+    const sig = W.length + ':' + W.reduce((a, w) => a + w.a.x + w.a.y * 3 + w.b.x * 7 + w.b.y * 11 + (w.t || 0) * 13, 0);
+    if (this._faces?.sig === sig) return this._faces;
+    const faces = [], corners = [];
+    const key = q => `${Math.round(q.x)}|${Math.round(q.y)}`, ends = new Map();
+    for (const w of W) {
+      const L = wallLen(w); if (L < 0.5) continue;
+      const u = wallDir(w), n = wallNormal(w), t = this.T(w) / 2;
+      const f = [1, -1].map(sg => ({ w, a: V.add(w.a, V.mul(n, t * sg)), b: V.add(w.b, V.mul(n, t * sg)), u }));
+      faces.push(...f);
+      for (const k of ['a', 'b']) { const kk = key(w[k]); if (!ends.has(kk)) ends.set(kk, []); ends.get(kk).push({ w, k, f }); }
+    }
+    // birleşim noktalarında yüz çizgilerinin kesişimleri = gerçek iç / dış köşeler
+    const lineX = (A, B) => { const den = V.cross(A.u, B.u); if (Math.abs(den) < 1e-6) return null; return V.add(A.a, V.mul(A.u, V.cross(V.sub(B.a, A.a), B.u) / den)); };
+    for (const list of ends.values()) {
+      const P = list[0].w[list[0].k];
+      if (list.length === 1) { const { f, k } = list[0]; corners.push(f[0][k], f[1][k]); continue; }   // serbest uç: duvar başının iki köşesi
+      const tMax = Math.max(...list.map(e => this.T(e.w)));
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++)
+        for (const A of list[i].f) for (const B of list[j].f) { const x = lineX(A, B); if (x && V.dist(x, P) <= tMax * 1.5) corners.push(x); }
+    }
+    return (this._faces = { sig, faces, corners });
+  }
+
   snapPt(p, from = null, skip = null) {
     const thr = 14 / this.s;
     this.snapInd = null;
-    // 1) uç noktalar / oda köşeleri
-    let best = null, bd = thr;
-    const cand = q => { const d = V.dist(p, q); if (d < bd) { bd = d; best = q; } };
-    this.plan.walls.forEach(w => { if (w.id !== skip) { cand(w.a); cand(w.b); } });
-    this.plan.rooms.forEach(r => r.pts.forEach(cand));
-    if (this.chain) this.chain.pts.forEach(cand);
-    if (best) { this.snapInd = { ...best, k: 'end' }; return { ...best }; }
+    const F = this.wallFaces();
+    // 1) köşe noktaları: duvar yüz köşeleri, duvar uçları, oda köşeleri, çizilen zincir
+    let best = null, bd = thr, bk = 'end';
+    const cand = (q, k = 'end', wt = 1) => { const d = V.dist(p, q) * wt; if (d < bd) { bd = d; best = q; bk = k; } };
+    F.corners.forEach(q => cand(q, 'corner'));
+    // duvar ekseni uçları duvarın içinde kalır: yüz köşeleri yakınsa onlar tercih edilsin
+    this.plan.walls.forEach(w => { if (w.id !== skip) { cand(w.a, 'end', 1.8); cand(w.b, 'end', 1.8); } });
+    this.plan.rooms.forEach(r => r.pts.forEach(q => cand(q, 'corner')));
+    if (this.chain) this.chain.pts.forEach(q => cand(q));
+    if (best) { const q = { x: +best.x.toFixed(2), y: +best.y.toFixed(2) }; this.snapInd = { ...q, k: bk }; return q; }
+    // 2) duvar iç / dış yüzeyi
+    let fb = null, fd = thr * 0.8;
+    for (const f of F.faces) { if (f.w.id === skip) continue; const pr = projSeg(p, f.a, f.b); if (pr.d < fd) { fd = pr.d; fb = { f, q: pr.p }; } }
+    if (fb) {
+      let q = fb.q;
+      if (from && (this.opt.ortho || this.dir)) {
+        // ortogonal / sabit yönlü çizimde: yönün yüzeyle kesiştiği nokta (dik ölçü)
+        let d = this.dir || V.sub(p, from);
+        if (!this.dir) { const ang = Math.atan2(d.y, d.x), st = Math.PI / 4, sa = Math.round(ang / st) * st; d = Math.abs(ang - sa) < 0.14 ? { x: Math.cos(sa), y: Math.sin(sa) } : null; }
+        if (d) {
+          const den = V.cross(d, fb.f.u);
+          if (Math.abs(den) > 1e-6) { const x = V.add(from, V.mul(d, V.cross(V.sub(fb.f.a, from), fb.f.u) / den)); if (V.dist(x, p) < thr * 2) q = x; }
+        }
+      }
+      q = { x: +q.x.toFixed(2), y: +q.y.toFixed(2) };
+      this.snapInd = { ...q, k: 'face', u: fb.f.u };
+      return q;
+    }
     // 2) yön sabit / ortogonal + uzunluk yaslama
     if (from) {
       let d = V.sub(p, from), L = V.len(d);
@@ -1035,7 +1087,14 @@ export class PlanEditor {
         }
       }
     }
-    if (this.snapInd && (c || g)) o += `<rect class="snapind" x="${this.snapInd.x - px(6)}" y="${this.snapInd.y - px(6)}" width="${px(12)}" height="${px(12)}" stroke-width="${px(2)}"/>`;
+    const si = this.snapInd;
+    if (si && (c || g || p) && this.tool !== 'select') {
+      if (si.k === 'face') {
+        const L = px(16);
+        o += `<line class="snapface" x1="${si.x - si.u.x * L}" y1="${si.y - si.u.y * L}" x2="${si.x + si.u.x * L}" y2="${si.y + si.u.y * L}" stroke-width="${px(3)}"/><circle class="snapind" cx="${si.x}" cy="${si.y}" r="${px(5)}" stroke-width="${px(2)}"/>`;
+      } else if (si.k === 'corner') o += `<path class="snapind" d="M${si.x} ${si.y - px(8)}L${si.x + px(8)} ${si.y}L${si.x} ${si.y + px(8)}L${si.x - px(8)} ${si.y}Z" stroke-width="${px(2)}"/>`;
+      else o += `<rect class="snapind" x="${si.x - px(6)}" y="${si.y - px(6)}" width="${px(12)}" height="${px(12)}" stroke-width="${px(2)}"/>`;
+    }
     this.gUI.setAttribute('transform', `matrix(${s} 0 0 ${s} ${this.ox} ${this.oy})`);
     this.gUI.innerHTML = o;
   }
@@ -1054,7 +1113,7 @@ export class PlanEditor {
           ${this.chain?.started && this.chain.face && !this.chain.closed ? `<button class="btn btn-xs btn-ghost" data-flip title="Duvar kalınlığını çizginin diğer tarafına al">${icon('rotate')}Tarafı çevir</button>` : ''}</div>`
         : `<label class="mini-l"><input type="checkbox" id="peWalls" ${this.polyWalls ? 'checked' : ''}> Duvarları da oluştur</label>`}`;
     } else if (t === 'item') {
-      extra = `<div class="hud-row"><select class="inp sm" id="peItem">${FURNITURE.map(f => `<option value="${f.k}" ${f.k === this.itemType ? 'selected' : ''}>${f.t} (${f.w}×${f.d})</option>`).join('')}</select></div>`;
+      extra = `<div class="hud-row"><select class="inp sm" id="peItem">${furnOptions(this.itemType)}</select></div>`;
     }
     this.hud.innerHTML = t === 'select' && !this.sel ? '' : `<div class="hud-hint">${esc(HINTS[t] || '')}</div>${extra}`;
     this.hud.hidden = !this.hud.innerHTML;
@@ -1141,7 +1200,7 @@ export class PlanEditor {
         <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>`;
     } else if (s.kind === 'item') {
       body = `<h4>Mobilya / Donatı</h4>
-        <label>Tür<select class="inp sm" data-k="type">${FURNITURE.map(f => `<option value="${f.k}" ${o.type === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
+        <label>Tür<select class="inp sm" data-k="type">${furnOptions(o.type, false)}</select></label>
         <label>Etiket<input class="inp sm" data-k="label" value="${esc(o.label)}"></label>
         <div class="grid2">${num('w', 'En', o.w)}${num('d', 'Derinlik', o.d)}${num('h', 'Yükseklik', o.h)}${num('z', 'Yerden', o.z || 0)}</div>
         ${num('rot', 'Dönüş', o.rot, '°', 15)}

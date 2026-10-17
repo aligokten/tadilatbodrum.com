@@ -17,6 +17,33 @@ async function loadThree() {
 
 const M = v => v / 100; // cm → m
 
+/* ── render yardımcıları ── */
+const isMobile = () => matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+// path tracing float doku ve float render hedefi ister; yoksa çıktı siyah olur
+function ptSupported(r) {
+  const gl = r.getContext();
+  return r.capabilities.isWebGL2 && !!gl.getExtension('EXT_color_buffer_float') && !!gl.getExtension('OES_texture_float_linear') && !isMobile();
+}
+async function canvasBlob(canvas) {
+  const b = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  if (b) return b;
+  // bazı mobil tarayıcılarda büyük tuvalde toBlob null döner
+  const d = canvas.toDataURL('image/jpeg', 0.92);
+  return (await fetch(d)).blob();
+}
+// görüntü (neredeyse) tamamen siyah mı? — küçük örnekte ortalama parlaklık
+async function isBlack(blob) {
+  if (!blob || blob.size < 100) return true;
+  try {
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const x = c.getContext('2d'); x.drawImage(bmp, 0, 0, 32, 32);
+    const d = x.getImageData(0, 0, 32, 32).data;
+    let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+    return s / (32 * 32 * 3) < 4;
+  } catch { return false; }
+}
+
 export class Plan3D {
   constructor(host) {
     this.host = host;
@@ -77,6 +104,7 @@ export class Plan3D {
     const loop = () => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
+      if (this.busy) return;   // render alınırken görüntüleyici tuvali kullanılıyor
       if (this.controls.update() || this.dirty) { this.renderer.render(this.scene, this.camera); this.dirty = false; }
     };
     loop();
@@ -85,7 +113,7 @@ export class Plan3D {
 
   resize() {
     const w = this.host.clientWidth, h = this.host.clientHeight;
-    if (!w || !h) return;
+    if (!w || !h || this.busy) return;
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.dirty = true;
@@ -235,7 +263,138 @@ export class Plan3D {
       b.position.set(x, y, z); b.rotation.y = r; b.castShadow = b.receiveShadow = true; g.add(b); return b;
     };
     const legs = (w, d, h, th = 0.04) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => box(th, h, th, a * (w / 2 - th), h / 2, b * (d / 2 - th), leg));
+    const cyl = (r1, r2, h, x, y, z, mm = m, seg = 24) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mm); c.position.set(x, y, z); c.castShadow = c.receiveShadow = true; g.add(c); return c; };
+    const ball = (r, x, y, z, mm = m) => { const b = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), mm); b.position.set(x, y, z); b.castShadow = true; g.add(b); return b; };
+    const metal = this.std('#9DA3A8', 0.3, 0.9), glass = this.std('#DCEFF2', 0.05), steel = this.std('#C9CDD2', 0.25, 0.8);
+    // ön yüzde kapak / çekmece derzleri: n parçaya böl
+    const fronts = (w, h, d, y0, n, vertical = true) => { for (let i = 1; i < n; i++) vertical ? box(0.004, h - 0.02, 0.004, -w / 2 + i * w / n, y0 + h / 2, d / 2, dark) : box(w - 0.02, 0.004, 0.004, 0, y0 + i * h / n, d / 2, dark); };
+    const sofa = (w, d) => {   // yaslanma arkada (-z), oturma önde
+      const arm = Math.min(0.18, w * 0.15);
+      box(w, H * 0.45, d, 0, H * 0.225 + 0.06, 0); legs(w, d, 0.06, 0.05);
+      box(w, H * 0.55, d * 0.22, 0, H * 0.725, -d / 2 + d * 0.11);
+      box(arm, H * 0.3, d, -w / 2 + arm / 2, H * 0.6, 0); box(arm, H * 0.3, d, w / 2 - arm / 2, H * 0.6, 0);
+      const cush = this.std(col, 0.95), n = Math.max(1, Math.round((w - 2 * arm) / 0.7)), cw = (w - 2 * arm) / n;
+      for (let i = 0; i < n; i++) box(cw - 0.02, 0.12, d * 0.7, -w / 2 + arm + cw * (i + 0.5), H * 0.45 + 0.12, d * 0.08, cush);
+    };
     switch (it.type) {
+      case 'ikili': sofa(W, D); break;
+      case 'lkanepe': {
+        const sd = Math.min(0.95, D * 0.45);
+        // uzun kol arkada, köşe uzantısı sağda öne doğru
+        const g0 = g; sofa(W, sd); g.children.forEach(c => { c.position.z += -D / 2 + sd / 2; });
+        const ext = new THREE.Group(); ext.position.set(W / 2 - sd / 2, 0, sd / 2); g0.add(ext);
+        const b2 = (sx, sy, sz, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; ext.add(b); };
+        const L2 = D - sd;
+        b2(sd, H * 0.45, L2, 0, H * 0.225 + 0.06, 0); b2(sd * 0.22, H * 0.55, L2, sd / 2 - sd * 0.11, H * 0.725, 0);
+        b2(sd, H * 0.3, 0.16, 0, H * 0.6, L2 / 2 - 0.08);
+        break;
+      }
+      case 'puf': cyl(W / 2, W / 2, H, 0, H / 2, 0, this.std(col, 0.95), 28); break;
+      case 'yansehpa': cyl(W / 2, W / 2, 0.03, 0, H - 0.015, 0, m, 28); cyl(0.02, 0.02, H - 0.03, 0, (H - 0.03) / 2, 0, dark, 10); cyl(W * 0.3, W * 0.3, 0.02, 0, 0.01, 0, dark, 24); break;
+      case 'kitaplik': {
+        const t = 0.02, n = Math.max(3, Math.round(H / 0.38));
+        box(t, H, D, -W / 2 + t / 2, H / 2, 0); box(t, H, D, W / 2 - t / 2, H / 2, 0); box(W, H, t, 0, H / 2, -D / 2 + t / 2);
+        for (let i = 0; i <= n; i++) box(W - 2 * t, t, D, 0, Math.min(H - t / 2, i * H / n + t / 2), 0);
+        const bk = ['#B5503A', '#2F6F8F', '#D9B44A', '#4F7A4B', '#7B5A8E'];
+        for (let i = 0; i < n; i++) for (let j = 0; j < Math.floor((W - 0.06) / 0.05); j += 1 + (j % 3 === 0)) {
+          const bh = H / n * (0.55 + ((i * 7 + j * 3) % 5) * 0.07);
+          box(0.035, bh, D * 0.75, -W / 2 + 0.04 + j * 0.05, i * H / n + t + bh / 2, 0.02, this.std(bk[(i + j) % bk.length], 0.8));
+        }
+        break;
+      }
+      case 'konsol': case 'vitrin': case 'sifonyer': case 'komodin': case 'dosyadolap': {
+        const lg = it.type === 'konsol' ? 0.1 : 0.04;
+        box(W, H - lg, D, 0, lg + (H - lg) / 2, 0); legs(W, D, lg, 0.04);
+        if (it.type === 'vitrin') { fronts(W, H - lg, D, lg, Math.max(2, Math.round(W / 0.5))); }
+        else fronts(W, H - lg - 0.02, D, lg, it.type === 'konsol' ? 2 : Math.max(2, Math.round(H / 0.25)), false);
+        break;
+      }
+      case 'hali': box(W, 0.012, D, 0, 0.006, 0, this.std(col, 1)); box(W - 0.2, 0.013, D - 0.2, 0, 0.0065, 0, this.std('#D8CBB6', 1)); break;
+      case 'lambader': cyl(0.15, 0.15, 0.02, 0, 0.01, 0, dark); cyl(0.012, 0.012, H - 0.3, 0, (H - 0.3) / 2, 0, dark, 8); cyl(0.13, 0.2, 0.3, 0, H - 0.15, 0, this.std('#F4EEE4', 0.9), 24); break;
+      case 'avize': cyl(0.005, 0.005, 0.6, 0, H + 0.3, 0, dark, 6); cyl(W * 0.1, W / 2, H, 0, H / 2, 0, this.std(col, 0.4, 0.3), 32); break;
+      case 'somine':
+        box(W, H, D, 0, H / 2, 0); box(W + 0.1, 0.06, D + 0.08, 0, H + 0.03, 0.02, this.std('#BFB6A8', 0.5));
+        box(W * 0.5, H * 0.5, 0.02, 0, H * 0.35, D / 2, this.std('#16171A', 0.6)); break;
+      case 'yuvarlakmasa': case 'bahcemasa':
+        cyl(W / 2, W / 2, 0.04, 0, H - 0.02, 0, it.type === 'bahcemasa' ? m : this.std(col, 0.5), 40);
+        cyl(0.05, 0.05, H - 0.04, 0, (H - 0.04) / 2, 0, dark, 12); cyl(W * 0.25, W * 0.28, 0.03, 0, 0.015, 0, dark, 24); break;
+      case 'tabure': cyl(W / 2, W / 2, 0.05, 0, H - 0.025, 0, m, 24); cyl(0.025, 0.025, H - 0.05, 0, (H - 0.05) / 2, 0, metal, 10); cyl(W * 0.4, W * 0.4, 0.02, 0, 0.01, 0, metal, 24); cyl(W * 0.35, W * 0.35, 0.015, 0, H * 0.35, 0, metal, 24); break;
+      case 'kingyatak':
+        box(W, 0.3, D, 0, 0.15, 0, this.std('#8A6A4F', 0.6)); box(W - 0.04, 0.22, D - 0.06, 0, 0.41, 0.02, this.std('#F4F2EE', 0.95));
+        box(W, 0.9, 0.08, 0, 0.45, -D / 2 + 0.04, this.std('#8A6A4F', 0.6));
+        for (const sx of [-1, 1]) box(W / 2 - 0.12, 0.12, 0.38, sx * W / 4, 0.58, -D / 2 + 0.32, this.std('#FFFFFF', 1));
+        box(W - 0.02, 0.05, D * 0.55, 0, 0.535, D * 0.2, this.std('#00AFB0', 0.95)); break;
+      case 'ranza':
+        for (const y of [0.25, 1.25]) { box(W, 0.06, D, 0, y, 0, m); box(W - 0.04, 0.16, D - 0.04, 0, y + 0.11, 0, this.std('#F4F2EE', 0.95)); }
+        for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.06, H, 0.06, a * (W / 2 - 0.03), H / 2, b * (D / 2 - 0.03), m);
+        for (let i = 0; i < 4; i++) box(0.04, 0.03, 0.4, W / 2 - 0.02, 0.4 + i * 0.25, D / 2 - 0.3, m); break;
+      case 'bebek':
+        box(W, 0.05, D, 0, 0.35, 0, m); box(W - 0.04, 0.1, D - 0.04, 0, 0.42, 0, this.std('#F4F2EE', 0.95));
+        for (const sx of [-1, 1]) { box(W, 0.06, 0.04, 0, H - 0.03, sx * (D / 2 - 0.02), m); box(0.04, 0.06, D, sx * (W / 2 - 0.02), H - 0.03, 0, m); }
+        for (let i = 0; i <= Math.round(D / 0.08); i++) for (const sx of [-1, 1]) box(0.015, H - 0.35, 0.015, sx * (W / 2 - 0.02), 0.35 + (H - 0.35) / 2, -D / 2 + i * D / Math.round(D / 0.08), m);
+        legs(W, D, 0.35, 0.04); break;
+      case 'makyaj': case 'calismamasa':
+        box(W, 0.035, D, 0, H - 0.0175, 0, m); box(0.4, H * 0.45, D - 0.04, W / 2 - 0.21, H - 0.035 - H * 0.225, 0); legs(W, D, H - 0.035, 0.04);
+        if (it.type === 'makyaj') box(W * 0.6, 0.6, 0.02, 0, H + 0.4, -D / 2 + 0.03, glass);
+        break;
+      case 'ofiskoltuk':
+        cyl(0.3, 0.3, 0.03, 0, 0.06, 0, dark, 5); cyl(0.03, 0.03, 0.4, 0, 0.26, 0, metal, 10);
+        box(0.5, 0.08, 0.48, 0, 0.48, 0, m); box(0.46, 0.55, 0.06, 0, 0.8, -0.22, m); break;
+      case 'boydolap': box(W, H, D, 0, H / 2, 0); fronts(W, H, D, 0, 3, false); break;
+      case 'gardrobbuz': box(W, H, D, 0, H / 2, 0, steel); box(0.004, H - 0.02, 0.004, 0, H / 2, D / 2, dark);
+        for (const sx of [-1, 1]) box(0.015, 0.5, 0.03, sx * 0.04, H * 0.6, D / 2 + 0.02, metal); break;
+      case 'bulasik': case 'kurutma':
+        box(W, H, D, 0, H / 2, 0, this.std('#E9EBED', 0.4, 0.3)); box(W - 0.02, 0.1, 0.01, 0, H - 0.07, D / 2, dark);
+        if (it.type === 'kurutma') { const d = cyl(0.17, 0.17, 0.02, 0, H * 0.45, D / 2 + 0.01, this.std('#2E3135', 0.2), 32); d.rotation.x = Math.PI / 2; }
+        break;
+      case 'firin': box(W, H, D, 0, H / 2, 0, dark); box(W * 0.8, H * 0.55, 0.01, 0, H * 0.42, D / 2, this.std('#111214', 0.1)); box(W * 0.7, 0.02, 0.03, 0, H * 0.8, D / 2 + 0.02, metal); break;
+      case 'ocak':
+        box(W, 0.01, D, 0, 0.005, 0, this.std('#111214', 0.1));
+        for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cyl(0.08, 0.08, 0.004, a * W / 4, 0.012, b * D / 4, this.std('#3A3F45', 0.4), 24);
+        break;
+      case 'evye':
+        box(W, 0.01, D, 0, H, 0, steel); box(W * 0.45, H - 0.02, D - 0.1, -W * 0.2, H / 2, 0, steel);
+        cyl(0.012, 0.012, 0.3, W * 0.3, H + 0.15, -D / 2 + 0.07, metal, 10); break;
+      case 'davlumbaz': box(W, 0.08, D, 0, 0.04, 0, steel); box(0.3, H - 0.08, 0.25, 0, 0.08 + (H - 0.08) / 2, -D / 2 + 0.125, steel); break;
+      case 'asmaklozet':
+        box(W, H, 0.12, 0, H / 2, -D / 2 + 0.06, this.std('#E9EBED', 0.6));
+        box(0.2, 0.14, 0.01, 0, H * 0.8, -D / 2 + 0.125, white);
+        { const bowl = cyl(0.19, 0.16, 0.34, 0, 0.4, 0.04, white, 32); bowl.scale.z = 1.35; }
+        break;
+      case 'ayna': box(W, H, D, 0, H / 2, 0, this.std('#F2F0EC', 0.6)); box(W - 0.02, H - 0.02, 0.005, 0, H / 2, D / 2, glass); break;
+      case 'duskabin':
+        box(W, 0.05, D, 0, 0.025, 0, white);
+        box(W, H - 0.05, 0.008, 0, 0.05 + (H - 0.05) / 2, D / 2, glass); box(0.008, H - 0.05, D, W / 2, 0.05 + (H - 0.05) / 2, 0, glass);
+        cyl(0.1, 0.1, 0.01, -W / 4, H - 0.1, -D / 4, metal, 20); break;
+      case 'havlupan': for (let i = 0; i < Math.round(H / 0.08); i++) box(W, 0.02, 0.02, 0, 0.04 + i * 0.08, 0, this.std(col, 0.3, 0.6));
+        for (const sx of [-1, 1]) box(0.03, H, 0.03, sx * W / 2, H / 2, 0, this.std(col, 0.3, 0.6)); break;
+      case 'radyator': for (let i = 0; i < Math.round(W / 0.05); i++) box(0.04, H, D, -W / 2 + 0.025 + i * 0.05, H / 2, 0, white); break;
+      case 'kombi': case 'termosifon': case 'klima':
+        if (it.type === 'termosifon') { const c = cyl(Math.min(W, D) / 2, Math.min(W, D) / 2, H, 0, H / 2, 0, white, 28); }
+        else { box(W, H, D, 0, H / 2, 0, white); box(W * 0.8, 0.01, 0.005, 0, H * (it.type === 'klima' ? 0.2 : 0.15), D / 2, dark); }
+        break;
+      case 'kolon': case 'nis': box(W, H, D, 0, H / 2, 0, this.std(col, 0.95)); break;
+      case 'merdiven': {
+        const n = Math.max(2, Math.round(H / 0.175)), rh = H / n, td = D / n;
+        for (let i = 0; i < n; i++) box(W, rh * (i + 1), td, 0, rh * (i + 1) / 2, D / 2 - td * (i + 0.5), this.std(col, 0.9));
+        break;
+      }
+      case 'basamak': box(W, H, D, 0, H / 2, 0, this.std(col, 0.9)); break;
+      case 'sezlong':
+        box(W, 0.06, D * 0.7, 0, 0.3, D * 0.15, m); legs(W, D * 0.7, 0.27, 0.04);
+        { const back = box(W, 0.06, D * 0.32, 0, 0.45, -D / 2 + D * 0.14, m); back.rotation.x = 0.7; }
+        break;
+      case 'semsiye':
+        cyl(0.02, 0.02, H, 0, H / 2, 0, this.std('#D9D6D0', 0.5), 8); cyl(0.25, 0.25, 0.05, 0, 0.025, 0, dark, 20);
+        { const c = new THREE.Mesh(new THREE.ConeGeometry(W / 2, 0.45, 8, 1, true), this.std(col, 0.95)); c.position.y = H - 0.2; c.castShadow = true; c.material.side = THREE.DoubleSide; g.add(c); }
+        break;
+      case 'barbeku':
+        box(W, H * 0.75, D, 0, H * 0.375, 0, this.std('#B5503A', 0.9)); box(W * 0.6, 0.02, D * 0.8, 0, H * 0.76, 0, dark);
+        box(0.4, 0.8, 0.4, 0, H * 0.75 + 0.4, -D / 2 + 0.2, this.std('#B5503A', 0.9)); break;
+      case 'agac':
+        cyl(0.08, 0.14, H * 0.45, 0, H * 0.225, 0, this.std('#6B4F3A', 0.9), 12);
+        { const lf = this.std(col, 0.9); for (let i = 0; i < 6; i++) ball(W * (0.22 + ((i * 37) % 10) / 80), Math.cos(i * 1.7) * W * 0.18, H * (0.55 + (i % 3) * 0.12), Math.sin(i * 1.7) * W * 0.18, lf); }
+        break;
       case 'kanepe': case 'koltuk': {
         const arm = Math.min(0.18, W * 0.15);
         box(W, H * 0.45, D, 0, H * 0.225 + 0.06, 0); legs(W, D, 0.06, 0.05);
@@ -366,37 +525,84 @@ export class Plan3D {
     else this.build();
   }
 
-  /* ───────────── yüksek çözünürlüklü render ───────────── */
-  async renderImage({ w = 1920, h = 1080, quality = 'fast', samples = 300, onProgress, signal } = {}) {
+  /* ───────────── yüksek çözünürlüklü render ─────────────
+   * Mobil cihazlarda ikinci bir WebGL bağlamı, büyük gölge haritası ve path tracing'in istediği
+   * float dokular çoğu zaman bağlamı düşürür ve siyah görüntü verir. Bu yüzden:
+   *  • mobilde görüntüleyicinin kendi renderer'ı kullanılır (yeni bağlam açılmaz),
+   *  • çözünürlük ve gölge haritası cihaz sınırına indirilir,
+   *  • çıktı siyahsa otomatik olarak daha hafif ayarla yeniden denenir.
+   */
+  async renderImage({ w = 1920, h = 1080, quality = 'fast', samples = 300, onProgress, signal, onNote } = {}) {
+    const mobile = isMobile();
+    const gl = this.renderer.getContext(), caps = this.renderer.capabilities;
+    const maxSide = Math.min(caps.maxTextureSize || 4096, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 4096, mobile ? 2048 : 4096);
+    const k = Math.min(1, maxSide / Math.max(w, h));
+    if (k < 1) { w = Math.round(w * k); h = Math.round(h * k); onNote?.(`Bu cihaz için çözünürlük ${w} × ${h} olarak ayarlandı.`); }
+    if (quality === 'pt' && !ptSupported(this.renderer)) {
+      onNote?.('Bu cihazın grafik birimi fotogerçekçi render\'ı desteklemiyor — hızlı render alınıyor.');
+      quality = 'fast';
+    }
+    let blob = await this.renderOnce({ w, h, quality, samples, onProgress, signal, shared: mobile });
+    if (signal?.aborted) return blob;
+    if (await isBlack(blob)) {
+      // ikinci deneme: görüntüleyicinin renderer'ı, hızlı kalite, daha düşük çözünürlük
+      onNote?.(quality === 'pt' ? 'Fotogerçekçi render bu cihazda siyah çıktı — hızlı render alınıyor.' : 'Render daha düşük çözünürlükle yeniden deneniyor.');
+      const k2 = Math.min(1, 1280 / Math.max(w, h));
+      blob = await this.renderOnce({ w: Math.round(w * k2), h: Math.round(h * k2), quality: 'fast', samples, onProgress, signal, shared: true, light: true });
+      if (await isBlack(blob)) throw new Error('Bu cihaz render görüntüsünü oluşturamadı. Bilgisayardan deneyin ya da 3D görünümün ekran görüntüsünü kullanın.');
+    }
+    return blob;
+  }
+
+  async renderOnce({ w, h, quality, samples, onProgress, signal, shared, light = false }) {
     const cam = this.camera.clone(); cam.aspect = w / h; cam.updateProjectionMatrix();
-    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
-    const r = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-    r.setPixelRatio(1); r.setSize(w, h, false);
-    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = this.opt.exposure;
-    r.outputColorSpace = THREE.SRGBColorSpace;
-    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+    let r, canvas, restore;
+    if (shared) {
+      // görüntüleyicinin renderer'ını geçici olarak render boyutuna getir
+      r = this.renderer; canvas = r.domElement;
+      const pr = r.getPixelRatio(), size = r.getSize(new THREE.Vector2());
+      this.busy = true;
+      r.setPixelRatio(1); r.setSize(w, h, false);
+      restore = () => { r.setPixelRatio(pr); r.setSize(size.x, size.y, false); this.busy = false; this.resize(); };
+    } else {
+      canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      r = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+      r.setPixelRatio(1); r.setSize(w, h, false);
+      r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace;
+      r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+      restore = () => r.dispose();
+    }
+    r.toneMappingExposure = this.opt.exposure;
     const prevMap = this.sun.shadow.mapSize.x;
     try {
       if (quality === 'pt') return await this.pathTrace(r, cam, canvas, samples, onProgress, signal);
-      this.sun.shadow.mapSize.set(4096, 4096); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
-      const [{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }] = await Promise.all([
-        import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'),
-        import('three/addons/postprocessing/GTAOPass.js'), import('three/addons/postprocessing/OutputPass.js')]);
-      const comp = new EffectComposer(r);
-      comp.setSize(w, h);
-      comp.addPass(new RenderPass(this.scene, cam));
-      const ao = new GTAOPass(this.scene, cam, w, h);
-      ao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.5, thickness: 1, scale: 1.2 });
-      ao.blendIntensity = 0.9;
-      comp.addPass(ao);
-      comp.addPass(new OutputPass());
-      onProgress?.(0.3);
-      for (let i = 0; i < 3; i++) { comp.render(); await new Promise(requestAnimationFrame); }
+      const sm = light ? 1024 : shared ? 2048 : 4096;
+      this.sun.shadow.mapSize.set(sm, sm); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
+      onProgress?.(0.2);
+      if (light) {
+        // en hafif yol: son işlem yok, doğrudan çizim
+        for (let i = 0; i < 2; i++) { r.render(this.scene, cam); await new Promise(requestAnimationFrame); }
+      } else {
+        const [{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }] = await Promise.all([
+          import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'),
+          import('three/addons/postprocessing/GTAOPass.js'), import('three/addons/postprocessing/OutputPass.js')]);
+        const comp = new EffectComposer(r);
+        comp.setPixelRatio(1); comp.setSize(w, h);
+        comp.addPass(new RenderPass(this.scene, cam));
+        const ao = new GTAOPass(this.scene, cam, w, h);
+        ao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.5, thickness: 1, scale: 1.2 });
+        ao.blendIntensity = 0.9;
+        comp.addPass(ao);
+        comp.addPass(new OutputPass());
+        onProgress?.(0.4);
+        for (let i = 0; i < 3; i++) { comp.render(); await new Promise(requestAnimationFrame); }
+        comp.renderTarget1?.dispose(); comp.renderTarget2?.dispose(); ao.dispose?.();
+      }
       onProgress?.(1);
-      return await new Promise(res => canvas.toBlob(res, 'image/png'));
+      return await canvasBlob(canvas);
     } finally {
       this.sun.shadow.mapSize.set(prevMap, prevMap); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
-      r.dispose(); this.dirty = true;
+      restore(); this.dirty = true;
     }
   }
 
@@ -423,7 +629,7 @@ export class Plan3D {
         onProgress?.(0.1 + 0.9 * pt.samples / samples, Math.floor(pt.samples));
         await new Promise(requestAnimationFrame);
       }
-      return await new Promise(res => canvas.toBlob(res, 'image/png'));
+      return await canvasBlob(canvas);
     } finally {
       pt.dispose?.();
       sc.environment = prevEnv; sc.background = prevBg; sc.environmentIntensity = prevEI;
