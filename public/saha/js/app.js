@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.17-4';
+export const APP_VERSION = '2026.10.17-5';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -308,18 +308,24 @@ function dashboard() {
 function jobCard(j) {
   const s = statusOf(j.status), pr = surveyProgress(j.survey?.answers);
   const tot = j.quote ? quoteTotals(j.quote).total : 0;
-  return `<a class="job-card" href="#/is/${j.id}">
-    <div class="jc-top"><span class="code">${esc(j.code)}</span><span class="pill" style="--c:${s.c}">${s.t}</span></div>
-    <h3>${esc(j.customer.name || 'İsimsiz müşteri')}</h3>
-    <p class="muted">${icon('map')}${esc([j.customer.district, j.customer.address].filter(Boolean).join(' · ') || 'Adres girilmedi')}</p>
-    <div class="jc-meta">
-      ${j.kesifDate ? `<span>${icon('calendar')}${fmtDate(j.kesifDate)}</span>` : ''}
-      <span>${icon('list')}${(j.requests || []).length} talep</span>
-      <span>${icon('camera')}${(j.photos || []).length}</span>
-      ${j.plan?.walls?.length ? `<span>${icon('ruler')}Rölöve</span>` : ''}${(j.drawings || []).some(d => hasContent(d.plan)) ? `<span>${icon('layers')}Proje</span>` : ''}
-      ${tot ? `<span class="money">${fmtMoney(tot)}</span>` : ''}
+  const docs = [j.plan?.walls?.length || (j.drawings || []).some(d => hasContent(d.plan)), j.quote?.items?.length, (j.photos || []).length].filter(Boolean).length;
+  return `<a class="job-card folder f-${s.k}" href="#/is/${j.id}">
+    <span class="f-back" aria-hidden="true"></span>
+    ${docs ? `<span class="f-paper" aria-hidden="true"></span>` : ''}${docs > 1 ? `<span class="f-paper p2" aria-hidden="true"></span>` : ''}
+    <span class="pill f-pill">${s.t}</span>
+    <div class="f-front">
+      <span class="code">${esc(j.code)}</span>
+      <h3>${esc(j.customer.name || 'İsimsiz müşteri')}</h3>
+      <p class="muted">${icon('map')}${esc([j.customer.district, j.customer.address].filter(Boolean).join(' · ') || 'Adres girilmedi')}</p>
+      <div class="jc-meta">
+        ${j.kesifDate ? `<span>${icon('calendar')}${fmtDate(j.kesifDate)}</span>` : ''}
+        <span>${icon('list')}${(j.requests || []).length} talep</span>
+        <span>${icon('camera')}${(j.photos || []).length}</span>
+        ${j.plan?.walls?.length ? `<span>${icon('ruler')}Rölöve</span>` : ''}${(j.drawings || []).some(d => hasContent(d.plan)) ? `<span>${icon('layers')}Proje</span>` : ''}
+        ${tot ? `<span class="money">${fmtMoney(tot)}</span>` : ''}
+      </div>
+      <div class="bar" title="Anket %${pr.pct}"><i style="width:${pr.pct}%"></i></div>
     </div>
-    <div class="bar" title="Anket %${pr.pct}"><i style="width:${pr.pct}%"></i></div>
   </a>`;
 }
 
