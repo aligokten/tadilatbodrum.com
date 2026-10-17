@@ -25,7 +25,7 @@ concurrency:
 env:
   PROJECT_ID: saggplus
   # Cloud Shell kurulum komutunun en son yazdırdığı satır:
-  WIF_PROVIDER: ''
+  WIF_PROVIDER: projects/808666491811/locations/global/workloadIdentityPools/github/providers/github
   SERVICE_ACCOUNT: github-deploy@saggplus.iam.gserviceaccount.com
 
 jobs:
