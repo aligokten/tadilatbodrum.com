@@ -740,3 +740,11 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .danger-t{color:#C2410C}
 .ps-dw{display:block;max-width:100%;margin-top:2px;background:transparent;border:0;border-bottom:1px dashed rgba(255,255,255,.35);color:#C9CDD3;font:inherit;font-size:12px;font-weight:700;padding:1px 18px 1px 0;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#C9CDD3 50%),linear-gradient(135deg,#C9CDD3 50%,transparent 50%);background-position:right 6px top 55%,right 2px top 55%;background-size:4px 4px;background-repeat:no-repeat;cursor:pointer}
 .ps-dw option{color:#111}
+
+/* dışa aktarma menüsü */
+.exp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.exp-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;cursor:pointer}
+.exp-opt:hover{border-color:var(--teal);background:var(--teal-50)}
+.exp-opt small{color:var(--teal-d);font-weight:800;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+.exp-opt b{font-size:15px}
+.exp-opt span{color:var(--muted);font-size:12px;line-height:1.35}

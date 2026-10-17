@@ -8,18 +8,23 @@ export function newQuote(job, settings) {
   const d = new Date();
   return {
     no: `${job.code}-T1`, date: d.toISOString().slice(0, 10), validDays: settings.validDays || 15,
-    vatPct: settings.vat ?? 20, discountPct: 0, items: [], intro: '', notes: '', terms: settings.terms || '',
+    vatPct: settings.vat ?? 20, discountPct: 0, profitPct: settings.profit ?? 0, profitMode: 'line', items: [], intro: '', notes: '', terms: settings.terms || '',
     showVat: true, includeRenders: true, rev: 1,
   };
 }
 
+/* kalem fiyatları maliyettir; yüklenici kârı üstüne eklenir, iskonto kâr dahil tutara uygulanır */
 export function quoteTotals(q) {
-  const sub = q.items.reduce((s, i) => s + (+i.qty || 0) * (+i.price || 0), 0);
+  const cost = q.items.reduce((s, i) => s + (+i.qty || 0) * (+i.price || 0), 0);
+  const profit = cost * (+q.profitPct || 0) / 100;
+  const sub = cost + profit;
   const disc = sub * (+q.discountPct || 0) / 100;
   const net = sub - disc;
   const vat = q.showVat ? net * (+q.vatPct || 0) / 100 : 0;
-  return { sub, disc, net, vat, total: net + vat };
+  return { cost, profit, sub, disc, net, vat, total: net + vat };
 }
+/* "birim fiyatlara dağıt" modunda müşteriye giden birim fiyat çarpanı */
+const priceK = q => q.profitMode === 'spread' ? 1 + (+q.profitPct || 0) / 100 : 1;
 
 /* metraj kaynağı: önce plan, yoksa keşif mahalleri */
 export function jobMetrics(job) {
@@ -107,15 +112,19 @@ export function renderQuote(root, job, settings, save, ctx) {
         </div>
         <div class="card totals">
           <div class="grid2">
+            <label>Yüklenici kârı<div class="inp-unit"><input class="inp" type="number" step="0.5" data-q="profitPct" value="${q.profitPct || 0}"><span>%</span></div></label>
+            <label>Teklifte<select class="inp" data-q="profitMode"><option value="line" ${q.profitMode !== 'spread' ? 'selected' : ''}>Ayrı satır göster</option><option value="spread" ${q.profitMode === 'spread' ? 'selected' : ''}>Birim fiyatlara dağıt</option></select></label>
             <label>İskonto<div class="inp-unit"><input class="inp" type="number" data-q="discountPct" value="${q.discountPct}"><span>%</span></div></label>
             <label>KDV<div class="inp-unit"><input class="inp" type="number" data-q="vatPct" value="${q.vatPct}"><span>%</span></div></label>
           </div>
           <label class="check"><input type="checkbox" data-q="showVat" ${q.showVat ? 'checked' : ''}> KDV ekle</label>
           <label class="check"><input type="checkbox" data-q="includeRenders" ${q.includeRenders ? 'checked' : ''}> Render / plan görsellerini teklife ekle</label>
-          <div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>
+          ${T.profit ? `<div class="tline"><span>Maliyet (kalemler)</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>+ ${fmtMoney(T.profit)}</b></div>` : ''}
+          <div class="tline"><span>Ara toplam${T.profit ? ' (kâr dahil)' : ''}</span><b>${fmtMoney(T.sub)}</b></div>
           ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
           ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : ''}
           <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
+          ${T.profit ? `<p class="muted small">Kalem fiyatları maliyet olarak girilir. ${q.profitMode === 'spread' ? 'Teklif çıktısında kâr birim fiyatlara dağıtılır; müşteri ayrı kâr satırı görmez.' : 'Teklif çıktısında "Genel giderler ve yüklenici kârı" ayrı satır olarak görünür.'} Net kâr (iskonto sonrası): <b>${fmtMoney(T.profit - T.disc)}</b></p>` : ''}
           <div class="col">
             <button class="btn btn-primary" data-act="print">${icon('print')}Teklifi yazdır / PDF</button>
             <button class="btn btn-ghost" data-act="wa">${icon('chat')}WhatsApp ile gönder</button>
@@ -141,7 +150,7 @@ export function renderQuote(root, job, settings, save, ctx) {
   };
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
-    if (k && ['discountPct', 'vatPct', 'showVat', 'includeRenders'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : +e.target.value; save(); redrawTotals(); }
+    if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
   root.onclick = async e => {
@@ -230,11 +239,12 @@ async function printQuote(job, settings, ctx) {
     if (urls.length) imgs = `<section class="p-imgs">${urls.map((u, i) => `<figure><img src="${u}"><figcaption>${esc(ph[i].caption || (ph[i].tag === 'render' ? 'Görselleştirme' : 'Rölöve'))}</figcaption></figure>`).join('')}</section>`;
   }
   let n = 0;
+  const k = priceK(q), spread = k !== 1;
   const rows = CATEGORIES.map(cat => {
     const its = q.items.filter(i => i.cat === cat.k); if (!its.length) return '';
-    const st = its.reduce((s, i) => s + i.qty * i.price, 0);
+    const st = its.reduce((s, i) => s + i.qty * i.price * k, 0);
     return `<tr class="grp"><td colspan="5">${esc(cat.t)}</td><td class="r">${fmtMoney(st)}</td></tr>` +
-      its.map(i => `<tr><td class="c">${++n}</td><td>${esc(i.desc).replace(/\n/g, '<br>')}</td><td class="r">${fmtNum(i.qty)}</td><td>${esc(i.unit)}</td><td class="r">${fmtMoney(i.price)}</td><td class="r">${fmtMoney(i.qty * i.price)}</td></tr>`).join('');
+      its.map(i => `<tr><td class="c">${++n}</td><td>${esc(i.desc).replace(/\n/g, '<br>')}</td><td class="r">${fmtNum(i.qty)}</td><td>${esc(i.unit)}</td><td class="r">${fmtMoney(i.price * k)}</td><td class="r">${fmtMoney(i.qty * i.price * k)}</td></tr>`).join('');
   }).join('');
   const html = `<div class="pdoc">
     ${docHeader(settings, 'Fiyat Teklifi', `<div class="p-meta"><span>Teklif no <b>${esc(q.no)}${q.rev > 1 ? ' / Rev.' + q.rev : ''}</b></span><span>Tarih <b>${fmtDate(q.date)}</b></span><span>Geçerlilik <b>${fmtDate(valid)}</b></span></div>`)}
@@ -246,6 +256,7 @@ async function printQuote(job, settings, ctx) {
     ${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th><th class="r">Birim fiyat</th><th class="r">Tutar</th></tr></thead><tbody>${rows}</tbody></table>
     <section class="p-totals">
+      ${T.profit && !spread ? `<div class="tline"><span>İş kalemleri toplamı</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Genel giderler ve yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>${fmtMoney(T.profit)}</b></div>` : ''}
       <div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>
       ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
       ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : '<div class="tline"><span>KDV</span><b>Hariç</b></div>'}

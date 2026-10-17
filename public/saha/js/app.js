@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.17-3';
+export const APP_VERSION = '2026.10.17-4';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -917,7 +917,7 @@ function planScreen() {
         <select class="ps-dw" id="psDw" aria-label="Çizim">${drawingsOf(j).map(d => `<option value="${d.id}" ${d.id === dw.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}<option value="+">+ Yeni çizim…</option></select></div>
       <div class="seg big" id="psMode"><button data-m="2d">2D Plan</button><button data-m="3d">${icon('cube')}3D</button><button data-m="split" class="hide-m">Yan yana</button></div>
       <div class="ps-act">
-        <button class="btn btn-ghost btn-sm" data-png title="Planı PNG olarak fotoğraflara kaydet">${icon('download')}<span>Plan görseli</span></button>
+        <button class="btn btn-ghost btn-sm" data-exp title="2D çizimi ve 3D modeli dışa aktar (DXF, SketchUp, 3DS, STL…)">${icon('download')}<span>Dışa aktar</span></button>
         <button class="btn btn-primary btn-sm" data-render>${icon('sparkle')}<span>Render</span></button>
       </div>
     </header>
@@ -971,11 +971,49 @@ function planScreen() {
     if (v === '+') { e.target.value = dw.id; return newDrawingDialog(j); }
     location.hash = `#/is/${j.id}/plan${v === 'rolove' ? '' : '?d=' + v}${mode !== '2d' ? (v === 'rolove' ? '?' : '&') + 'v=3d' : ''}`;
   };
-  $('[data-png]').onclick = async () => {
+  const fname = ext => `${j.code}-${(dw.main ? 'rolove' : dw.name).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').replace(/[^A-Za-z0-9_-]+/g, '-')}.${ext}`;
+  // 3D model: görünür 3D yoksa geçici, ekran dışı bir görüntüleyici kurulur
+  const with3d = async fn => {
+    if (S.p3) { S.p3.setPlan(S.editor.plan); return fn(S.p3); }
+    const { Plan3D } = await import('./plan3d.js');
+    const host = h('<div style="position:fixed;left:-3000px;top:0;width:400px;height:300px"></div>'); document.body.append(host);
+    const p3 = new Plan3D(host);
+    try { await p3.init(); p3.setPlan(S.editor.plan); return await fn(p3); } finally { p3.dispose(); host.remove(); }
+  };
+  $('[data-exp]').onclick = async () => {
+    if (!hasContent(S.editor.plan)) return toast('Çizim boş', 'err');
+    const opts = [
+      ['dxf2', '2D çizim', 'DXF', 'AutoCAD / ArchiCAD / NanoCAD — duvar, kapı, pencere, oda, mobilya, ölçü katmanlarıyla (mm)'],
+      ['png', '2D çizim', 'PNG', 'Plan görseli — fotoğraflara da kaydedilir'],
+      ['dae', '3D model', 'SketchUp (.dae)', 'SketchUp: Dosya → İçe aktar → Collada; malzeme renkleriyle'],
+      ['3ds', '3D model', '3DS', '3ds Max, SketchUp Pro, Rhino, Blender (cm)'],
+      ['stl', '3D model', 'STL', '3D yazıcı / CAD (mm)'],
+      ['dxf3', '3D model', 'DXF 3D', 'AutoCAD 3D — 3DFACE yüzeyler, katman = nesne (mm)'],
+      ['glb', '3D model', 'GLB', 'Web, AR, Blender — dokularıyla'],
+    ];
+    const r = await modal({ title: `Dışa aktar — ${dw.name}`, body: `<div class="exp-list">${opts.map(([k, g, t, d]) => `<button class="exp-opt" data-x="${k}"><small>${g}</small><b>${t}</b><span>${d}</span></button>`).join('')}</div>
+      <p class="muted small">SketchUp'ın kendi .skp biçimi kapalı bir formattır ve tarayıcıda yazılamaz; SketchUp, .dae (Collada) dosyasını doğrudan içe aktarır ve kaydettiğinizde .skp olur.</p>`,
+      actions: [{ k: 'no', t: 'Kapat' }], onOpen: (el, close) => el.onclick = e => { const b = e.target.closest('[data-x]'); if (b) close({ k: b.dataset.x }); } });
+    const k = r?.k; if (!k || k === 'no') return;
+    try {
+      if (k === 'png') return savePng();
+      if (k === 'dxf2') { const { planToDXF } = await import('./exporters.js'); downloadBlob(planToDXF(S.editor.plan), fname('dxf')); return toast('DXF indirildi'); }
+      toast('3D model hazırlanıyor…');
+      const ex = await import('./exporters.js');
+      const blob = await with3d(async p3 => {
+        if (k === 'glb') return p3.exportGLB();
+        const gr = await p3.exportGroups();
+        return { dae: () => ex.toDAE(gr, `${j.code} ${dw.name}`), '3ds': () => ex.to3DS(gr), stl: () => ex.toSTL(gr), dxf3: () => ex.toDXF3D(gr) }[k]();
+      });
+      downloadBlob(blob, fname({ dae: 'dae', '3ds': '3ds', stl: 'stl', dxf3: '3d.dxf', glb: 'glb' }[k]));
+      toast(`${({ dae: 'SketchUp (.dae)', '3ds': '3DS', stl: 'STL', dxf3: 'DXF 3D', glb: 'GLB' })[k]} indirildi (${Math.max(1, Math.round(blob.size / 1024))} KB)`);
+    } catch (e) { console.error(e); toast('Dışa aktarılamadı: ' + e.message, 'err'); }
+  };
+  const savePng = async () => {
     const blob = await S.editor.exportPng({ title: `${j.code} ${j.customer.name || ''} — ${dw.name}` });
     if (!blob) return toast('Plan boş', 'err');
     const p = await addBlobPhoto(blob, { tag: 'rolove', caption: `${dw.main ? 'Rölöve planı' : dw.name} ` + new Date().toLocaleDateString('tr-TR') });
-    downloadBlob(blob, `${j.code}-${dw.main ? 'rolove' : dw.name.replace(/[^\wçğıöşüÇĞİÖŞÜ-]+/g, '-')}.png`);
+    downloadBlob(blob, fname('png'));
     toast('Plan görseli fotoğraflara kaydedildi');
     return p;
   };
@@ -1138,7 +1176,7 @@ function settingsView() {
       </div>
       <div class="card">
         <h3>${icon('file')}Teklif varsayılanları</h3>
-        <div class="grid2"><label>KDV %<input class="inp" type="number" data-f="vat"></label><label>Geçerlilik (gün)<input class="inp" type="number" data-f="validDays"></label></div>
+        <div class="grid2"><label>KDV %<input class="inp" type="number" data-f="vat"></label><label>Geçerlilik (gün)<input class="inp" type="number" data-f="validDays"></label><label>Yüklenici kârı %<input class="inp" type="number" step="0.5" data-f="profit"></label></div>
         <label>Şartlar ve koşullar (her satır bir madde)<textarea class="inp" rows="7" data-f="terms"></textarea></label>
       </div>
     </div>
