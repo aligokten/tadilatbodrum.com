@@ -46,13 +46,16 @@ jobs:
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.SERVICE_ACCOUNT }}
+          # erişim belirtecini burada üret: yetki sorunu varsa bu adımda açık hata verir
+          token_format: access_token
+          create_credentials_file: true
       - if: steps.check.outputs.ok == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Firebase Hosting'e yayınla
         if: steps.check.outputs.ok == 'true'
-        run: npx --yes firebase-tools@13.29.1 deploy --only hosting --project "$PROJECT_ID" --non-interactive --message "GitHub ${GITHUB_SHA::7}"
+        run: npx --yes firebase-tools@13.29.1 deploy --only hosting --project "$PROJECT_ID" --non-interactive --message "GitHub ${GITHUB_SHA::7}" ${{ runner.debug == '1' && '--debug' || '' }}
       - name: Özet
         if: steps.check.outputs.ok == 'true'
         run: |
