@@ -1,5 +1,6 @@
 /* ═══ Plan geometrisi — birim: cm, 2D'de y aşağı ═══ */
 import { uid } from './store.js';
+import { fixtureCounts } from './fixtures.js';
 
 export function emptyPlan() {
   return { v: 1, walls: [], openings: [], rooms: [], items: [], dims: [], labels: [],
@@ -95,10 +96,10 @@ export function roomMetrics(plan, room) {
 }
 
 export function planMetrics(plan) {
-  if (!plan) return { rooms: [], floor: 0, wall: 0, ceil: 0, perim: 0 };
+  if (!plan) return { rooms: [], floor: 0, wall: 0, ceil: 0, perim: 0, elec: 0, light: 0, plumb: 0 };
   const rooms = plan.rooms.map(r => ({ id: r.id, name: r.name, floor: r.floor, ...roomMetrics(plan, r) }));
   const sum = k => rooms.reduce((s, r) => s + r[k], 0);
-  return { rooms, floor: sum('area'), wall: sum('wallArea'), ceil: sum('ceil'), perim: sum('perim') };
+  return { rooms, floor: sum('area'), wall: sum('wallArea'), ceil: sum('ceil'), perim: sum('perim'), ...fixtureCounts(plan) };
 }
 
 export function planBounds(plan) {

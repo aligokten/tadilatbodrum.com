@@ -7,6 +7,8 @@
 import { V, wallLen, wallDir, polyCentroid, pointInPoly } from './plan-geom.js';
 import { floorTexture } from './textures.js';
 import { build3D } from './cabinet.js';
+import { fixtureOf, fixture3D } from './fixtures.js';
+import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, sashes, leaves } from './openings.js';
 
 let THREE, OrbitControls, RoomEnvironment;
 async function loadThree() {
@@ -225,29 +227,74 @@ export class Plan3D {
     const g = new THREE.Group(); g.name = o.type === 'window' ? 'Pencere' : 'Kapi';
     const c = V.add(w.a, V.mul(u, o.pos));
     g.position.set(M(c.x), 0, M(c.y)); g.rotation.y = ang;
-    const fr = this.std('#F4F4F2', 0.5), W = M(o.w), T = M(t), f = 0.05;
-    const box = (sx, sy, sz, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
+    const fr = this.std(frameColor(o), 0.5), W = M(o.w), T = M(t), f = 0.05, sd = o.side || 1;
+    const box = (sx, sy, sz, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(Math.max(sx, 0.002), Math.max(sy, 0.002), Math.max(sz, 0.002)), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
+    const glassM = (frost) => this.mat(frost ? 'frost' : 'glass', () => frost
+      ? new THREE.MeshPhysicalMaterial({ color: '#F4F8F9', roughness: 0.55, transmission: 0.6, thickness: 0.01, transparent: true, opacity: 0.8 })
+      : new THREE.MeshPhysicalMaterial({ color: '#E8F6F8', metalness: 0, roughness: 0.02, transmission: 1, thickness: 0.01, ior: 1.5, transparent: true, opacity: 0.25 }));
+    const handle = (x, y, z, vertical = false) => { const hd = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.12, 12), this.std('#9DA3A8', 0.3, 0.9)); if (!vertical) hd.rotation.z = Math.PI / 2; hd.position.set(x, y, z); g.add(hd); };
+    // çerçeveli cam panel (pencere kanadı / camlı kapı kanadı)
+    const glazed = (x0, x1, y0, y1, z, prof, depth, m, frost) => {
+      const ww = x1 - x0, hh = y1 - y0, cx = (x0 + x1) / 2;
+      box(ww, prof, depth, cx, y0 + prof / 2, z, m); box(ww, prof, depth, cx, y1 - prof / 2, z, m);
+      box(prof, hh, depth, x0 + prof / 2, (y0 + y1) / 2, z, m); box(prof, hh, depth, x1 - prof / 2, (y0 + y1) / 2, z, m);
+      const gl = new THREE.Mesh(new THREE.BoxGeometry(Math.max(ww - prof * 2, 0.01), Math.max(hh - prof * 2, 0.01), 0.008), glassM(frost)); gl.position.set(cx, (y0 + y1) / 2, z); g.add(gl);
+    };
     if (o.type === 'window') {
       const y0 = M(o.sill), y1 = Math.min(M(o.sill + o.h), M(topClip));
       if (y1 <= y0) return;
-      const hgt = y1 - y0;
-      box(W, f, T + 0.02, 0, y0 + f / 2, 0, fr); box(W, f, T * 0.6, 0, y1 - f / 2, 0, fr);
-      box(f, hgt, T * 0.6, -W / 2 + f / 2, y0 + hgt / 2, 0, fr); box(f, hgt, T * 0.6, W / 2 - f / 2, y0 + hgt / 2, 0, fr);
-      if (W > 0.9) box(f * 0.8, hgt, T * 0.5, 0, y0 + hgt / 2, 0, fr);
-      const glass = this.mat('glass', () => new THREE.MeshPhysicalMaterial({ color: '#E8F6F8', metalness: 0, roughness: 0.02, transmission: 1, thickness: 0.01, ior: 1.5, transparent: true, opacity: 0.25 }));
-      const gl = new THREE.Mesh(new THREE.BoxGeometry(W - f * 2, hgt - f * 2, 0.01), glass);
-      gl.position.set(0, y0 + hgt / 2, 0); g.add(gl);
-      box(W + 0.06, 0.03, T + 0.06, 0, y0 - 0.015, 0, this.std('#E5DFD3', 0.6)); // denizlik
+      const hgt = y1 - y0, wu = winUse(o), wm = winModel(o), D = T * 0.6;
+      box(W, f, D, 0, y0 + f / 2, 0, fr); box(W, f, D, 0, y1 - f / 2, 0, fr);
+      box(f, hgt, D, -W / 2 + f / 2, y0 + hgt / 2, 0, fr); box(f, hgt, D, W / 2 - f / 2, y0 + hgt / 2, 0, fr);
+      const S = sashes(o), X = r => -W / 2 + f + r * (W - 2 * f), sy0 = y0 + f, sy1 = y1 - f;
+      if (!S.length) { const gl = new THREE.Mesh(new THREE.BoxGeometry(W - f * 2, hgt - f * 2, 0.01), glassM(wu.frost)); gl.position.set(0, y0 + hgt / 2, 0); g.add(gl); }
+      S.forEach(([a, b, open], i) => {
+        const z = wm === 'surme' ? (i ? -0.02 : 0.02) : 0;
+        glazed(X(a), X(b), sy0, sy1, z, open ? 0.055 : 0.03, open ? 0.06 : 0.04, fr, wu.frost);
+        if (wm !== 'surme' && a > 0) box(0.02, hgt, D, X(a), y0 + hgt / 2, 0, fr);
+        if (open && wm !== 'sabit') {
+          const hx = wm === 'vasistas' ? (X(a) + X(b)) / 2 : (a === 0 && !(wm === 'tek' && o.flip) ? X(b) - 0.06 : X(a) + 0.06);
+          handle(hx, wm === 'vasistas' ? sy1 - 0.08 : sy0 + (sy1 - sy0) * 0.5, sd * 0.05, wm !== 'vasistas');
+        }
+      });
+      if (y0 > 0.02) box(W + 0.06, 0.03, T + 0.06, 0, y0 - 0.015, 0, this.std('#E5DFD3', 0.6)); // denizlik
+      if (wu.rail) {   // fransız balkon korkuluğu: dış tarafta
+        const rz = -sd * (T / 2 + 0.06), rail = this.std('#3A3F45', 0.4, 0.6);
+        box(W, 0.04, 0.04, 0, 1.0, rz, rail); box(W, 0.02, 0.02, 0, 0.12, rz, rail);
+        for (let x = -W / 2 + 0.02; x <= W / 2 - 0.01; x += 0.11) box(0.014, 0.88, 0.014, x, 0.56, rz, rail);
+      }
     } else {
-      const H = Math.min(M(o.h), M(topClip));
-      const wood = this.std('#B08463', 0.55);
-      box(f, H, T + 0.02, -W / 2 + f / 2, H / 2, 0, fr); box(f, H, T + 0.02, W / 2 - f / 2, H / 2, 0, fr);
-      box(W, f, T + 0.02, 0, H - f / 2, 0, fr);
+      const H = Math.min(M(o.h), M(topClip)), du = doorUse(o), dm = doorModel(o);
+      const leafM = this.std(leafColor(o), du.k === 'giris' ? 0.35 : 0.55, du.k === 'giris' ? 0.3 : 0);
+      const fw = du.k === 'giris' ? 0.07 : f, fd = du.k === 'giris' ? T + 0.04 : T + 0.02;
+      box(fw, H, fd, -W / 2 + fw / 2, H / 2, 0, fr); box(fw, H, fd, W / 2 - fw / 2, H / 2, 0, fr);
+      box(W, fw, fd, 0, H - fw / 2, 0, fr);
       if (!this.opt.cut) {
-        const leaf = box(W - f * 2 - 0.01, H - f - 0.01, 0.04, 0, (H - f) / 2, 0, wood);
-        const hd = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.12, 12), this.std('#9DA3A8', 0.3, 0.9));
-        hd.rotation.z = Math.PI / 2; hd.position.set((o.flip ? -1 : 1) * (W / 2 - 0.12), H * 0.47, 0.04); g.add(hd);
-        leaf.userData.door = true;
+        const lh = H - fw - 0.01, th = du.k === 'giris' ? 0.065 : 0.04;
+        // tek kanat paneli: x0..x1, z; kullanım alanına göre dolu / camlı
+        const leaf = (x0, x1, z, hx) => {
+          const cx = (x0 + x1) / 2, ww = x1 - x0;
+          if (du.glass === 'full') glazed(x0, x1, 0.01, lh, z, 0.035, th, leafM, false);
+          else if (du.glass === 'low') { glazed(x0, x1, 0.45, lh, z, 0.06, th, leafM, false); box(ww, 0.45, th, cx, 0.225 + 0.005, z, leafM); }
+          else {
+            const lf = box(ww, lh, th, cx, lh / 2 + 0.005, z, leafM); lf.userData.door = true;
+            if (du.k === 'banyo') for (let i = 0; i < 5; i++) box(ww * 0.5, 0.008, th + 0.004, cx, 0.08 + i * 0.022, z, this.std('#3A3F45', 0.6));   // alt menfez
+            if (du.k === 'giris') { box(ww * 0.7, lh * 0.7, 0.004, cx, lh / 2, z + sd * (th / 2 + 0.002), this.std(leafColor(o), 0.5)); box(0.06, 0.25, 0.01, hx, H * 0.47, z + sd * (th / 2 + 0.005), this.std('#9DA3A8', 0.3, 0.9)); }
+          }
+          if (hx !== null) handle(hx, H * 0.47, z + sd * (th / 2 + 0.02));
+        };
+        const iw = W - fw * 2 - 0.01, X = r => -iw / 2 + r * iw;
+        if (dm === 'surgu') {
+          const z = sd * (T / 2 + 0.03), ext = 0.05;
+          box(iw + 0.25, 0.05, 0.05, 0, H + 0.03, z, this.std('#9DA3A8', 0.3, 0.8));   // ray
+          leaf(-iw / 2 - ext, iw / 2 + ext, z, (o.flip ? 1 : -1) * (iw / 2 - 0.05));
+        } else if (dm === 'gomme') leaf(X(0), X(1), 0, (o.flip ? 1 : -1) * (iw / 2 - 0.04));
+        else if (dm === 'katlanir') {
+          for (let i = 0; i < 4; i++) leaf(X(i / 4) + 0.003, X((i + 1) / 4) - 0.003, 0, i === (o.flip ? 0 : 3) ? X(o.flip ? 0.06 : 0.94) : null);
+        } else for (const [a, b, hk] of leaves(o)) {
+          const x0 = X(a) + 0.002, x1 = X(b) - 0.002;
+          leaf(x0, x1, 0, hk === 'a' ? x1 - 0.08 : x0 + 0.08);
+        }
       }
     }
     this.root.add(g);
@@ -277,6 +324,12 @@ export class Plan3D {
       const cush = this.std(col, 0.95), n = Math.max(1, Math.round((w - 2 * arm) / 0.7)), cw = (w - 2 * arm) / n;
       for (let i = 0; i < n; i++) box(cw - 0.02, 0.12, d * 0.7, -w / 2 + arm + cw * (i + 0.5), H * 0.45 + 0.12, d * 0.08, cush);
     };
+    const fx = fixtureOf(it.type);
+    if (fx) {
+      if (fx.mount === 'ceil') { if (this.opt.cut) return g; g.position.y = M(this.plan.meta.wallH); }
+      fixture3D(THREE, g, it, (c, r, mt) => this.std(c, r, mt));
+      return g;
+    }
     switch (it.type) {
       case 'cabinet': build3D(THREE, g, it, (c, r, mt) => this.std(c, r, mt)); break;
       case 'ikili': sofa(W, D); break;

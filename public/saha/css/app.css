@@ -485,6 +485,7 @@ body.plan-mode #view{padding:0;max-width:none;height:100dvh;gap:0}
 .wall{stroke:#24272B;stroke-linecap:square}
 .win{fill:#fff;stroke:#24272B}
 .door,.jamb{fill:none;stroke:#24272B}
+.winarc{fill:none;stroke:#24272B;opacity:.65}
 .item{stroke:#4B5058}
 .item.sel{stroke:var(--orange);stroke-width:3px;vector-effect:non-scaling-stroke}
 .itemback{stroke:#4B5058;opacity:.5}

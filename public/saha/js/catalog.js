@@ -1,4 +1,5 @@
 /* ═══ Sabit listeler, varsayılan ayarlar ve fiyat kütüphanesi ═══ */
+import { FIXTURES, FIXTURE_GROUPS } from './fixtures.js';
 
 export const STATUSES = [
   { k: 'talep',    t: 'Talep',      c: '#7A8594' },
@@ -84,7 +85,7 @@ export const floorOf = k => FLOORS.find(f => f.k === k) || FLOORS[0];
 /* g: kategori (seçim listesinde gruplanır), z: yerden yükseklik (cm) */
 export const FURN_GROUPS = [
   ['oturma', 'Oturma / salon'], ['yemek', 'Yemek'], ['yatak', 'Yatak odası'], ['calisma', 'Çalışma'],
-  ['mutfak', 'Mutfak'], ['banyo', 'Banyo'], ['tesisat', 'Isıtma / tesisat'], ['yapi', 'Yapı elemanları'], ['dis', 'Dış mekan'], ['diger', 'Diğer'],
+  ['mutfak', 'Mutfak'], ['banyo', 'Banyo'], ['tesisat', 'Isıtma / tesisat'], ...FIXTURE_GROUPS, ['yapi', 'Yapı elemanları'], ['dis', 'Dış mekan'], ['diger', 'Diğer'],
 ];
 export const FURNITURE = [
   { g: 'oturma', k: 'kanepe',   t: 'Kanepe (3\'lü)', w: 220, d: 90,  h: 85,  c: '#9AA3AE' },
@@ -154,8 +155,9 @@ export const FURNITURE = [
   { g: 'dis',    k: 'agac',     t: 'Ağaç',          w: 200, d: 200, h: 450, c: '#4F8A4B' },
   { g: 'dis',    k: 'bitki',    t: 'Saksı bitki',   w: 50,  d: 50,  h: 120, c: '#4F8A4B' },
   { g: 'diger',  k: 'kutu',     t: 'Genel kutu',    w: 100, d: 60,  h: 100, c: '#C9CDD2' },
+  ...FIXTURES,
 ];
-export const furnOf = k => FURNITURE.find(f => f.k === k) || FURNITURE[FURNITURE.length - 1];
+export const furnOf = k => FURNITURE.find(f => f.k === k) || FURNITURE.find(f => f.k === 'kutu');
 
 export const WALL_COLORS = ['#F7F5F0', '#FFFFFF', '#ECE6DA', '#DDE4E4', '#CFE7EA', '#F3E1D3', '#E2DCCF', '#C9D6C3', '#B7C4CF', '#3A3D42'];
 
@@ -185,11 +187,12 @@ export const DEFAULT_CATALOG = [
   { id: 'c11', cat: 'yalitim',  desc: 'Islak hacim su yalıtımı (2 kat + file)', unit: 'm²', price: 380, qty: 'floor' },
   { id: 'c12', cat: 'alcipan',  desc: 'Asma tavan alçıpan + gizli ışık bandı', unit: 'm²', price: 900, qty: 'ceil' },
   { id: 'c13', cat: 'alcipan',  desc: 'Alçıpan bölme duvar (çift yüz, yalıtımlı)', unit: 'm²', price: 1100 },
-  { id: 'c14', cat: 'elektrik', desc: 'Priz / anahtar noktası (kablo + kasa + montaj)', unit: 'nokta', price: 850 },
-  { id: 'c15', cat: 'elektrik', desc: 'Spot aydınlatma (LED, montaj dahil)', unit: 'adet', price: 450 },
+  { id: 'c14', cat: 'elektrik', desc: 'Priz / anahtar noktası (kablo + kasa + montaj)', unit: 'nokta', price: 850, qty: 'elec' },
+  { id: 'c15', cat: 'elektrik', desc: 'Spot aydınlatma (LED, montaj dahil)', unit: 'adet', price: 450, qty: 'light' },
   { id: 'c16', cat: 'elektrik', desc: 'Elektrik tesisatı yenileme (daire)', unit: 'götürü', price: 45000 },
   { id: 'c17', cat: 'tesisat',  desc: 'Temiz su + pis su tesisatı yenileme (ıslak hacim)', unit: 'götürü', price: 22000 },
   { id: 'c18', cat: 'tesisat',  desc: 'Ankastre rezervuar + asma klozet montajı', unit: 'takım', price: 6500 },
+  { id: 'c40', cat: 'tesisat',  desc: 'Sıhhi tesisat noktası (temiz su / pis su / sifon)', unit: 'nokta', price: 1400, qty: 'plumb' },
   { id: 'c19', cat: 'banyo',    desc: 'Lavabo dolabı + ayna montajı', unit: 'takım', price: 3500 },
   { id: 'c20', cat: 'banyo',    desc: 'Duşakabin (temperli cam, montaj dahil)', unit: 'adet', price: 14000 },
   { id: 'c21', cat: 'mutfak',   desc: 'Mutfak dolabı (lake kapak, alt+üst)', unit: 'm', price: 16000 },

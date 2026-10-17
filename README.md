@@ -51,6 +51,8 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 - Müşteri talepleri, 10 bölümlü koşullu **müşteri anketi**, mahal bazlı **keşif kontrol listesi**, tespitler
 - Fotoğraf çekme/yükleme (mahal ve tespite bağlı), keşif raporu PDF'i
 - **2D rölöve editörü** → otomatik **3D model** → **gerçekçi render** (path tracing)
+- Elektrik (priz, anahtar, sigorta kutusu, aydınlatma…) ve sıhhi tesisat (yer sifonu, musluk, pis su gideri…) **sembol kütüphanesi**; duvara otomatik yaslanır, teklifte nokta sayısı olarak metrajlanır
+- Kapı ve pencerelerde **model** (tek / çift / sürgü / gömme / katlanır kapı; açılır, çift açılım, vasistas, sürme, sabit pencere) ve **kullanım** (giriş, banyo, balkon, fransız balkon…) seçenekleri
 - Metrajı plandan alan **teklif aracı** + yazdırılabilir/PDF teklif
 
 ## Dosya yapısı

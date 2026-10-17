@@ -2,7 +2,9 @@
  * 3D: Plan3D sahnesindeki ağlar dünya koordinatına çevrilip üçgenler olarak yazılır (three.js: metre, Y yukarı).
  * 2D: plan verisi (cm, y aşağı) doğrudan DXF çizgilerine, yaylara ve yazılara çevrilir (mm, y yukarı).
  */
-import { V, wallLen, wallDir, wallNormal, polyCentroid, roomMetrics } from './plan-geom.js';
+import { V, wallLen, wallDir, wallNormal, polyCentroid, roomMetrics, planBounds } from './plan-geom.js';
+import { fixtureOf } from './fixtures.js';
+import { doorModel, winModel, winUse, sashes, leaves } from './openings.js';
 
 /* ───────────── 3D: sahneden üçgen toplama ───────────── */
 const safe = s => String(s || 'Nesne').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'Nesne';
@@ -137,7 +139,7 @@ export function toDXF3D(groups) {
 }
 
 /* ───────────── DXF ortak ───────────── */
-const LAYER_COLORS = { DUVAR: 7, ODA: 8, KAPI: 3, PENCERE: 5, MOBILYA: 30, MUTFAK: 1, OLCU: 2, YAZI: 7, ALAN: 4, ACIKLIK: 6 };
+const LAYER_COLORS = { DUVAR: 7, ODA: 8, KAPI: 3, PENCERE: 5, MOBILYA: 30, MUTFAK: 1, OLCU: 2, YAZI: 7, ALAN: 4, ACIKLIK: 6, ELEKTRIK: 30, TESISAT: 150 };
 function dxfHead(layers) {
   const L = [...new Set(['0', ...layers])];
   return ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
@@ -151,7 +153,7 @@ export function planToDXF(plan) {
   const P = plan, T = P.meta?.wallT || 15;
   const k = 10, X = v => (v * k).toFixed(1), Y = v => (-v * k).toFixed(1);
   const tr = s => String(s).replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ç/g, 'c').replace(/Ç/g, 'C').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ü/g, 'u').replace(/Ü/g, 'U');
-  const out = dxfHead(['DUVAR', 'ODA', 'KAPI', 'PENCERE', 'MOBILYA', 'MUTFAK', 'OLCU', 'YAZI', 'ALAN']);
+  const out = dxfHead(['DUVAR', 'ODA', 'KAPI', 'PENCERE', 'MOBILYA', 'MUTFAK', 'ELEKTRIK', 'TESISAT', 'OLCU', 'YAZI', 'ALAN']);
   const line = (L, a, b) => out.push('0', 'LINE', '8', L, '10', X(a.x), '20', Y(a.y), '30', '0', '11', X(b.x), '21', Y(b.y), '31', '0');
   const poly = (L, pts, closed = true) => { out.push('0', 'POLYLINE', '8', L, '66', '1', '70', closed ? '1' : '0', '10', '0', '20', '0', '30', '0'); for (const p of pts) out.push('0', 'VERTEX', '8', L, '10', X(p.x), '20', Y(p.y), '30', '0'); out.push('0', 'SEQEND', '8', L); };
   const text = (L, p, s, h = 15, ang = 0) => out.push('0', 'TEXT', '8', L, '10', X(p.x), '20', Y(p.y), '30', '0', '40', (h * k).toFixed(1), '1', tr(s), '50', String(ang), '72', '1', '73', '2', '11', X(p.x), '21', Y(p.y), '31', '0');
@@ -182,30 +184,54 @@ export function planToDXF(plan) {
     const w = P.walls.find(x => x.id === op.wallId); if (!w) continue;
     const t = (w.t || T), u = wallDir(w), n = wallNormal(w), c = V.add(w.a, V.mul(u, op.pos));
     const A = V.sub(c, V.mul(u, op.w / 2)), B = V.add(c, V.mul(u, op.w / 2));
+    const sd = op.side || 1, PT = (f, kk) => V.add(V.lerp(A, B, f), V.mul(n, kk));
     if (op.type === 'window') {
-      for (const f of [-t / 2, -t / 6, t / 6, t / 2]) line('PENCERE', V.add(A, V.mul(n, f)), V.add(B, V.mul(n, f)));
+      const wm = winModel(op), L = 'PENCERE';
+      for (const f of [-t / 2, t / 2]) line(L, PT(0, f), PT(1, f));
+      line(L, PT(0, -t / 2), PT(0, t / 2)); line(L, PT(1, -t / 2), PT(1, t / 2));
+      if (wm === 'sabit') line(L, PT(0, 0), PT(1, 0));
+      else if (wm === 'surme') { line(L, PT(0, t / 6), PT(0.54, t / 6)); line(L, PT(0.46, -t / 6), PT(1, -t / 6)); }
+      else { line(L, PT(0, t / 6), PT(1, t / 6)); line(L, PT(0, -t / 6), PT(1, -t / 6)); sashes(op).forEach(([x0]) => { if (x0 > 0) line(L, PT(x0, t / 2), PT(x0, -t / 2)); }); }
+      if (winUse(op).rail) line(L, PT(0, -sd * (t / 2 + 5)), PT(1, -sd * (t / 2 + 5)));
     } else if (op.type === 'door') {
-      const hinge = op.flip ? B : A, other = op.flip ? A : B, sd = op.side || 1;
-      const H = V.add(hinge, V.mul(n, sd * t / 2)), O = V.add(other, V.mul(n, sd * t / 2)), Lf = V.add(H, V.mul(n, sd * op.w));
-      line('KAPI', H, Lf);
-      // yay: DXF'te açı y yukarı koordinatta, saat yönü tersine
-      const ang = p => Math.atan2(-(p.y - H.y), p.x - H.x) * 180 / Math.PI;
-      let a0 = ang(O), a1 = ang(Lf); if (((a1 - a0) % 360 + 360) % 360 > 180) [a0, a1] = [a1, a0];
-      arc('KAPI', H, op.w, (a0 + 360) % 360, (a1 + 360) % 360);
+      const dm = doorModel(op), L = 'KAPI';
+      const ang = (H, p) => Math.atan2(-(p.y - H.y), p.x - H.x) * 180 / Math.PI;
+      const swing = (H, O, lw) => {
+        const Lf = V.add(H, V.mul(n, sd * lw)); line(L, H, Lf);
+        let a0 = ang(H, O), a1 = ang(H, Lf); if (((a1 - a0) % 360 + 360) % 360 > 180) [a0, a1] = [a1, a0];
+        arc(L, H, lw, (a0 + 360) % 360, (a1 + 360) % 360);   // DXF: y yukarı, saat yönü tersine
+      };
+      const rect = (f0, f1, k0, k1) => poly(L, [PT(f0, k0), PT(f1, k0), PT(f1, k1), PT(f0, k1)]);
+      if (dm === 'surgu') { rect(-0.03, 1.03, sd * (t / 2 + 1), sd * (t / 2 + 5)); const dir = op.flip ? -1 : 1; line(L, PT(dir > 0 ? 1.03 : -0.03, sd * (t / 2 + 7)), PT(dir > 0 ? 2.03 : -1.03, sd * (t / 2 + 7))); }
+      else if (dm === 'gomme') { rect(0, 1, -2, 2); const f0 = op.flip ? -1 : 1, f1 = op.flip ? 0 : 2; rect(Math.min(f0, f1), Math.max(f0, f1), -t / 4, t / 4); }
+      else if (dm === 'katlanir') {
+        const h0 = op.flip ? 1 : 0, dir = op.flip ? -1 : 1, pts = [PT(h0, sd * t / 2)];
+        for (let i = 1; i <= 4; i++) pts.push(PT(h0 + dir * i * 0.125, sd * (t / 2 + (i % 2 ? op.w * 0.215 : 0))));
+        poly(L, pts, false);
+      } else for (const [s0, s1, hk] of leaves(op)) swing(PT(hk === 'a' ? s0 : s1, sd * t / 2), PT(hk === 'a' ? s1 : s0, sd * t / 2), (s1 - s0) * op.w);
+      line(L, PT(0, -t / 2), PT(0, t / 2)); line(L, PT(1, -t / 2), PT(1, t / 2));
     }
   }
   // mobilya / mutfak: dış hat + etiket
+  const used = new Map();
   for (const it of P.items) {
     const a = it.rot * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
     const pt = (lx, ly) => ({ x: it.x + lx * cs - ly * sn, y: it.y + lx * sn + ly * cs });
+    const fx = fixtureOf(it.type), r0 = ((it.rot % 360) + 360) % 360, upright = r0 > 90 && r0 <= 270 ? 180 - r0 : -r0;
+    if (fx) {   // elektrik / tesisat: sembol kutusu + kısa kod (tam liste lejantta)
+      const L = fx.g === 'elektrik' ? 'ELEKTRIK' : 'TESISAT';
+      poly(L, [pt(-it.w / 2, -it.d / 2), pt(it.w / 2, -it.d / 2), pt(it.w / 2, it.d / 2), pt(-it.w / 2, it.d / 2)]);
+      text(L, pt(0, 0), fx.ab, Math.min(it.w, it.d) * 0.45, upright);
+      used.set(fx.ab, fx.t);
+      continue;
+    }
     const L = it.type === 'cabinet' ? 'MUTFAK' : 'MOBILYA';
     poly(L, [pt(-it.w / 2, -it.d / 2), pt(it.w / 2, -it.d / 2), pt(it.w / 2, it.d / 2), pt(-it.w / 2, it.d / 2)]);
     if (it.type === 'cabinet' && it.cab) {   // modül bölmeleri
       let x = -it.w / 2;
       for (const m of (it.cab.kind === 'wardrobe' ? it.cab.ward : it.cab.base) || []) { x += m.w; if (x < it.w / 2 - 0.5) line(L, pt(x, -it.d / 2), pt(x, it.d / 2)); }
     }
-    const r = ((it.rot % 360) + 360) % 360;
-    text('YAZI', pt(0, 0), it.label || it.type, Math.min(10, it.w / 6), r > 90 && r <= 270 ? 180 - r : -r);   // yazı ters okunmasın
+    text('YAZI', pt(0, 0), it.label || it.type, Math.min(10, it.w / 6), upright);   // yazı ters okunmasın
   }
   // ölçü çizgileri
   for (const d of P.dims) {
@@ -216,6 +242,12 @@ export function planToDXF(plan) {
     text('OLCU', V.add(m, V.mul(n, 8)), V.dist(d.a, d.b).toFixed(1).replace('.', ','), 9, ang);
   }
   for (const l of P.labels) text('YAZI', l, l.text, (l.size || 25) * 0.6);
+  // donatı lejantı: çizimin altına
+  if (used.size) {
+    const b = planBounds(P) || { x0: 0, y1: 0 };
+    let y = b.y1 + 60; text('YAZI', { x: b.x0 + 60, y }, 'ELEKTRIK / TESISAT LEJANTI', 12);
+    for (const [ab, t] of used) { y += 22; text('YAZI', { x: b.x0 + 30, y }, ab, 10); text('YAZI', { x: b.x0 + 140, y }, t, 10); }
+  }
   out.push('0', 'ENDSEC', '0', 'EOF');
   return new Blob([out.join('\r\n')], { type: 'application/dxf' });
 }
