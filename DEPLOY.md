@@ -15,6 +15,24 @@ Geriye tek şey kalıyor: **admin kullanıcısı oluşturup UID'sini kurallara y
 
 ---
 
+## 0) Otomatik yayın (GitHub Actions) — önerilen
+
+`main` dalına her birleştirmede site **otomatik yayınlanır** (`.github/workflows/deploy.yml`);
+Windows'ta `firebase deploy` çalıştırmaya gerek kalmaz. Kimlik doğrulama anahtarsızdır
+(Workload Identity Federation): repoda gizli anahtar tutulmaz, yalnızca bu depodaki iş akışları yetkilidir.
+
+**Bir kerelik kurulum (telefondan da olur):**
+1. https://shell.cloud.google.com adresini Firebase projesinin sahibi olan Google hesabıyla açın.
+2. Şu komutu yapıştırıp çalıştırın:
+   ```bash
+   curl -sL https://raw.githubusercontent.com/aligokten/tadilatbodrum.com/main/scripts/github-deploy-setup.sh | bash
+   ```
+3. En sonda yazan `projects/…/providers/github` satırını Claude'a gönderin (gizli bilgi değildir);
+   iş akışına işlenir ve ilk yayın başlatılır.
+
+Sonrası: her değişiklik main'e birleşince birkaç dakika içinde yayında olur. Elle yayın için
+GitHub → **Actions → Siteyi yayınla → Run workflow**. Yayınlanan sürüm iş akışı özetinde yazar.
+
 ## 1) Firebase Console — saggplus projesi
 
 1. **Authentication → Sign-in method → E-posta/Şifre**'yi etkinleştir (kapalıysa).
@@ -41,7 +59,7 @@ saggplus kurallarındaki `match /databases/{database}/documents {` bloğunun iç
 > `allow read: if !allPaths.matches('saha/.*')` değişikliğini de birleştirin — müşteri
 > verileri ve keşif fotoğrafları yalnızca admin oturumuyla okunur.
 
-## 3) Hosting'i dağıt (Windows / Firebase CLI)
+## 3) Hosting'i elle dağıt (Windows / Firebase CLI — otomatik yayın kuruluysa gerekmez)
 
 Proje klasöründe:
 
