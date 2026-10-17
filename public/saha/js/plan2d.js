@@ -4,6 +4,8 @@
 import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
+import { fixtureOf, fixtureSvg } from './fixtures.js';
+import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, doorModel, doorUse, winModel, winUse, frameColor, leafColor, applyUse, sashes, leaves } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
 
 /* mobilya seçim listesi: kategorilere göre gruplu */
@@ -13,7 +15,7 @@ import {
   offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom,
 } from './plan-geom.js';
 
-const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}
+const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}
   .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
   .rname{font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
 
@@ -91,6 +93,7 @@ export class PlanEditor {
     this.undoS = []; this.redoS = [];
     this.opt = JSON.parse(localStorage.getItem('tb-plan-opt') || '{"snap":true,"ortho":true,"dims":true,"step":5}');
     this.itemType = 'kanepe';
+    this.opPick = { door: { model: 'tek', use: 'ic' }, window: { model: 'cift', use: 'oda' } };   // yerleştirilecek kapı / pencere
     this.dir = null;              // klavye/HUD ile sabitlenen yön
     this.bgUrl = '';
     this.build();
@@ -368,6 +371,25 @@ export class PlanEditor {
     for (const w of this.plan.walls) { const pr = projSeg(p, w.a, w.b); if (pr.d < bd) { bd = pr.d; best = { w, pr }; } }
     return best;
   }
+  /* araç seçimine göre yeni kapı / pencere (model + kullanım varsayılanları) */
+  newOpening(t, wallId, pos, L) {
+    const o = { id: uid('o'), wallId, type: t, pos, w: OPEN_DEF[t].w, h: OPEN_DEF[t].h, sill: OPEN_DEF[t].sill, flip: false, side: 1 };
+    if (t === 'gap') return o;
+    o.model = this.opPick[t].model;
+    applyUse(o, this.opPick[t].use, L);
+    o.model = this.opPick[t].model;
+    return o;
+  }
+  opWidth(t) { return t === 'gap' ? OPEN_DEF.gap.w : ((t === 'door' ? DOOR_USES : WIN_USES).find(u => u.k === this.opPick[t].use) || OPEN_DEF[t]).w; }
+
+  /* duvara monte donatı (priz, anahtar, batarya…): en yakın duvar yüzüne arkası dayalı konum + dönüş */
+  wallMount(p, d, maxPx = 60) {
+    let best = null, bd = Math.max(maxPx / this.s, 40);
+    for (const f of this.wallFaces().faces) { const pr = projSeg(p, f.a, f.b); if (pr.d < bd) { bd = pr.d; best = { f, q: pr.p }; } }
+    if (!best) return null;
+    const m = V.norm(V.sub(best.f.a, best.f.w.a)), c = V.add(best.q, V.mul(m, d / 2));   // m: duvar ekseninden yüze, odaya doğru
+    return { x: +c.x.toFixed(2), y: +c.y.toFixed(2), rot: (Math.round(Math.atan2(-m.x, m.y) * 180 / Math.PI) + 360) % 360 };
+  }
   dimPts(d) {
     const u = V.norm(V.sub(d.b, d.a)), n = { x: -u.y, y: u.x };
     return [V.add(d.a, V.mul(n, d.off)), V.add(d.b, V.mul(n, d.off))];
@@ -494,10 +516,10 @@ export class PlanEditor {
     } else if (t === 'door' || t === 'window') {
       const nw = this.nearestWall(wp);
       if (nw) {
-        const L = wallLen(nw.w), def = OPEN_DEF[t];
+        const L = wallLen(nw.w), dw = this.opWidth(t);
         let pos = this.snapLen(nw.pr.t * L);
-        pos = Math.max(def.w / 2 + 2, Math.min(L - def.w / 2 - 2, pos));
-        this.preview = { wallId: nw.w.id, pos, w: Math.min(def.w, L - 4) };
+        pos = Math.max(dw / 2 + 2, Math.min(L - dw / 2 - 2, pos));
+        this.preview = { wallId: nw.w.id, pos, w: Math.min(dw, L - 4) };
       } else this.preview = null;
     } else this.preview = this.snapPt(wp);
     this.renderUI();
@@ -513,8 +535,8 @@ export class PlanEditor {
     }
     if ((t === 'door' || t === 'window') && p?.wallId) {
       this.snap();
-      const def = OPEN_DEF[t];
-      const o = { id: uid('o'), wallId: p.wallId, type: t, pos: p.pos, w: p.w, h: def.h, sill: def.sill, flip: false, side: 1 };
+      const o = this.newOpening(t, p.wallId, p.pos, wallLen(this.wall(p.wallId)));
+      o.w = p.w;
       this.plan.openings.push(o);
       this.sel = { kind: 'opening', id: o.id };
       this.setTool('select'); this.changed();
@@ -524,6 +546,7 @@ export class PlanEditor {
       this.snap();
       const f = furnOf(this.itemType);
       const it = { id: uid('i'), type: f.k, label: f.t, x: p.x, y: p.y, w: f.w, d: f.d, h: f.h, z: f.z || 0, rot: 0, color: f.c };
+      if (f.mount === 'wall') Object.assign(it, this.wallMount(p, f.d) || {});
       this.plan.items.push(it);
       this.sel = { kind: 'item', id: it.id };
       this.setTool('select'); this.changed();
@@ -643,7 +666,10 @@ export class PlanEditor {
       if (ht.handle === 'rot') {
         const a = Math.atan2(wp.x - o.x, -(wp.y - o.y)) * 180 / Math.PI;
         o.rot = (Math.round(a / 15) * 15 + 360) % 360;
-      } else { o.x += sd.x; o.y += sd.y; }
+      } else {
+        o.x += sd.x; o.y += sd.y;
+        if (fixtureOf(o.type)?.mount === 'wall') Object.assign(o, this.wallMount(o, o.d, 30) || {});
+      }
     } else if (ht.kind === 'label') { o.x += sd.x; o.y += sd.y; }
     else if (ht.kind === 'dim') {
       const u = V.norm(V.sub(o.b, o.a)), n = { x: -u.y, y: u.x };
@@ -1065,15 +1091,62 @@ export class PlanEditor {
       const c = V.add(w.a, V.mul(u, op.pos)), A = V.sub(c, V.mul(u, op.w / 2)), B = V.add(c, V.mul(u, op.w / 2));
       const isSel = live && this.sel?.id === op.id;
       o += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#fff" stroke-width="${t + px(1.5)}"/>`;
+      const sd = op.side || 1, PT = (f, k) => V.add(V.lerp(A, B, f), V.mul(n, k)), L2 = (p1, p2) => `M${p1.x} ${p1.y}L${p2.x} ${p2.y}`;
       if (op.type === 'window') {
-        const n1 = V.mul(n, t / 2), n2 = V.mul(n, t / 6);
-        o += `<path class="win" d="M${A.x + n1.x} ${A.y + n1.y}L${B.x + n1.x} ${B.y + n1.y}L${B.x - n1.x} ${B.y - n1.y}L${A.x - n1.x} ${A.y - n1.y}Z M${A.x + n2.x} ${A.y + n2.y}L${B.x + n2.x} ${B.y + n2.y}M${A.x - n2.x} ${A.y - n2.y}L${B.x - n2.x} ${B.y - n2.y}" stroke-width="${px(1.3)}"/>`;
+        const wm = winModel(op), k1 = t / 2, k2 = t / 6;
+        let d = L2(PT(0, k1), PT(1, k1)) + L2(PT(1, k1), PT(1, -k1)) + L2(PT(1, -k1), PT(0, -k1)) + L2(PT(0, -k1), PT(0, k1));
+        if (wm === 'sabit') d += L2(PT(0, 0), PT(1, 0));
+        else if (wm === 'surme') d += L2(PT(0, k2), PT(0.54, k2)) + L2(PT(0.46, -k2), PT(1, -k2));
+        else d += L2(PT(0, k2), PT(1, k2)) + L2(PT(0, -k2), PT(1, -k2));
+        const S = sashes(op);
+        if (wm !== 'surme') S.forEach(([x0]) => { if (x0 > 0) d += L2(PT(x0, k1), PT(x0, -k1)); });
+        o += `<path class="win" d="${d}" stroke-width="${px(1.3)}"/>`;
+        // açılır kanat yayları (kesik çizgi, iç tarafa)
+        if (['tek', 'cift', 'acvas', 'uclu'].includes(wm)) {
+          let arcs = '';
+          S.forEach(([x0, x1, open]) => {
+            if (!open) return;
+            const atStart = x0 === 0 && !(wm === 'tek' && op.flip), hf = atStart ? x0 : x1, of = atStart ? x1 : x0, Ls = (x1 - x0) * op.w;
+            const H = PT(hf, sd * k1), O = PT(of, sd * k1), L = V.add(H, V.mul(n, sd * Ls));
+            const sweep = V.cross(V.sub(L, H), V.sub(O, H)) > 0 ? 1 : 0;
+            arcs += `M${H.x} ${H.y}L${L.x} ${L.y}A${Ls} ${Ls} 0 0 ${sweep} ${O.x} ${O.y}`;
+          });
+          o += `<path class="winarc" d="${arcs}" stroke-width="${px(0.9)}" stroke-dasharray="${px(4)} ${px(3)}"/>`;
+        }
+        if (wm === 'vasistas' || wm === 'acvas') { const c1 = PT(0.5, sd * (k1 + Math.min(op.w * 0.18, 18))); o += `<path class="winarc" d="${L2(PT(0.3, sd * k1), c1)}${L2(c1, PT(0.7, sd * k1))}" stroke-width="${px(0.9)}"/>`; }   // vasistas: üstten devrilme işareti
+        if (winUse(op).rail) {
+          const k = -sd * (k1 + 5); let r = L2(PT(0, k), PT(1, k));
+          for (let f = 0; f <= 1.0001; f += 0.125) r += L2(PT(f, -sd * k1), PT(f, k));
+          o += `<path class="win" d="${r}" stroke-width="${px(1)}"/>`;
+        }
       } else if (op.type === 'door') {
-        const hinge = op.flip ? B : A, other = op.flip ? A : B, sd = op.side || 1;
-        const off = V.mul(n, sd * t / 2);
-        const H = V.add(hinge, off), O = V.add(other, off), L = V.add(H, V.mul(n, sd * op.w));
-        const sweep = V.cross(V.sub(L, H), V.sub(O, H)) > 0 ? 1 : 0;
-        o += `<path class="door" d="M${H.x} ${H.y}L${L.x} ${L.y}A${op.w} ${op.w} 0 0 ${sweep} ${O.x} ${O.y}" stroke-width="${px(1.3)}"/>`;
+        const dm = doorModel(op);
+        if (dm === 'surgu') {
+          const k0 = sd * (t / 2 + 1), k5 = sd * (t / 2 + 5), dir = op.flip ? -1 : 1;
+          o += `<path class="door" d="${L2(PT(-0.03, k0), PT(1.03, k0))}${L2(PT(1.03, k0), PT(1.03, k5))}${L2(PT(1.03, k5), PT(-0.03, k5))}${L2(PT(-0.03, k5), PT(-0.03, k0))}" stroke-width="${px(1.3)}"/>`;
+          const r0 = dir > 0 ? 1.03 : -0.03, r1 = dir > 0 ? 2.03 : -1.03, km = sd * (t / 2 + 7);
+          o += `<path class="winarc" d="${L2(PT(r0, km), PT(r1, km))}" stroke-width="${px(0.9)}" stroke-dasharray="${px(4)} ${px(3)}"/>`;
+          const ah = PT(0.5 + dir * 0.25, sd * (t / 2 + 14)), at = PT(0.5 - dir * 0.15, sd * (t / 2 + 14));
+          o += `<path class="door" d="${L2(at, ah)}M${ah.x} ${ah.y}L${PT(0.5 + dir * 0.17, sd * (t / 2 + 10)).x} ${PT(0.5 + dir * 0.17, sd * (t / 2 + 10)).y}M${ah.x} ${ah.y}L${PT(0.5 + dir * 0.17, sd * (t / 2 + 18)).x} ${PT(0.5 + dir * 0.17, sd * (t / 2 + 18)).y}" stroke-width="${px(1)}"/>`;
+        } else if (dm === 'gomme') {
+          const f0 = op.flip ? -1 : 1, f1 = op.flip ? 0 : 2, kp = t / 4;
+          o += `<path class="winarc" d="${L2(PT(f0, kp), PT(f1, kp))}${L2(PT(f1, kp), PT(f1, -kp))}${L2(PT(f1, -kp), PT(f0, -kp))}" stroke-width="${px(1)}" stroke-dasharray="${px(4)} ${px(3)}"/>`;
+          o += `<path class="door" d="${L2(PT(0, 2), PT(1, 2))}${L2(PT(1, 2), PT(1, -2))}${L2(PT(1, -2), PT(0, -2))}${L2(PT(0, -2), PT(0, 2))}" stroke-width="${px(1.3)}"/>`;
+        } else if (dm === 'katlanir') {
+          const h0 = op.flip ? 1 : 0, dir = op.flip ? -1 : 1, pw = 1 / 4;
+          const pts = [PT(h0, sd * t / 2)];
+          for (let i = 1; i <= 4; i++) pts.push(PT(h0 + dir * i * pw * 0.5, sd * (t / 2 + (i % 2 ? op.w * pw * 0.86 : 0))));
+          o += `<path class="door" d="M${pts.map(q => `${q.x} ${q.y}`).join('L')}" stroke-width="${px(1.3)}"/>`;
+          o += `<path class="winarc" d="${L2(pts[4], PT(op.flip ? 0 : 1, sd * t / 2))}" stroke-width="${px(0.9)}" stroke-dasharray="${px(4)} ${px(3)}"/>`;
+        } else {
+          let d = '';
+          for (const [s0, s1, hk] of leaves(op)) {
+            const lw = (s1 - s0) * op.w, H = PT(hk === 'a' ? s0 : s1, sd * t / 2), O = PT(hk === 'a' ? s1 : s0, sd * t / 2), L = V.add(H, V.mul(n, sd * lw));
+            const sweep = V.cross(V.sub(L, H), V.sub(O, H)) > 0 ? 1 : 0;
+            d += `M${H.x} ${H.y}L${L.x} ${L.y}A${lw} ${lw} 0 0 ${sweep} ${O.x} ${O.y}`;
+          }
+          o += `<path class="door" d="${d}" stroke-width="${px(1.3)}"/>`;
+        }
         o += `<line class="jamb" x1="${A.x - n.x * t / 2}" y1="${A.y - n.y * t / 2}" x2="${A.x + n.x * t / 2}" y2="${A.y + n.y * t / 2}" stroke-width="${px(1.5)}"/><line class="jamb" x1="${B.x - n.x * t / 2}" y1="${B.y - n.y * t / 2}" x2="${B.x + n.x * t / 2}" y2="${B.y + n.y * t / 2}" stroke-width="${px(1.5)}"/>`;
       }
       if (isSel) o += `<line class="selline" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${t + px(6)}"/>`;
@@ -1083,6 +1156,10 @@ export class PlanEditor {
       const isSel = live && this.sel?.id === it.id;
       if (it.type === 'cabinet' && it.cab) {
         o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${planSymbol(it, px)}${isSel ? `<rect class="item sel" x="${-it.w / 2}" y="${-it.d / 2}" width="${it.w}" height="${it.d}" fill="none" stroke-width="${px(1.6)}"/>` : ''}</g>`;
+        continue;
+      }
+      if (fixtureOf(it.type)) {
+        o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${isSel ? `<rect class="item sel" x="${-it.w / 2 - px(3)}" y="${-it.d / 2 - px(3)}" width="${it.w + px(6)}" height="${it.d + px(6)}" fill="none" stroke-width="${px(1.4)}" stroke-dasharray="${px(4)} ${px(3)}"/>` : ''}${fixtureSvg(it, px)}</g>`;
         continue;
       }
       const fs = Math.min(px(11), it.w / 5, 22);
@@ -1180,7 +1257,10 @@ export class PlanEditor {
         o += `<path class="cross" d="M${p.x - px(9)} ${p.y}H${p.x + px(9)}M${p.x} ${p.y - px(9)}V${p.y + px(9)}" stroke-width="${px(1.5)}"/>`;
         if (this.tool === 'item') {
           const f = furnOf(this.itemType);
-          o += `<rect class="prev" x="${p.x - f.w / 2}" y="${p.y - f.d / 2}" width="${f.w}" height="${f.d}" stroke-width="${px(1.5)}"/>`;
+          if (f.fx) {
+            const at = (f.mount === 'wall' && this.wallMount(p, f.d)) || { ...p, rot: 0 };
+            o += `<g transform="translate(${at.x} ${at.y}) rotate(${at.rot})" opacity="0.75">${fixtureSvg({ ...f, type: f.k, color: f.c, rot: at.rot }, px)}</g>`;
+          } else o += `<rect class="prev" x="${p.x - f.w / 2}" y="${p.y - f.d / 2}" width="${f.w}" height="${f.d}" stroke-width="${px(1.5)}"/>`;
         }
       }
     }
@@ -1211,6 +1291,10 @@ export class PlanEditor {
         : `<label class="mini-l"><input type="checkbox" id="peWalls" ${this.polyWalls ? 'checked' : ''}> Duvarları da oluştur</label>`}`;
     } else if (t === 'item') {
       extra = `<div class="hud-row"><select class="inp sm" id="peItem">${furnOptions(this.itemType)}</select></div>`;
+    } else if (t === 'door' || t === 'window') {
+      const pk = this.opPick[t], U = t === 'door' ? DOOR_USES : WIN_USES, M = t === 'door' ? DOOR_MODELS : WIN_MODELS;
+      extra = `<div class="hud-row"><select class="inp sm" id="peOpU" title="Kullanım">${U.map(u => `<option value="${u.k}" ${pk.use === u.k ? 'selected' : ''}>${u.t}</option>`).join('')}</select>
+        <select class="inp sm" id="peOpM" title="Model">${M.map(m => `<option value="${m.k}" ${pk.model === m.k ? 'selected' : ''}>${m.t}</option>`).join('')}</select></div>`;
     }
     this.hud.innerHTML = t === 'select' && !this.sel ? '' : `<div class="hud-hint">${esc(HINTS[t] || '')}</div>${extra}`;
     this.hud.hidden = !this.hud.innerHTML;
@@ -1232,6 +1316,9 @@ export class PlanEditor {
     const fin = $('[data-fin]', this.hud); if (fin) fin.onclick = () => this.finishChain();
     const th = $('#peT', this.hud); if (th) th.onchange = () => { this.plan.meta.wallT = Math.max(2, +th.value || 15); this.onChange(this.plan); };
     const it = $('#peItem', this.hud); if (it) it.onchange = () => { this.itemType = it.value; };
+    const ou = $('#peOpU', this.hud), om = $('#peOpM', this.hud);
+    if (ou) ou.onchange = () => { const pk = this.opPick[t]; pk.use = ou.value; const m = WIN_USES.find(u => u.k === ou.value)?.model; if (t === 'window' && m) { pk.model = m; om.value = m; } };
+    if (om) om.onchange = () => { this.opPick[t].model = om.value; };
     const pw = $('#peWalls', this.hud); if (pw) pw.onchange = () => { this.polyWalls = pw.checked; setPref('tb-pe-polywalls', pw.checked); };
     const pf = $('#peFace', this.hud); if (pf) pf.onchange = () => { this.wallFace = pf.checked; setPref('tb-pe-wallface', pf.checked); this.renderUI(); };
     const fl = $('[data-flip]', this.hud); if (fl) fl.onclick = () => { const c = this.chain; if (!c) return; c.flip = !c.flip; this.layoutChain(c); this.changed(); this.renderHud(); };
@@ -1280,12 +1367,19 @@ export class PlanEditor {
       const w = this.wall(o.wallId), L = wallLen(w);
       body = `<h4>${o.type === 'door' ? 'Kapı' : o.type === 'window' ? 'Pencere' : 'Boşluk'}</h4>
         <label>Tür<select class="inp sm" data-k="type"><option value="door" ${o.type === 'door' ? 'selected' : ''}>Kapı</option><option value="window" ${o.type === 'window' ? 'selected' : ''}>Pencere</option><option value="gap" ${o.type === 'gap' ? 'selected' : ''}>Boşluk / kemer</option></select></label>
+        ${o.type === 'door' || o.type === 'window' ? `
+        <label>Kullanım<select class="inp sm" data-k="use">${(o.type === 'door' ? DOOR_USES : WIN_USES).map(u => `<option value="${u.k}" ${(o.type === 'door' ? doorUse(o) : winUse(o)).k === u.k ? 'selected' : ''}>${u.t}</option>`).join('')}</select></label>
+        <label>Model<select class="inp sm" data-k="model">${(o.type === 'door' ? DOOR_MODELS : WIN_MODELS).map(m => `<option value="${m.k}" ${(o.type === 'door' ? doorModel(o) : winModel(o)) === m.k ? 'selected' : ''}>${m.t}</option>`).join('')}</select></label>` : ''}
         ${num('w', 'Genişlik', o.w)}
         ${num('h', 'Yükseklik', o.h)}
         ${o.type === 'window' ? num('sill', 'Denizlik yüksekliği', o.sill) : ''}
         ${num('left', 'Duvar başından mesafe', +(o.pos - o.w / 2).toFixed(1), 'cm', 0.5)}
         <p class="muted small">Duvar uzunluğu ${fmtNum(L, 1)} cm · sağ kalan ${fmtNum(L - o.pos - o.w / 2, 1)} cm</p>
-        ${o.type === 'door' ? `<div class="row"><button class="btn btn-xs btn-ghost" data-act="flip">Menteşe yönü</button><button class="btn btn-xs btn-ghost" data-act="side">Açılma yönü</button></div>` : ''}`;
+        ${o.type === 'door' ? `<div class="row"><button class="btn btn-xs btn-ghost" data-act="flip">${doorModel(o) === 'surgu' || doorModel(o) === 'gomme' ? 'Kayma yönü' : 'Menteşe yönü'}</button><button class="btn btn-xs btn-ghost" data-act="side">${doorModel(o) === 'surgu' ? 'Taraf' : 'Açılma yönü'}</button></div>` : ''}
+        ${o.type === 'window' ? `<div class="row"><button class="btn btn-xs btn-ghost" data-act="flip">Menteşe yönü</button><button class="btn btn-xs btn-ghost" data-act="side">İç taraf</button></div>` : ''}
+        ${o.type === 'door' || o.type === 'window' ? `
+        <label>Kasa rengi (3D)<div class="swatches" data-k="fc">${FRAME_COLORS.map(([c, n]) => `<button style="background:${c}" data-c="${c}" title="${n}" class="${frameColor(o) === c ? 'on' : ''}"></button>`).join('')}</div></label>
+        ${o.type === 'door' && !doorUse(o).glass ? `<label>Kanat rengi (3D)<div class="swatches" data-k="lc">${LEAF_COLORS.map(([c, n]) => `<button style="background:${c}" data-c="${c}" title="${n}" class="${leafColor(o) === c ? 'on' : ''}"></button>`).join('')}</div></label>` : ''}` : ''}`;
     } else if (s.kind === 'room') {
       const m = roomMetrics(P, o);
       const xs = o.pts.map(p => p.x), ys = o.pts.map(p => p.y);
@@ -1306,6 +1400,15 @@ export class PlanEditor {
         ${num('rot', 'Dönüş', o.rot, '°', 15)}
         <div class="row"><button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button><button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
         <p class="muted small">Modülleri, ölçüleri, malzemeyi, kesim listesini ve teklif kalemlerini "Tasarla" ekranında düzenleyin (çift tıklama da açar).</p>`;
+    } else if (s.kind === 'item' && fixtureOf(o.type)) {
+      const f = fixtureOf(o.type);
+      body = `<h4>${f.g === 'elektrik' ? 'Elektrik' : 'Sıhhi tesisat'}</h4>
+        <label>Tür<select class="inp sm" data-k="type">${furnOptions(o.type, false)}</select></label>
+        <label>Etiket<input class="inp sm" data-k="label" value="${esc(o.label)}"></label>
+        <div class="grid2">${f.mount === 'ceil' ? '' : num('z', f.mount === 'floor' ? 'Döşemeden' : 'Montaj yük.', o.z || 0)}${['piskolon', 'yagmur', 'ledserit', 'lineer', 'rogar'].includes(o.type) ? num(o.type === 'piskolon' || o.type === 'yagmur' ? 'h' : 'w', o.type === 'piskolon' || o.type === 'yagmur' ? 'Boy' : 'Uzunluk', o.type === 'piskolon' || o.type === 'yagmur' ? o.h : o.w) : ''}</div>
+        ${num('rot', 'Dönüş', o.rot, '°', 15)}
+        <div class="row">${f.mount === 'wall' ? `<button class="btn btn-xs btn-ghost" data-act="mount">${icon('magnet')}Duvara yasla</button>` : ''}<button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button><button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
+        <p class="muted small">${f.mount === 'wall' ? 'Duvara yakın bırakıldığında arkası duvar yüzüne yaslanır ve kendiliğinden döner. ' : f.mount === 'ceil' ? 'Tavana monte edilir; 3D görünümde tavan yüksekliğinden alınır. ' : ''}${f.cnt ? 'Teklifte "' + ({ elec: 'Priz / anahtar sayısı', light: 'Aydınlatma sayısı', plumb: 'Tesisat noktası sayısı' })[f.cnt] + '" metrajına sayılır.' : ''}</p>`;
     } else if (s.kind === 'item') {
       body = `<h4>Mobilya / Donatı</h4>
         <label>Tür<select class="inp sm" data-k="type">${furnOptions(o.type, false)}</select></label>
@@ -1353,7 +1456,16 @@ export class PlanEditor {
         } else if (k === 'type' && this.sel.kind === 'item') {
           const f = furnOf(v); Object.assign(x, { type: v, label: f.t, w: f.w, d: f.d, h: f.h, z: f.z || 0, color: f.c });
         } else if (k === 'type' && this.sel.kind === 'opening') {
-          const d = OPEN_DEF[v]; Object.assign(x, { type: v, h: d.h, sill: d.sill });
+          const d = OPEN_DEF[v], L = wallLen(this.wall(x.wallId));
+          ['model', 'use', 'fc', 'lc'].forEach(q => delete x[q]);
+          Object.assign(x, { type: v, h: d.h, sill: d.sill });
+          if (v !== 'gap') { applyUse(x, this.opPick[v].use, L); x.model = this.opPick[v].model; }
+          x.pos = Math.max(x.w / 2, Math.min(L - x.w / 2, x.pos));
+        } else if (k === 'use' && this.sel.kind === 'opening') {
+          const L = wallLen(this.wall(x.wallId)); applyUse(x, v, L); x.pos = Math.max(x.w / 2, Math.min(L - x.w / 2, x.pos));
+          this.opPick[x.type].use = v; if (x.model) this.opPick[x.type].model = x.model;
+        } else if (k === 'model' && this.sel.kind === 'opening') {
+          x.model = v; this.opPick[x.type].model = v;
         } else if (k === 'w' && this.sel.kind === 'opening') {
           const L = wallLen(this.wall(x.wallId)); x.w = Math.min(v, L - 2); x.pos = Math.max(x.w / 2, Math.min(L - x.w / 2, x.pos));
         } else x[k] = v;
@@ -1370,6 +1482,7 @@ export class PlanEditor {
       if (a === 'flip') x.flip = !x.flip;
       if (a === 'side') x.side = -(x.side || 1);
       if (a === 'rot90') x.rot = (x.rot + 90) % 360;
+      if (a === 'mount') { const m = this.wallMount(x, x.d, 400); if (m) Object.assign(x, m); else toast('Yakında duvar bulunamadı', 'err'); }
       if (a === 'dup') { const c = { ...x, id: uid('i'), x: x.x + 30, y: x.y + 30 }; P.items.push(c); this.sel = { kind: 'item', id: c.id }; }
       if (a === 'split') {
         const m = V.lerp(x.a, x.b, 0.5), L = wallLen(x);
@@ -1378,8 +1491,8 @@ export class PlanEditor {
         P.openings.filter(o => o.wallId === x.id && o.pos > L / 2).forEach(o => { o.wallId = nw.id; o.pos -= L / 2; });
       }
       if (a === 'addDoor' || a === 'addWin') {
-        const t = a === 'addDoor' ? 'door' : 'window', d = OPEN_DEF[t], L = wallLen(x);
-        const op = { id: uid('o'), wallId: x.id, type: t, pos: L / 2, w: Math.min(d.w, L - 4), h: d.h, sill: d.sill, flip: false, side: 1 };
+        const t = a === 'addDoor' ? 'door' : 'window', L = wallLen(x);
+        const op = this.newOpening(t, x.id, L / 2, L);
         P.openings.push(op); this.sel = { kind: 'opening', id: op.id };
       }
       this.changed();

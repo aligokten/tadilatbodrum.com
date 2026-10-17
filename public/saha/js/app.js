@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.17-5';
+export const APP_VERSION = '2026.10.18-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -102,6 +102,13 @@ async function start(be) {
   S.be = be;
   app.innerHTML = splash('Yükleniyor…');
   S.settings = await be.getSettings().catch(() => structuredClone(DEFAULT_SETTINGS));
+  // kütüphane güncellemesi (v2): elektrik / tesisat kalemlerine plandan adet metrajı
+  if ((S.settings.catV || 1) < 2 && Array.isArray(S.settings.catalog)) {
+    const C = S.settings.catalog, def = id => DEFAULT_SETTINGS.catalog.find(c => c.id === id);
+    for (const id of ['c14', 'c15']) { const c = C.find(x => x.id === id); if (c && !c.qty) c.qty = def(id).qty; }
+    if (!C.some(c => c.id === 'c40')) C.splice(Math.max(0, C.findIndex(c => c.id === 'c18') + 1), 0, structuredClone(def('c40')));
+    S.settings.catV = 2;
+  }
   S.jobs = await be.listJobs().catch(() => []);
   shell();
   window.onhashchange = route;
@@ -1230,7 +1237,7 @@ function settingsView() {
         <input class="inp sm" data-c="desc" value="${esc(c.desc)}">
         <select class="inp sm" data-c="unit">${UNITS.map(u => `<option ${u === c.unit ? 'selected' : ''}>${u}</option>`).join('')}</select>
         <input class="inp sm" type="number" data-c="price" value="${c.price}">
-        <select class="inp sm" data-c="qty"><option value="">—</option>${[['floor', 'Zemin'], ['wall', 'Duvar'], ['ceil', 'Tavan'], ['perim', 'Çevre']].map(([k, t]) => `<option value="${k}" ${c.qty === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select class="inp sm" data-c="qty"><option value="">—</option>${[['floor', 'Zemin'], ['wall', 'Duvar'], ['ceil', 'Tavan'], ['perim', 'Çevre'], ['elec', 'Priz / anahtar sayısı'], ['light', 'Aydınlatma sayısı'], ['plumb', 'Tesisat noktası sayısı']].map(([k, t]) => `<option value="${k}" ${c.qty === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button class="icon-btn sm danger" data-cdel>${icon('trash')}</button></div>`).join('');
   };
   drawCat();
