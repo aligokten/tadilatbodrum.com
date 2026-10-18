@@ -212,6 +212,7 @@ export const DEFAULT_SETTINGS = {
   },
   vat: 20,
   profit: 0,
+  videoLines: 'Net ve kalem kalem teklif — sürpriz maliyet yok\nPlanlı takvim, her aşamada düzenli bilgilendirme\nTek muhatap: tüm ustalar ve ekipler bizden\nTemiz, korumalı ve düzenli çalışma alanı',
   validDays: 15,
   terms: [
     'Teklif, belirtilen geçerlilik süresi boyunca geçerlidir.',
