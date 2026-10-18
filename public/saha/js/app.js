@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.18-3';
+export const APP_VERSION = '2026.10.18-4';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -698,7 +698,7 @@ function setDrawingPlan(j, id, p) {
   if (id === 'rolove') { j.plan = p; return; }
   const d = (j.drawings || []).find(x => x.id === id); if (d) { d.plan = p; d.updatedAt = Date.now(); }
 }
-const hasContent = p => !!(p?.walls?.length || p?.rooms?.length || p?.items?.length);
+const hasContent = p => !!(p?.walls?.length || p?.rooms?.length || p?.items?.length || p?.rails?.length);
 const clonePlan = p => p ? JSON.parse(JSON.stringify(p)) : emptyPlan();
 
 async function newDrawingDialog(j, then) {

@@ -5,7 +5,7 @@
  * Müzik: OfflineAudioContext ile üretilen telifsiz sentez altlık (AAC kodlanabiliyorsa videoya eklenir).
  */
 import { icon, $, modal, toast, downloadBlob, fmtNum, fmtMoney } from './ui.js';
-import { catOf, sevOf, SEVERITY, DEFAULT_SETTINGS } from './catalog.js';
+import { catOf, sevOf, SEVERITY, DEFAULT_SETTINGS, INSPECTION, CHECK_STATES, CATEGORIES } from './catalog.js';
 import { planImageUrl } from './plan2d.js';
 import { jobMetrics, quoteTotals } from './quote.js';
 
@@ -251,13 +251,41 @@ export async function prepareVideo(job, settings, be, opt) {
     total: job.quote?.items?.length ? quoteTotals(job.quote).total : 0,
     cover: opt.photos ? await photo(coverP) : null,
     fimg: {}, renders: [], plan: null,
+    survey: surveyRows(job.survey?.answers || {}), priority: String(job.survey?.answers?.oncelik || '').trim(),
+    rooms: [],
   };
+  // mahal bazlı keşif: durum sayıları, sorunlu kalemler, mahal fotoğrafı
+  for (const r of (job.inspection?.rooms || []).slice(0, 4)) {
+    const ch = Object.entries(r.checks || {}).filter(([, c]) => c?.state && c.state !== 'yok');
+    const cnt = Object.fromEntries(CHECK_STATES.map(s => [s.k, ch.filter(([, c]) => c.state === s.k).length]));
+    const bad = ch.filter(([, c]) => c.state === 'kotu' || c.state === 'orta').sort((a, b) => (a[1].state === 'kotu' ? 0 : 1) - (b[1].state === 'kotu' ? 0 : 1))
+      .map(([k, c]) => ({ t: INSPECTION.find(i => i.k === k)?.t || k, state: c.state, note: c.note || '' }));
+    const ph = opt.photos ? job.photos.find(p => p.room === r.name && !p.findingId && p.tag !== 'render') : null;
+    D.rooms.push({ name: r.name || 'Mahal', area: r.w && r.l ? r.w * r.l / 1e4 : 0, cnt, n: ch.length, bad, notes: r.notes || '', img: ph ? await photo(ph) : null });
+  }
   if (opt.photos) for (const f of finds.slice(0, 8)) D.fimg[f.id] = await photo(job.photos.find(p => p.findingId === f.id));
   if (opt.visual) {
     if (opt.photos) for (const p of renders) { const im = await photo(p); if (im) D.renders.push(im); }
     if (!D.renders.length && job.plan?.walls?.length) D.plan = await loadImg(planImageUrl(job.plan, 1000, 1000));
   }
   return D;
+}
+
+/* anketten müşteriye geri yansıtılacak başlıklar (bütçe gibi hassas yanıtlar gösterilmez) */
+function surveyRows(a) {
+  const j = v => Array.isArray(v) ? v.map(x => CATEGORIES.find(c => c.k === x)?.t || x).join(', ') : v;
+  const has = v => Array.isArray(v) ? v.length : v !== undefined && v !== null && v !== '';
+  const dt = v => v ? new Date(v).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }) : '';
+  const rows = [
+    ['home', 'Mülk', [a.mulkTipi, a.odaSayisi, a.netM2 ? `${a.netM2} m²` : ''].filter(Boolean).join(' · ')],
+    ['user', 'Kullanım', a.kullanim],
+    ['clipboard', 'Kapsam', has(a.olcek) ? a.olcek : has(a.kapsam) ? j(a.kapsam) : ''],
+    ['sparkle', 'Tarz', [has(a.stil) ? j(a.stil) : '', has(a.renk) ? j(a.renk) : ''].filter(Boolean).join(' · ')],
+    ['award', 'Malzeme', a.segment ? `${a.segment} segment` : ''],
+    ['calendar', 'Takvim', a.baslangic || a.bitis ? [a.baslangic ? `${dt(a.baslangic)} başlangıç` : '', a.bitis ? `${dt(a.bitis)} teslim` : ''].filter(Boolean).join(' → ') : ''],
+    ['shield', 'Özen gösterilecek', [has(a.hassas) ? j(a.hassas) : '', a.oturum && a.oturum !== 'Hayır, ev boş olacak' ? 'Evde oturulurken çalışma' : ''].filter(Boolean).join(' · ')],
+  ];
+  return rows.filter(r => r[2]).map(([ic, t, v]) => ({ ic, t, v: String(v) }));
 }
 
 /* ── sahneler ── */
@@ -296,7 +324,7 @@ function buildScenes(D) {
 
   // 3) talepler
   const R = D.reqs.slice(0, 6);
-  if (o.reqs && R.length) add('reqs', 1.4 + R.length * 0.4 + 1.6, true, (g, t) => {
+  if (o.reqs && R.length) add('reqs', 1.2 + R.length * 0.35 + 1.4, true, (g, t) => {
     ribbon(g, [-60, 1500, 200, 1380, 260, 1900, 520, H + 60], C.cyanL, 66, P(t, 0.2, 1.4, E.inOut));
     ribbon(g, [1150, 520, 860, 560, 980, 900, 1150, 980], C.orange, 58, P(t, 0.35, 1.4, E.inOut));
     logoHead(g, t);
@@ -307,6 +335,63 @@ function buildScenes(D) {
       chip(g, X0 - 10, y + 50 + i * 156, sameAs(ct, r.room) || !r.room ? ct : `${ct} · ${r.room}`, catOf(r.category).ic, i % 2 ? C.orange : C.cyan, P(t, 0.8 + i * 0.4, 1.3 + i * 0.4, E.out), { h: 130, sub: r.text, w: XW + 20, dark: true });
     });
     if (D.reqs.length > R.length) textLines(g, [`+${D.reqs.length - R.length} talep daha`], W / 2, y + 50 + R.length * 156 + 50, 50, t, 0.8 + R.length * 0.4, { f: font(600, 36, FB), color: 'rgba(255,255,255,.7)', align: 'center' });
+  });
+
+  // 3b) anket: beklentileriniz
+  const SV = D.survey.slice(0, 6);
+  if (o.survey && SV.length) add('survey', 1.4 + SV.length * 0.35 + 2.0, false, (g, t) => {
+    rings(g, 820, 1500, t);
+    logoHead(g, t);
+    let y = headline(g, [['Beklentilerinizi', 'ink'], ['not ettik', 'grad']], X0, 280, 124, t, 0.1);
+    y = accent(g, ['Anket yanıtlarınızdan öne çıkanlar'], X0, y + 70, t, 0.45, { size: 40 });
+    SV.forEach((r, i) => {
+      const k = P(t, 0.8 + i * 0.35, 1.3 + i * 0.35); if (k <= 0) return;
+      const yy = y + 50 + i * 150, x = X0 - 10 + (1 - k) * 60;
+      g.save(); g.globalAlpha *= k;
+      shadow(g, 26, 8, 0.08); rr(g, x, yy, XW + 20, 128, 40); g.fillStyle = '#fff'; g.fill(); noShadow(g); g.strokeStyle = C.line; g.lineWidth = 2; g.stroke();
+      g.beginPath(); g.arc(x + 64, yy + 64, 40, 0, Math.PI * 2); g.fillStyle = i % 2 ? '#FFF1E6' : '#E4F8FB'; g.fill(); drawIcon(g, r.ic, x + 64, yy + 64, 44, i % 2 ? C.orange : C.cyan, 2.2);
+      g.font = font(600, 28, FB); g.fillStyle = C.muted; g.fillText(r.t.toLocaleUpperCase('tr'), x + 128, yy + 50);
+      g.font = font(700, 36, FB); g.fillStyle = C.ink; g.fillText(wrap(g, r.v, XW - 150, 1)[0], x + 128, yy + 96);
+      g.restore();
+    });
+    if (D.priority) {
+      const yy = y + 50 + SV.length * 150 + 20, k = P(t, 1.0 + SV.length * 0.35, 1.5 + SV.length * 0.35);
+      if (k > 0 && yy < H - 260) {
+        g.font = font(600, 38, FB); const pl = wrap(g, `“${D.priority}”`, XW - 60, Math.max(1, Math.min(3, Math.floor((H - M - 140 - yy) / 52))));
+        g.save(); g.globalAlpha *= k; g.font = font(800, 30); g.fillStyle = C.orange; g.fillText('ÖNCELİĞİNİZ', X0, yy + 40); g.restore();
+        textLines(g, pl, X0, yy + 96, 52, t, 1.05 + SV.length * 0.35, { f: font(600, 38, FB), color: C.ink2 });
+      }
+    }
+  });
+
+  // 3c) mahal mahal keşif: durum çubuğu + sorunlu kalemler
+  const RM = D.rooms.filter(r => r.n || r.notes);
+  if (o.rooms && RM.length) add('rooms', 1.6 + RM.length * 0.5 + 2.4, true, (g, t) => {
+    rings(g, 800, 600, t, true);
+    logoHead(g, t);
+    let y = headline(g, [['Mahal mahal', 'white'], ['inceledik', 'grad']], X0, 280, 124, t, 0.1, { dark: true });
+    const ch = Math.min(330, Math.floor((H - M - 80 - (y + 60)) / RM.length) - 22), x = X0 - 30, w = XW + 60;
+    RM.forEach((r, i) => {
+      const k = P(t, 0.7 + i * 0.5, 1.25 + i * 0.5, E.out); if (k <= 0) return;
+      const yy = y + 60 + i * (ch + 22) + (1 - k) * 60;
+      g.save(); g.globalAlpha *= k;
+      rr(g, x, yy, w, ch, 40); g.fillStyle = C.cardD2; g.fill();
+      const th = ch - 40, tw = r.img ? Math.min(th, 230) : 0;
+      if (r.img) { g.save(); rr(g, x + 20, yy + 20, tw, th, 28); g.clip(); cover(g, r.img, x + 20, yy + 20, tw, th, 1.08, 0, 0); g.restore(); }
+      const tx = x + 20 + (tw ? tw + 30 : 24), tW = w - (tx - x) - 30;
+      g.font = font(800, 46); g.fillStyle = '#fff'; g.fillText(wrap(g, r.name, tW - 150, 1)[0], tx, yy + 70);
+      if (r.area) { g.font = font(600, 32, FB); g.fillStyle = 'rgba(255,255,255,.6)'; g.textAlign = 'right'; g.fillText(`${fmtNum(r.area, 1)} m²`, x + w - 30, yy + 68); g.textAlign = 'left'; }
+      // durum çubuğu (iyi / orta / kötü)
+      const kb = P(t, 0.9 + i * 0.5, 1.7 + i * 0.5, E.inOut), tot = Math.max(1, r.cnt.iyi + r.cnt.orta + r.cnt.kotu); let bx = tx;
+      for (const s of CHECK_STATES.filter(s => s.k !== 'yok')) { const bw = tW * r.cnt[s.k] / tot * kb; if (bw > 1) { rr(g, bx, yy + 96, Math.max(2, bw - 6), 18, 9); g.fillStyle = s.c; g.fill(); } bx += tW * r.cnt[s.k] / tot * kb; }
+      g.font = font(600, 28, FB); let lx = tx;
+      for (const s of CHECK_STATES.filter(s => s.k !== 'yok' && r.cnt[s.k])) { g.fillStyle = s.c; g.beginPath(); g.arc(lx + 8, yy + 150, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(255,255,255,.75)'; const lb = `${s.t} ${r.cnt[s.k]}`; g.fillText(lb, lx + 24, yy + 160); lx += g.measureText(lb).width + 54; }
+      const lines = r.bad.length ? r.bad.slice(0, 3).map(b => `${b.state === 'kotu' ? '●' : '○'} ${b.t}${b.note ? ': ' + b.note : ''}`) : [r.notes || 'Genel durum iyi'];
+      g.font = font(500, 30, FB); g.fillStyle = 'rgba(255,255,255,.88)';
+      const room = Math.max(0, Math.floor((ch - 200) / 40));
+      lines.slice(0, room).forEach((l, j) => g.fillText(wrap(g, l, tW, 1)[0], tx, yy + 212 + j * 40));
+      g.restore();
+    });
   });
 
   // 4) tespit girişi + 5) tespit kartları — sığan kadar
@@ -640,14 +725,14 @@ async function exportRealtime(tl, music, onProgress, signal) {
 
 /* ── arayüz ── */
 export async function openVideoReport(job, settings, be) {
-  const opt = { reqs: true, finds: true, photos: true, visual: true, price: false, music: true };
+  const opt = { reqs: true, survey: true, rooms: true, finds: true, photos: true, visual: true, price: false, music: true };
   const body = document.createElement('div'); body.className = 'vr';
   body.innerHTML = `
     <div class="vr-stage"><canvas class="vr-cv" width="540" height="960"></canvas><button class="vr-play" aria-label="Oynat">${icon('play')}</button><div class="vr-wait"><div class="spin"></div><p>Hazırlanıyor…</p></div></div>
     <div class="vr-side">
       <p class="muted small">Müşteriye WhatsApp'tan gönderilecek dikey (1080×1920) MP4 sunum. Logo ile açılır; talepler, tespitler ve önerilen çözümler, özet ve iletişim bilgileriyle kapanır.</p>
       <div class="vr-opts">
-        ${[['reqs', 'Talepler'], ['finds', 'Tespitler ve çözümler'], ['photos', 'Fotoğraflar'], ['visual', 'Render / rölöve görseli'], ['price', 'Teklif tutarını göster'], ['music', 'Arka plan müziği']].map(([k, t]) => `<label class="check"><input type="checkbox" data-o="${k}" ${opt[k] ? 'checked' : ''}> ${t}</label>`).join('')}
+        ${[['reqs', 'Talepler'], ['survey', 'Anket: beklentiler'], ['rooms', 'Mahal bazlı keşif'], ['finds', 'Tespitler ve çözümler'], ['photos', 'Fotoğraflar'], ['visual', 'Render / rölöve görseli'], ['price', 'Teklif tutarını göster'], ['music', 'Arka plan müziği']].map(([k, t]) => `<label class="check"><input type="checkbox" data-o="${k}" ${opt[k] ? 'checked' : ''}> ${t}</label>`).join('')}
       </div>
       <p class="vr-info muted small"></p>
       <div class="vr-prog" hidden><div class="bar"><i></i></div><small></small></div>

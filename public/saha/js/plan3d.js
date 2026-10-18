@@ -8,7 +8,7 @@ import { V, wallLen, wallDir, polyCentroid, pointInPoly } from './plan-geom.js';
 import { floorTexture } from './textures.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
-import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, sashes, leaves } from './openings.js';
+import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves } from './openings.js';
 
 let THREE, OrbitControls, RoomEnvironment;
 async function loadThree() {
@@ -215,6 +215,9 @@ export class Plan3D {
       piece(s, L + t / 2, 0, H);
     }
 
+    // korkuluklar
+    for (const r of P.rails || []) g.add(this.railing(r));
+
     // mobilya
     for (const it of P.items) g.add(this.furniture(it));
 
@@ -258,7 +261,7 @@ export class Plan3D {
         }
       });
       if (y0 > 0.02) box(W + 0.06, 0.03, T + 0.06, 0, y0 - 0.015, 0, this.std('#E5DFD3', 0.6)); // denizlik
-      if (wu.rail) {   // fransız balkon korkuluğu: dış tarafta
+      if (winRail(o)) {   // fransız balkon korkuluğu: dış tarafta
         const rz = -sd * (T / 2 + 0.06), rail = this.std('#3A3F45', 0.4, 0.6);
         box(W, 0.04, 0.04, 0, 1.0, rz, rail); box(W, 0.02, 0.02, 0, 0.12, rz, rail);
         for (let x = -W / 2 + 0.02; x <= W / 2 - 0.01; x += 0.11) box(0.014, 0.88, 0.014, x, 0.56, rz, rail);
@@ -298,6 +301,31 @@ export class Plan3D {
       }
     }
     this.root.add(g);
+  }
+
+  /* çizilen korkuluk: dikmeler + küpeşte; dolgu türe göre (dikey / yatay çubuk, cam panel, dolu parapet) */
+  railing(r) {
+    const g = new THREE.Group(); g.name = 'Korkuluk';
+    const L = M(V.dist(r.a, r.b)); if (L < 0.02) return g;
+    const u = V.norm(V.sub(r.b, r.a)), c = V.lerp(r.a, r.b, 0.5), kd = railKind(r), Hh = M(r.h || 110);
+    g.position.set(M(c.x), 0, M(c.y)); g.rotation.y = -Math.atan2(u.y, u.x);
+    const box = (sx, sy, sz, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
+    if (kd.k === 'dolu') {
+      box(L, Hh, 0.12, 0, Hh / 2, 0, this.std(this.plan.meta.wallColor || '#F7F5F0', 0.9));
+      box(L + 0.03, 0.04, 0.17, 0, Hh + 0.02, 0, this.std('#E5DFD3', 0.6));
+      return g;
+    }
+    const metal = kd.k === 'cam' ? this.std('#C9CDD2', 0.25, 0.85) : this.std(kd.c, 0.45, 0.5);
+    const np = Math.max(1, Math.ceil(L / 1.2));
+    for (let i = 0; i <= np; i++) box(0.045, Hh, 0.045, -L / 2 + i * L / np, Hh / 2, 0, metal);
+    box(L + 0.05, 0.05, 0.07, 0, Hh, 0, metal);                           // küpeşte
+    if (kd.k === 'dikey') { box(L, 0.03, 0.03, 0, 0.08, 0, metal); for (let x = -L / 2 + 0.11; x < L / 2 - 0.05; x += 0.11) box(0.016, Hh - 0.12, 0.016, x, 0.08 + (Hh - 0.12) / 2, 0, metal); }
+    else if (kd.k === 'yatay') for (let y = 0.12; y < Hh - 0.08; y += 0.12) box(L, 0.018, 0.018, 0, y, 0, metal);
+    else {
+      const glass = this.mat('railglass', () => new THREE.MeshStandardMaterial({ color: '#BFE3EA', roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.38 }));
+      const gl = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, L - 0.06), Hh - 0.12, 0.012), glass); gl.position.set(0, 0.06 + (Hh - 0.12) / 2, 0); g.add(gl);
+    }
+    return g;
   }
 
   furniture(it) {
