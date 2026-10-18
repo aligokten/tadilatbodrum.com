@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.18-1';
+export const APP_VERSION = '2026.10.18-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -451,6 +451,7 @@ function tabGenel(tb) {
     </div>
     <div class="row wrap">
       <button class="btn btn-primary" data-report>${icon('print')}Keşif raporu (PDF)</button>
+      <button class="btn btn-ghost" data-video>${icon('film')}Video rapor (WhatsApp)</button>
       <button class="btn btn-ghost" data-cancel>${j.status === 'iptal' ? 'İptali geri al' : 'İşi iptal et'}</button>
       <button class="btn btn-danger" data-del>${icon('trash')}İşi sil</button>
     </div>`;
@@ -470,6 +471,7 @@ function tabGenel(tb) {
     await S.be.deleteJob(j); S.jobs = S.jobs.filter(x => x.id !== j.id); openJob(null); location.hash = '#/'; toast('İş silindi');
   };
   $('[data-report]', tb).onclick = printReport;
+  $('[data-video]', tb).onclick = async () => { const { openVideoReport } = await import('./video.js'); openVideoReport(j, S.settings, S.be); };
 }
 
 /* ── Talepler ── */
@@ -1191,6 +1193,11 @@ function settingsView() {
         <h3>${icon('file')}Teklif varsayılanları</h3>
         <div class="grid2"><label>KDV %<input class="inp" type="number" data-f="vat"></label><label>Geçerlilik (gün)<input class="inp" type="number" data-f="validDays"></label><label>Yüklenici kârı %<input class="inp" type="number" step="0.5" data-f="profit"></label></div>
         <label>Şartlar ve koşullar (her satır bir madde)<textarea class="inp" rows="7" data-f="terms"></textarea></label>
+      </div>
+      <div class="card">
+        <h3>${icon('film')}Video rapor</h3>
+        <label>Kapanış mesajları — "Süreç bizde, keyfi sizde" sahnesi (her satır bir madde, en çok 5)<textarea class="inp" rows="5" data-f="videoLines"></textarea></label>
+        <p class="muted small">Müşterinin çekincelerine (bütçe aşımı, gecikme, dağınıklık, muhatap bulamama…) açıkça yanıt veren kısa cümleler yazın. Yalnızca gerçekten sunduğunuz güvenceleri yazın; garanti süresi gibi taahhütler yazılı teklifle de uyumlu olmalı.</p>
       </div>
     </div>
     <div class="card">

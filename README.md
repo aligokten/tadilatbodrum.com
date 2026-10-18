@@ -54,6 +54,7 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 - Elektrik (priz, anahtar, sigorta kutusu, aydınlatma…) ve sıhhi tesisat (yer sifonu, musluk, pis su gideri…) **sembol kütüphanesi**; duvara otomatik yaslanır, teklifte nokta sayısı olarak metrajlanır
 - Kapı ve pencerelerde **model** (tek / çift / sürgü / gömme / katlanır kapı; açılır, çift açılım, vasistas, sürme, sabit pencere) ve **kullanım** (giriş, banyo, balkon, fransız balkon…) seçenekleri
 - Metrajı plandan alan **teklif aracı** + yazdırılabilir/PDF teklif
+- Müşteriye WhatsApp'tan gönderilecek **video rapor**: 1080×1920 dikey MP4, en çok 1 dk; logo açılışı, talepler, tespitler ve çözümler, özet, "Süreç bizde" güvence sahnesi ve iletişim (WebCodecs H.264 + mp4-muxer, sentez arka plan müziği)
 
 ## Dosya yapısı
 
