@@ -32,6 +32,7 @@ export const WIN_USES = [
   { k: 'mutfak',  t: 'Mutfak (tezgah üstü)',                w: 120, h: 110, sill: 105 },
   { k: 'banyo',   t: 'Banyo / WC (buzlu cam, yüksek)',      w: 60,  h: 60,  sill: 160, frost: true, model: 'vasistas' },
   { k: 'fransiz', t: 'Fransız balkon (yere kadar, korkuluk)', w: 120, h: 220, sill: 0, rail: true, model: 'cift' },
+  { k: 'fransizK', t: 'Fransız pencere (yere kadar, korkuluksuz)', w: 120, h: 220, sill: 0, model: 'cift' },
   { k: 'vitrin',  t: 'Vitrin / panoramik',                  w: 240, h: 220, sill: 10,  model: 'sabit' },
 ];
 export const FRAME_COLORS = [['#F4F4F2', 'Beyaz'], ['#3A3F45', 'Antrasit'], ['#1F2125', 'Siyah'], ['#9A6B3F', 'Altın meşe'], ['#5B3F2C', 'Ceviz']];
@@ -46,6 +47,18 @@ export const winUse = o => pick(WIN_USES, o.use) || WIN_USES[0];
 export const frameColor = o => o.fc || (o.type === 'door' ? doorUse(o).fc : '#F4F4F2');
 export const leafColor = o => o.lc || doorUse(o).lc;
 export const modelName = o => o.type === 'door' ? pick(DOOR_MODELS, doorModel(o)).t : o.type === 'window' ? pick(WIN_MODELS, winModel(o)).t : 'Boşluk';
+// pencere dış korkuluğu: açıklıkta elle seçildiyse o, yoksa kullanım varsayılanı
+export const winRail = o => o.type === 'window' && (o.rail ?? !!winUse(o).rail);
+
+/* çizilen korkuluk (balkon, teras, merdiven boşluğu…) türleri */
+export const RAIL_KINDS = [
+  { k: 'dikey', t: 'Metal, dikey çubuklu', c: '#3A3F45' },
+  { k: 'yatay', t: 'Metal, yatay çubuklu', c: '#3A3F45' },
+  { k: 'cam',   t: 'Cam panel + küpeşte', c: '#9DB7BD' },
+  { k: 'dolu',  t: 'Dolu parapet (duvar)', c: '#C9C4BA' },
+];
+export const railKind = r => RAIL_KINDS.find(x => x.k === r.kind) || RAIL_KINDS[0];
+
 export const useName = o => o.type === 'door' ? doorUse(o).t : o.type === 'window' ? winUse(o).t : '';
 
 /* kullanım seçildiğinde ölçü / model / renk varsayılanlarını uygula (duvar boyuna sığdırarak) */
@@ -56,7 +69,7 @@ export function applyUse(o, k, wallL = Infinity) {
     o.w = Math.min(u.w, wallL - 4);
   } else if (o.type === 'window') {
     const u = pick(WIN_USES, k) || WIN_USES[0];
-    Object.assign(o, { use: u.k, h: u.h, sill: u.sill });
+    Object.assign(o, { use: u.k, h: u.h, sill: u.sill }); delete o.rail;
     if (u.model) o.model = u.model;
     o.w = Math.min(u.w, wallL - 4);
   }

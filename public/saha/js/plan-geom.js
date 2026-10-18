@@ -3,7 +3,7 @@ import { uid } from './store.js';
 import { fixtureCounts } from './fixtures.js';
 
 export function emptyPlan() {
-  return { v: 1, walls: [], openings: [], rooms: [], items: [], dims: [], labels: [],
+  return { v: 1, walls: [], openings: [], rooms: [], items: [], dims: [], labels: [], rails: [],
     meta: { wallH: 280, wallT: 15, wallColor: '#F7F5F0', bg: null } };
 }
 
@@ -107,6 +107,7 @@ export function planBounds(plan) {
   plan.walls.forEach(w => { pts.push(w.a, w.b); });
   plan.rooms.forEach(r => pts.push(...r.pts));
   plan.items.forEach(i => { const R = Math.hypot(i.w, i.d) / 2; pts.push({ x: i.x - R, y: i.y - R }, { x: i.x + R, y: i.y + R }); });
+  (plan.rails || []).forEach(r => pts.push(r.a, r.b));
   plan.labels.forEach(l => pts.push({ x: l.x, y: l.y }));
   if (!pts.length) return null;
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);

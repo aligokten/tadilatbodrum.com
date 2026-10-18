@@ -4,7 +4,7 @@
  */
 import { V, wallLen, wallDir, wallNormal, polyCentroid, roomMetrics, planBounds } from './plan-geom.js';
 import { fixtureOf } from './fixtures.js';
-import { doorModel, winModel, winUse, sashes, leaves } from './openings.js';
+import { doorModel, winModel, winRail, railKind, sashes, leaves } from './openings.js';
 
 /* ───────────── 3D: sahneden üçgen toplama ───────────── */
 const safe = s => String(s || 'Nesne').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'Nesne';
@@ -139,7 +139,7 @@ export function toDXF3D(groups) {
 }
 
 /* ───────────── DXF ortak ───────────── */
-const LAYER_COLORS = { DUVAR: 7, ODA: 8, KAPI: 3, PENCERE: 5, MOBILYA: 30, MUTFAK: 1, OLCU: 2, YAZI: 7, ALAN: 4, ACIKLIK: 6, ELEKTRIK: 30, TESISAT: 150 };
+const LAYER_COLORS = { DUVAR: 7, ODA: 8, KAPI: 3, PENCERE: 5, MOBILYA: 30, MUTFAK: 1, OLCU: 2, YAZI: 7, ALAN: 4, ACIKLIK: 6, ELEKTRIK: 30, TESISAT: 150, KORKULUK: 8 };
 function dxfHead(layers) {
   const L = [...new Set(['0', ...layers])];
   return ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
@@ -153,7 +153,7 @@ export function planToDXF(plan) {
   const P = plan, T = P.meta?.wallT || 15;
   const k = 10, X = v => (v * k).toFixed(1), Y = v => (-v * k).toFixed(1);
   const tr = s => String(s).replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ç/g, 'c').replace(/Ç/g, 'C').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ü/g, 'u').replace(/Ü/g, 'U');
-  const out = dxfHead(['DUVAR', 'ODA', 'KAPI', 'PENCERE', 'MOBILYA', 'MUTFAK', 'ELEKTRIK', 'TESISAT', 'OLCU', 'YAZI', 'ALAN']);
+  const out = dxfHead(['DUVAR', 'ODA', 'KAPI', 'PENCERE', 'KORKULUK', 'MOBILYA', 'MUTFAK', 'ELEKTRIK', 'TESISAT', 'OLCU', 'YAZI', 'ALAN']);
   const line = (L, a, b) => out.push('0', 'LINE', '8', L, '10', X(a.x), '20', Y(a.y), '30', '0', '11', X(b.x), '21', Y(b.y), '31', '0');
   const poly = (L, pts, closed = true) => { out.push('0', 'POLYLINE', '8', L, '66', '1', '70', closed ? '1' : '0', '10', '0', '20', '0', '30', '0'); for (const p of pts) out.push('0', 'VERTEX', '8', L, '10', X(p.x), '20', Y(p.y), '30', '0'); out.push('0', 'SEQEND', '8', L); };
   const text = (L, p, s, h = 15, ang = 0) => out.push('0', 'TEXT', '8', L, '10', X(p.x), '20', Y(p.y), '30', '0', '40', (h * k).toFixed(1), '1', tr(s), '50', String(ang), '72', '1', '73', '2', '11', X(p.x), '21', Y(p.y), '31', '0');
@@ -192,7 +192,7 @@ export function planToDXF(plan) {
       if (wm === 'sabit') line(L, PT(0, 0), PT(1, 0));
       else if (wm === 'surme') { line(L, PT(0, t / 6), PT(0.54, t / 6)); line(L, PT(0.46, -t / 6), PT(1, -t / 6)); }
       else { line(L, PT(0, t / 6), PT(1, t / 6)); line(L, PT(0, -t / 6), PT(1, -t / 6)); sashes(op).forEach(([x0]) => { if (x0 > 0) line(L, PT(x0, t / 2), PT(x0, -t / 2)); }); }
-      if (winUse(op).rail) line(L, PT(0, -sd * (t / 2 + 5)), PT(1, -sd * (t / 2 + 5)));
+      if (winRail(op)) line(L, PT(0, -sd * (t / 2 + 5)), PT(1, -sd * (t / 2 + 5)));
     } else if (op.type === 'door') {
       const dm = doorModel(op), L = 'KAPI';
       const ang = (H, p) => Math.atan2(-(p.y - H.y), p.x - H.x) * 180 / Math.PI;
@@ -211,6 +211,13 @@ export function planToDXF(plan) {
       } else for (const [s0, s1, hk] of leaves(op)) swing(PT(hk === 'a' ? s0 : s1, sd * t / 2), PT(hk === 'a' ? s1 : s0, sd * t / 2), (s1 - s0) * op.w);
       line(L, PT(0, -t / 2), PT(0, t / 2)); line(L, PT(1, -t / 2), PT(1, t / 2));
     }
+  }
+  // korkuluklar: iki paralel çizgi (dolu parapette kapalı dikdörtgen)
+  for (const r of P.rails || []) {
+    if (V.dist(r.a, r.b) < 1) continue;
+    const u = V.norm(V.sub(r.b, r.a)), n = { x: -u.y, y: u.x }, k = railKind(r).k === 'dolu' ? 6 : 3;
+    const A1 = V.add(r.a, V.mul(n, k)), B1 = V.add(r.b, V.mul(n, k)), A2 = V.sub(r.a, V.mul(n, k)), B2 = V.sub(r.b, V.mul(n, k));
+    line('KORKULUK', A1, B1); line('KORKULUK', A2, B2); line('KORKULUK', A1, A2); line('KORKULUK', B1, B2);
   }
   // mobilya / mutfak: dış hat + etiket
   const used = new Map();
