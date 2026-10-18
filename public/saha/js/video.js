@@ -9,10 +9,19 @@ import { catOf, sevOf, SEVERITY, DEFAULT_SETTINGS } from './catalog.js';
 import { planImageUrl } from './plan2d.js';
 import { jobMetrics, quoteTotals } from './quote.js';
 
+import { LOGO } from './brand.js';
+
 const W = 1080, H = 1920, FPS = 30, MAX_T = 59.5;
-const C = { teal: '#00AFB0', cyan: '#1EC3D3', tealD: '#00898A', orange: '#EB591F', orangeD: '#C9461A', amber: '#F2A33A', sage: '#9CC6A6', ink: '#111214', ink2: '#2B2E33', muted: '#6A7380', bg: '#F5F6F7', dark: '#16171A', line: '#E6E8EB' };
+/* kurumsal görsel dil (sosyal medya şablonları): beyaz / siyah yuvarlak köşeli kart, iri siyah başlık + degrade vurgu
+ * kelimesi, camgöbeği ve turuncu şeritler, yuvarlak rozetler, ikonlu hap etiketler, alttaki güvence satırı */
+const C = {
+  cyan: '#13C4D8', cyanL: '#05D3DF', orange: '#FE6B02', amber: '#F7943A', sage: '#A9C29A', green: '#22C55E',
+  ink: '#0B0B0C', ink2: '#2A2C30', muted: '#5B6067', line: '#E7E9EB',
+  outer: '#ECEEEF', card: '#FFFFFF', outerD: '#000000', cardD: '#141516', cardD2: '#1F2023',
+};
 const FD = '"Inter Tight", Inter, system-ui, sans-serif', FB = 'Inter, system-ui, sans-serif';
 const font = (w, s, f = FD) => `${w} ${s}px ${f}`;
+const M = 28, CR = 72, X0 = 110, XW = W - 2 * X0;   // kart kenar boşluğu, köşe yarıçapı, içerik kenarı / genişliği
 
 /* ── zaman / yumuşatma ── */
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -20,12 +29,11 @@ const E = {
   out: x => 1 - Math.pow(1 - x, 3),
   inOut: x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
   back: x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
-  lin: x => x,
 };
 const P = (t, a, b, e = E.out) => e(clamp((t - a) / (b - a)));
 const lerp = (a, b, k) => a + (b - a) * k;
 
-/* ── ikonlar: ui.js SVG yollarını Path2D'ye çevir (görsel yükleme / canvas kirlenmesi yok) ── */
+/* ── ikonlar: ui.js SVG yollarını Path2D'ye çevir ── */
 const ICON_CACHE = new Map();
 function iconPaths(k) {
   if (ICON_CACHE.has(k)) return ICON_CACHE.get(k);
@@ -50,6 +58,19 @@ function drawIcon(g, k, cx, cy, size, color, lw = 2) {
   g.restore();
 }
 
+/* ── logo (vektör) ── */
+const LP = { c: new Path2D(LOGO.c), o: new Path2D(LOGO.o) };
+function logo(g, cx, y, w, { mark = false, reveal = 1 } = {}) {
+  const [vx, vy, vw, vh] = LOGO.vb, bw = mark ? LOGO.markW : vw, s = w / bw;
+  g.save(); g.translate(cx - w / 2, y); g.scale(s, s); g.translate(-vx, -vy);
+  g.beginPath(); g.rect(vx - 2, vy - 2, (mark ? LOGO.markW : LOGO.markW + (vw - LOGO.markW) * reveal) + 4, vh + 4); g.clip();
+  g.fillStyle = LOGO.cyan; g.fill(LP.c, 'evenodd'); g.fillStyle = LOGO.orange; g.fill(LP.o, 'evenodd');
+  g.restore();
+  return vh * s;
+}
+// sahne başlığı: her sahnenin üstünde ortalı logo
+function logoHead(g, t, w = 600, y = 110) { g.save(); g.globalAlpha *= P(t, 0, 0.45); logo(g, W / 2, y + (1 - P(t, 0, 0.5)) * -20, w); g.restore(); }
+
 /* ── çizim yardımcıları ── */
 function wrap(g, s, maxW, maxLines = 99) {
   const words = String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean), lines = [];
@@ -64,12 +85,44 @@ function wrap(g, s, maxW, maxLines = 99) {
   return lines;
 }
 function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
-// satırları sırayla aşağıdan kayarak göster
-function textLines(g, lines, x, y, lh, t, t0, { color = C.ink, f, align = 'left', stagger = 0.08, dur = 0.5, rise = 40 } = {}) {
-  g.save(); g.font = f; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic';
+const shadow = (g, blur = 40, oy = 14, a = 0.12) => { g.shadowColor = `rgba(11,11,12,${a})`; g.shadowBlur = blur; g.shadowOffsetY = oy; };
+const noShadow = g => { g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadowOffsetY = 0; };
+// marka degradesi (camgöbeği → adaçayı → kehribar → turuncu)
+const gradH = (g, x0, x1) => { const gr = g.createLinearGradient(x0, 0, x1, 0); gr.addColorStop(0, C.cyan); gr.addColorStop(0.38, C.sage); gr.addColorStop(0.62, C.amber); gr.addColorStop(1, C.orange); return gr; };
+const gradD = (g, x0, y0, x1, y1) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, C.cyan); gr.addColorStop(0.5, C.amber); gr.addColorStop(1, C.orange); return gr; };
+
+// metin satırları: aşağıdan kayarak
+function textLines(g, lines, x, y, lh, t, t0, { color = C.ink, f, align = 'left', stagger = 0.08, dur = 0.5, rise = 36 } = {}) {
+  g.save(); g.font = f; g.fillStyle = color; g.textAlign = align;
   lines.forEach((l, i) => { const k = P(t, t0 + i * stagger, t0 + i * stagger + dur); if (k <= 0) return; g.globalAlpha = k; g.fillText(l, x, y + i * lh + (1 - k) * rise); });
   g.restore();
   return y + lines.length * lh;
+}
+/* iri başlık: satırlar maskeden yükselir; stil: ink | white | grad | orange | cyan */
+function headline(g, rows, x, y, size, t, t0, { dark = false, align = 'left', maxW = XW } = {}) {
+  g.save(); g.textAlign = align;
+  const setF = s => { g.font = font(800, s); g.letterSpacing = `${(-s * 0.035).toFixed(1)}px`; };
+  setF(size); const widest = Math.max(...rows.map(([s]) => g.measureText(s).width));
+  if (widest > maxW) { size = Math.floor(size * maxW / widest); setF(size); }
+  const lh = size * 1.02;
+  rows.forEach(([s, st], i) => {
+    const k = P(t, t0 + i * 0.12, t0 + i * 0.12 + 0.65); if (k <= 0) return;
+    const yy = y + size * 0.82 + i * lh, w = g.measureText(s).width, xs = align === 'center' ? x - w / 2 : x;
+    g.save(); g.beginPath(); g.rect(0, yy - size * 1.0, W, size * 1.32); g.clip();
+    g.fillStyle = st === 'grad' ? gradH(g, xs, xs + w) : st === 'orange' ? C.orange : st === 'cyan' ? C.cyan : (st === 'white' || dark) ? '#fff' : C.ink;
+    g.fillText(s, x, yy + (1 - k) * size * 1.15);
+    g.restore();
+  });
+  g.restore();
+  return y + rows.length * lh;
+}
+// başlık satırlarına sığacak şekilde bir adı satırlara böl
+function nameRows(g, s, size, maxW, max = 2) { g.font = font(800, size); g.letterSpacing = `${(-size * 0.035).toFixed(1)}px`; const r = wrap(g, s, maxW, max); g.letterSpacing = '0px'; return r; }
+// camgöbeği dikey çizgili açıklama
+function accent(g, lines, x, y, t, t0, { size = 42, dark = false, color, lh = size * 1.32, bar = C.cyan, weight = 500 } = {}) {
+  const k = P(t, t0, t0 + 0.5); if (k <= 0) return y;
+  g.save(); g.globalAlpha *= k; g.fillStyle = bar; rr(g, x, y - size * 0.9, 7, lh * (lines.length - 1) + size * 1.15 * k, 4); g.fill(); g.restore();
+  return textLines(g, lines, x + 34, y, lh, t, t0 + 0.05, { f: font(weight, size, FB), color: color || (dark ? 'rgba(255,255,255,.86)' : C.ink2) });
 }
 function cover(g, img, x, y, w, h, zoom = 1, px = 0, py = 0) {
   const iw = img.width, ih = img.height, s = Math.max(w / iw, h / ih) * zoom, dw = iw * s, dh = ih * s;
@@ -79,38 +132,93 @@ function contain(g, img, x, y, w, h) {
   const s = Math.min(w / img.width, h / img.height), dw = img.width * s, dh = img.height * s;
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
-// yumuşak hareketli renk bulutları (marka renkleri)
-function blobs(g, t, cols, alpha = 0.55, r = 760) {
-  g.save();
-  cols.forEach((c, i) => {
-    const x = W * (0.15 + ((i * 0.43) % 1) * 0.7) + Math.sin(t * 0.45 + i * 2.1) * 140;
-    const y = H * (0.12 + ((i * 0.61) % 1) * 0.76) + Math.cos(t * 0.35 + i * 1.3) * 180;
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, c); gr.addColorStop(1, c.slice(0, 7) + '00');
-    g.globalAlpha = alpha; g.fillStyle = gr; g.fillRect(0, 0, W, H);
-  });
+// yaklaşık kübik bezier uzunluğu
+function bezLen(p) { let L = 0, px = p[0], py = p[1]; for (let i = 1; i <= 24; i++) { const t = i / 24, u = 1 - t, x = u * u * u * p[0] + 3 * u * u * t * p[2] + 3 * u * t * t * p[4] + t * t * t * p[6], y = u * u * u * p[1] + 3 * u * u * t * p[3] + 3 * u * t * t * p[5] + t * t * t * p[7]; L += Math.hypot(x - px, y - py); px = x; py = y; } return L; }
+// kalın marka şeridi: k (0..1) kadar çizilir, üstünde ince ışık
+function ribbon(g, p, color, lw, k) {
+  if (k <= 0) return;
+  const L = bezLen(p);
+  g.save(); g.lineCap = 'round'; g.setLineDash([L * k, L + 50]);
+  g.beginPath(); g.moveTo(p[0], p[1]); g.bezierCurveTo(p[2], p[3], p[4], p[5], p[6], p[7]);
+  g.strokeStyle = color; g.lineWidth = lw; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = lw * 0.22; g.translate(0, -lw * 0.2); g.stroke();
   g.restore();
 }
-const brandGrad = (g, x0, y0, x1, y1) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, C.cyan); gr.addColorStop(0.38, C.sage); gr.addColorStop(0.62, C.amber); gr.addColorStop(1, C.orange); return gr; };
-// marka dalgası (logodaki su dalgaları): soldan çizilerek gelir
-function waves(g, x, y, w, k, color, lw = 10, n = 3, gap = 34, amp = 12) {
-  g.save(); g.strokeStyle = color; g.lineWidth = lw; g.lineCap = 'round';
-  for (let j = 0; j < n; j++) {
-    const kk = clamp(k * 1.25 - j * 0.12); if (kk <= 0) continue;
-    g.beginPath();
-    for (let i = 0; i <= 60 * kk; i++) { const xx = x + (w * i) / 60, yy = y + j * gap + Math.sin((i / 60) * Math.PI * 4) * amp; i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
-    g.stroke();
+// ince eş merkezli halkalar
+function rings(g, cx, cy, t, dark = false, n = 4) {
+  g.save(); g.lineWidth = 2;
+  for (let i = 0; i < n; i++) {
+    const r = 260 + i * 170 + (t * 24) % 170;
+    g.globalAlpha = 0.5 * (1 - i / n); g.strokeStyle = i % 2 ? (dark ? 'rgba(254,107,2,.28)' : 'rgba(254,107,2,.22)') : (dark ? 'rgba(255,255,255,.08)' : 'rgba(11,11,12,.06)');
+    if (i % 2) g.setLineDash([6, 10]); else g.setLineDash([]);
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
   }
   g.restore();
 }
-function pill(g, x, y, s, { bg = C.teal, fg = '#fff', f = font(700, 34, FB), padX = 26, h = 64, align = 'left', dot = null } = {}) {
-  g.save(); g.font = f; const tw = g.measureText(s).width + (dot ? 30 : 0), w = tw + padX * 2, x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
-  rr(g, x0, y, w, h, h / 2); g.fillStyle = bg; g.fill();
-  if (dot) { g.fillStyle = dot; g.beginPath(); g.arc(x0 + padX + 8, y + h / 2, 9, 0, Math.PI * 2); g.fill(); }
-  g.fillStyle = fg; g.textBaseline = 'middle'; g.fillText(s, x0 + padX + (dot ? 30 : 0), y + h / 2 + 1);
-  g.restore(); return w;
+// yuvarlak rozet ("Ücretsiz Keşif" gibi) + köşede ikon balonu
+function badge(g, cx, cy, r, bg, lines, ic, k, { fg = '#fff', rot = -0.12, icColor = C.ink } = {}) {
+  if (k <= 0) return;
+  g.save(); g.translate(cx, cy); g.scale(k, k); g.rotate(rot);
+  shadow(g, 40, 16, 0.18); g.beginPath(); g.arc(0, 0, r + 12, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+  g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fillStyle = bg; g.fill();
+  const fs = r * (lines.length > 1 ? 0.3 : 0.36); g.font = font(800, fs); g.fillStyle = fg; g.textAlign = 'center';
+  lines.forEach((l, i) => g.fillText(l, 0, (i - (lines.length - 1) / 2) * fs * 1.08 + fs * 0.35));
+  if (ic) { const bx = r * 0.66, by = -r * 0.74, br = r * 0.32; shadow(g, 20, 8, 0.18); g.beginPath(); g.arc(bx, by, br, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); noShadow(g); drawIcon(g, ic, bx, by, br * 1.1, icColor, 2.4); }
+  g.restore();
 }
-const footer = (g, dark, a = 1) => { g.save(); g.globalAlpha = 0.7 * a; g.font = font(600, 30, FB); g.textAlign = 'center'; g.fillStyle = dark ? 'rgba(255,255,255,.75)' : C.muted; g.fillText('tadilatbodrum.com', W / 2, H - 70); g.restore(); };
+// beyaz hap etiket + renkli ikon dairesi
+function chip(g, x, y, label, ic, color, k, { h = 104, sub = '', w = 0, dark = false } = {}) {
+  if (k <= 0) return 0;
+  g.save(); g.globalAlpha *= clamp(k * 1.4); g.font = font(700, h * 0.36, FB);
+  const tw = Math.max(g.measureText(label).width, sub ? (g.font = font(500, h * 0.25, FB), g.measureText(sub).width) : 0), ww = w || tw + h * 1.45;
+  const dy = (1 - k) * 40;
+  shadow(g, 30, 10, dark ? 0.35 : 0.1); rr(g, x, y + dy, ww, h, h / 2); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+  g.beginPath(); g.arc(x + h / 2, y + dy + h / 2, h * 0.36, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+  drawIcon(g, ic, x + h / 2, y + dy + h / 2, h * 0.38, '#fff', 2.2);
+  g.fillStyle = C.ink; g.font = font(700, h * 0.32, FB);
+  const lw = ww - h * 1.15;
+  if (sub) { g.fillText(wrap(g, label, lw, 1)[0], x + h * 0.98, y + dy + h * 0.46); g.font = font(500, h * 0.235, FB); g.fillStyle = C.muted; g.fillText(wrap(g, sub, lw, 1)[0] || '', x + h * 0.98, y + dy + h * 0.76); }
+  else g.fillText(label, x + h * 0.98, y + dy + h * 0.62);
+  g.restore(); return ww;
+}
+// beyaz, gölgeli, yuvarlak köşeli "uygulama ikonu" + logo simgesi
+function appTile(g, cx, cy, s, k, check = false) {
+  if (k <= 0) return;
+  g.save(); g.translate(cx, cy); g.scale(k, k); g.rotate((1 - k) * -0.2);
+  shadow(g, 70, 30, 0.16); rr(g, -s / 2, -s / 2, s, s, s * 0.24); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+  const gr = g.createLinearGradient(0, -s / 2, 0, s / 2); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(11,11,12,.04)'); g.fillStyle = gr; g.fill();
+  const mw = s * 0.66; logo(g, 0, -mw * (150 / 170) / 2, mw, { mark: true });
+  if (check) { const r = s * 0.13, x = s * 0.4, y = s * 0.36; shadow(g, 20, 8, 0.2); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = C.green; g.fill(); noShadow(g); drawIcon(g, 'check', x, y, r * 1.2, '#fff', 3.4); }
+  g.restore();
+}
+// alt güvence satırı (şablonlardaki gibi)
+const TRUST = [['shield', 'Güvenilir', 'Ustalar', C.cyan], ['clipboard', 'Planlı', 'Süreç', C.orange], ['clock', 'Zamanında', 'Teslim', C.cyan], ['award', 'Kaliteli', 'Malzeme', C.orange]];
+function trustRow(g, y, t, t0, dark = false, items = TRUST) {
+  const n = items.length, cw = (W - 2 * M - 80) / n;
+  items.forEach(([ic, a, b, c], i) => {
+    const k = P(t, t0 + i * 0.1, t0 + i * 0.1 + 0.5); if (k <= 0) return;
+    const x = M + 40 + i * cw;
+    g.save(); g.globalAlpha *= k;
+    drawIcon(g, ic, x + 52, y, 64, c, 2);
+    g.font = font(500, 28, FB); g.fillStyle = dark ? 'rgba(255,255,255,.8)' : C.ink2; g.fillText(a, x + 98, y - 6); g.fillText(b, x + 98, y + 28);
+    if (i) { g.fillStyle = dark ? 'rgba(255,255,255,.14)' : C.line; g.fillRect(x - 6, y - 40, 2, 80); }
+    g.restore();
+  });
+}
+// çerçeveli fotoğraf kartı
+function photoCard(g, img, x, y, w, h, t, d, k, fallback) {
+  if (k <= 0) return;
+  g.save(); g.globalAlpha *= clamp(k * 1.3); const dy = (1 - k) * 60;
+  shadow(g, 60, 24, 0.2); rr(g, x - 10, y - 10 + dy, w + 20, h + 20, 58); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+  rr(g, x, y + dy, w, h, 48); g.clip();
+  if (img) cover(g, img, x, y + dy, w, h, 1.05 + 0.1 * t / d, 0.35 - 0.7 * t / d, 0); else fallback?.(x, y + dy, w, h);
+  g.restore();
+}
+// sahne zemini: dış kenar + yuvarlak köşeli kart
+function frame(g, dark) {
+  g.fillStyle = dark ? C.outerD : C.outer; g.fillRect(0, 0, W, H);
+  rr(g, M, M, W - 2 * M, H - 2 * M, CR); g.fillStyle = dark ? C.cardD : C.card; g.fill();
+}
 
 /* ── veri hazırlığı ── */
 async function loadImg(src) {
@@ -126,12 +234,11 @@ async function loadImg(src) {
 }
 
 export async function prepareVideo(job, settings, be, opt) {
-  await Promise.all([font(800, 100), font(700, 100), font(600, 50, FB), font(500, 50, FB), font(700, 50, FB)].map(f => document.fonts.load(f).catch(() => {})));
+  await Promise.all([font(800, 100), font(900, 100), font(700, 50, FB), font(600, 50, FB), font(500, 50, FB)].map(f => document.fonts.load(f).catch(() => {})));
   const photo = async p => p ? loadImg(await be.photoUrl(p)) : null;
   const reqs = (job.requests || []).filter(r => r.status !== 'kapsamdisi');
   const sevRank = k => SEVERITY.findIndex(s => s.k === k);
   const finds = [...(job.findings || [])].sort((a, b) => sevRank(b.severity || 'orta') - sevRank(a.severity || 'orta'));
-  const met = jobMetrics(job);
   const coverP = job.photos.find(p => ['kesif', 'once'].includes(p.tag)) || job.photos.find(p => p.tag !== 'render');
   const renders = job.photos.filter(p => p.tag === 'render').slice(0, 2);
   const D = {
@@ -139,10 +246,9 @@ export async function prepareVideo(job, settings, be, opt) {
     name: job.customer?.name || 'Değerli müşterimiz',
     place: [job.customer?.district, job.customer?.address].filter(Boolean).join(' · '),
     date: new Date(job.kesifDate || job.created || Date.now()).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }),
-    reqs, finds, met,
+    reqs, finds, met: jobMetrics(job),
     lines: String(settings.videoLines ?? DEFAULT_SETTINGS.videoLines).split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5),
     total: job.quote?.items?.length ? quoteTotals(job.quote).total : 0,
-    logo: await loadImg('assets/logo-hd.png'),
     cover: opt.photos ? await photo(coverP) : null,
     fimg: {}, renders: [], plan: null,
   };
@@ -155,265 +261,253 @@ export async function prepareVideo(job, settings, be, opt) {
 }
 
 /* ── sahneler ── */
+const sameAs = (cat, room) => room && cat.toLocaleLowerCase('tr').includes(room.toLocaleLowerCase('tr'));
 function buildScenes(D) {
   const S = [], o = D.opt;
   const add = (k, dur, dark, draw) => S.push({ k, dur, dark, draw });
 
-  // 1) logo açılışı
-  add('intro', 3.0, false, (g, t) => {
-    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
-    blobs(g, t, [C.cyan + '55', C.amber + '44'], 0.5, 700);
-    // dalga halkaları
-    for (let i = 0; i < 3; i++) { const k = P(t, 0.1 + i * 0.25, 1.6 + i * 0.25, E.out); if (k <= 0 || k >= 1) continue; g.save(); g.globalAlpha = (1 - k) * 0.35; g.strokeStyle = C.teal; g.lineWidth = 6; g.beginPath(); g.arc(W / 2, 860, 120 + k * 520, 0, Math.PI * 2); g.stroke(); g.restore(); }
-    const lw = 960, lh = lw * 634 / 1536, ly = 860 - lh / 2, lx = (W - lw) / 2;
-    if (D.logo) {
-      const L = D.logo, sx = L.width / 1536;
-      // ev + dalga simgesi: yaylanarak büyür
-      const k1 = P(t, 0.05, 0.75, E.back), iw = 480 * sx, iwD = lw * 480 / 1536;
-      g.save(); g.globalAlpha = clamp(k1 * 1.5); g.translate(lx + iwD * 0.55, ly + lh * 0.55); g.scale(0.4 + 0.6 * k1, 0.4 + 0.6 * k1);
-      g.drawImage(L, 0, 0, iw, L.height, -iwD * 0.55, -lh * 0.55, iwD, lh); g.restore();
-      // yazı: soldan sağa açılır
-      const k2 = P(t, 0.45, 1.25, E.inOut);
-      g.save(); g.beginPath(); g.rect(lx + iwD, ly, (lw - iwD) * k2, lh); g.clip();
-      g.drawImage(L, iw, 0, L.width - iw, L.height, lx + iwD + (1 - k2) * -40, ly, lw - iwD, lh); g.restore();
-    }
-    const k3 = P(t, 1.2, 1.9, E.inOut);
-    g.fillStyle = brandGrad(g, W / 2 - 300, 0, W / 2 + 300, 0); rr(g, W / 2 - 300 * k3, 1110, 600 * k3, 12, 6); g.fill();
-    textLines(g, ['KEŞİF VİDEO RAPORU'], W / 2, 1200, 50, t, 1.6, { f: font(700, 40, FB), color: C.ink2, align: 'center' });
-    textLines(g, [D.name], W / 2, 1270, 50, t, 1.8, { f: font(600, 40, FB), color: C.muted, align: 'center' });
+  // 1) açılış: şeritler, uygulama ikonu, logo, "Keşif raporunuz hazır."
+  add('intro', 3.2, false, (g, t) => {
+    rings(g, W / 2, 1120, t);
+    ribbon(g, [-60, 1010, 330, 940, 330, 1560, 1150, 1500], C.cyanL, 74, P(t, 0.15, 1.3, E.inOut));
+    ribbon(g, [1150, 760, 700, 800, 800, 1380, 1150, 1420], C.orange, 64, P(t, 0.35, 1.5, E.inOut));
+    appTile(g, W / 2, 1150, 430, P(t, 0.3, 1.0, E.back), true);
+    g.save(); g.globalAlpha *= P(t, 0.8, 1.2); logo(g, W / 2, 130, 760, { reveal: P(t, 0.8, 1.5, E.inOut) }); g.restore();
+    headline(g, [['Keşif raporunuz', 'ink'], ['hazır.', 'grad']], X0, 380, 132, t, 1.0);
+    g.font = font(500, 42, FB); accent(g, wrap(g, `${D.name} için hazırlandı`, XW - 40, 2), X0, 720, t, 1.4);
+    trustRow(g, 1730, t, 1.7, false, TRUST.filter((_, i) => i !== 1));
   });
 
-  // 2) kapak: müşteri, adres, tarih
-  add('title', 3.6, true, (g, t, d) => {
-    g.fillStyle = C.dark; g.fillRect(0, 0, W, H);
-    if (D.cover) { g.save(); g.globalAlpha = 0.85; cover(g, D.cover, 0, 0, W, H, 1.08 + t / d * 0.1, -0.3 + t / d * 0.6, 0); g.restore(); }
-    const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(0, 'rgba(22,23,26,.25)'); sh.addColorStop(0.45, 'rgba(22,23,26,.55)'); sh.addColorStop(1, 'rgba(22,23,26,.96)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
-    blobs(g, t, [C.teal, C.orange], 0.35, 650);
-    waves(g, 90, 880, 300, P(t, 0.1, 1.1), C.cyan, 9);
-    const k = P(t, 0.2, 0.7);
-    g.save(); g.globalAlpha = k; pill(g, 90, 1040, 'KEŞİF RAPORU', { bg: C.teal }); g.restore();
-    g.font = font(800, 116); const nl = wrap(g, D.name, W - 180, 2);
-    let y = textLines(g, nl, 90, 1240, 124, t, 0.35, { f: font(800, 116), color: '#fff' });
-    g.font = font(500, 44, FB);
-    if (D.place) { const pl = wrap(g, D.place, W - 250, 2); g.save(); g.globalAlpha = P(t, 0.8, 1.3); drawIcon(g, 'map', 116, y + 26, 50, C.cyan, 2.2); g.restore(); y = textLines(g, pl, 166, y + 44, 56, t, 0.8, { f: font(500, 44, FB), color: 'rgba(255,255,255,.85)' }); }
-    g.save(); g.globalAlpha = P(t, 1.05, 1.5); drawIcon(g, 'calendar', 116, y + 52, 46, C.amber, 2.2); g.restore();
-    textLines(g, [`${D.date}  ·  ${D.job.code || ''}`], 166, y + 68, 56, t, 1.05, { f: font(600, 40, FB), color: 'rgba(255,255,255,.75)' });
+  // 2) kapak: "Merhaba, <ad>" + keşif fotoğrafı
+  add('title', 3.8, true, (g, t, d) => {
+    rings(g, 760, 1260, t, true);
+    logoHead(g, t);
+    const nr = nameRows(g, D.name, 116, XW, 2);
+    let y = headline(g, [['Merhaba,', 'white'], ...nr.map(s => [s, 'grad'])], X0, 300, 116, t, 0.15, { dark: true });
+    g.font = font(500, 40, FB);
+    const sub = [...(D.place ? wrap(g, D.place, XW - 60, 2) : []), `${D.date} · ${D.job.code || ''}`];
+    y = accent(g, sub, X0, y + 70, t, 0.6, { size: 40, dark: true });
+    const py = Math.max(y + 40, 1000), ph = 1720 - py;
+    ribbon(g, [-60, py + 120, 260, py + 60, 300, py + ph * 0.8, 620, H + 40], C.cyanL, 70, P(t, 0.3, 1.4, E.inOut));
+    ribbon(g, [1150, py - 120, 760, py - 60, 980, py + ph * 0.9, 1150, py + ph * 0.8], C.orange, 62, P(t, 0.45, 1.6, E.inOut));
+    photoCard(g, D.cover, 150, py, W - 300, ph, t, d, P(t, 0.5, 1.1), (x, yy, w, h) => { g.fillStyle = '#fff'; g.fillRect(x, yy, w, h); appTile(g, x + w / 2, yy + h / 2, Math.min(w, h) * 0.6, 1); });
+    badge(g, 900, py + 20, 112, C.orange, ['Keşif', 'raporu'], 'search', P(t, 1.1, 1.6, E.back));
   });
 
   // 3) talepler
   const R = D.reqs.slice(0, 6);
-  if (o.reqs && R.length) add('reqs', 1.2 + R.length * 0.45 + 1.6, false, (g, t) => {
-    g.fillStyle = C.bg; g.fillRect(0, 0, W, H); blobs(g, t, [C.cyan + '66', C.amber + '44'], 0.45);
-    textLines(g, ['Sizi dinledik'], 90, 300, 60, t, 0.05, { f: font(700, 42, FB), color: C.tealD });
-    textLines(g, ['Talepleriniz'], 90, 420, 120, t, 0.15, { f: font(800, 116) });
+  if (o.reqs && R.length) add('reqs', 1.4 + R.length * 0.4 + 1.6, true, (g, t) => {
+    ribbon(g, [-60, 1500, 200, 1380, 260, 1900, 520, H + 60], C.cyanL, 66, P(t, 0.2, 1.4, E.inOut));
+    ribbon(g, [1150, 520, 860, 560, 980, 900, 1150, 980], C.orange, 58, P(t, 0.35, 1.4, E.inOut));
+    logoHead(g, t);
+    let y = headline(g, [['Talepleriniz', 'white'], ['tek listede', 'grad']], X0, 300, 128, t, 0.1, { dark: true });
+    y = accent(g, ['Keşifte sizden dinlediklerimiz'], X0, y + 70, t, 0.45, { size: 40, dark: true });
     R.forEach((r, i) => {
-      const k = P(t, 0.7 + i * 0.45, 1.3 + i * 0.45, E.out); if (k <= 0) return;
-      const y = 540 + i * 196, x = 90 + (1 - k) * 260;
-      g.save(); g.globalAlpha = k;
-      g.shadowColor = 'rgba(17,18,20,.08)'; g.shadowBlur = 30; g.shadowOffsetY = 10;
-      rr(g, x, y, W - 180, 170, 36); g.fillStyle = '#fff'; g.fill(); g.shadowColor = 'transparent';
-      rr(g, x + 26, y + 30, 110, 110, 30); g.fillStyle = '#E3F7F8'; g.fill();
-      drawIcon(g, catOf(r.category).ic, x + 81, y + 85, 62, C.teal, 2.1);
-      g.font = font(800, 46); g.fillStyle = C.ink; const ct = catOf(r.category).t, same = r.room && ct.toLocaleLowerCase('tr').includes(r.room.toLocaleLowerCase('tr'));
-      g.fillText(wrap(g, r.room && !same ? `${ct} · ${r.room}` : ct, W - 400, 1)[0], x + 166, y + 72);
-      g.font = font(500, 36, FB); g.fillStyle = C.muted; g.fillText(wrap(g, r.text, W - 400, 1)[0] || '', x + 166, y + 124);
-      g.restore();
+      const ct = catOf(r.category).t;
+      chip(g, X0 - 10, y + 50 + i * 156, sameAs(ct, r.room) || !r.room ? ct : `${ct} · ${r.room}`, catOf(r.category).ic, i % 2 ? C.orange : C.cyan, P(t, 0.8 + i * 0.4, 1.3 + i * 0.4, E.out), { h: 130, sub: r.text, w: XW + 20, dark: true });
     });
-    if (D.reqs.length > R.length) textLines(g, [`+${D.reqs.length - R.length} talep daha`], W / 2, 540 + R.length * 196 + 70, 50, t, 0.8 + R.length * 0.45, { f: font(600, 38, FB), color: C.muted, align: 'center' });
-    footer(g, false, P(t, 0.3, 0.8));
+    if (D.reqs.length > R.length) textLines(g, [`+${D.reqs.length - R.length} talep daha`], W / 2, y + 50 + R.length * 156 + 50, 50, t, 0.8 + R.length * 0.4, { f: font(600, 36, FB), color: 'rgba(255,255,255,.7)', align: 'center' });
   });
 
   // 4) tespit girişi + 5) tespit kartları — sığan kadar
-  const fixedAfter = (o.visual && (D.renders.length || D.plan) ? 3.8 : 0) + 3.6 + 5.4 + 3.6;
+  const fixedAfter = (o.visual && (D.renders.length || D.plan) ? 3.8 : 0) + 3.8 + 5.6 + 3.8;
   const used = S.reduce((a, s) => a + s.dur, 0);
-  const F = o.finds ? D.finds.slice(0, Math.max(0, Math.min(6, Math.floor((MAX_T - used - fixedAfter - 2.2) / 4.6)))) : [];
+  const F = o.finds ? D.finds.slice(0, Math.max(0, Math.min(6, Math.floor((MAX_T - used - fixedAfter - 2.4) / 4.6)))) : [];
   if (o.finds && D.finds.length) {
-    add('fintro', 2.2, true, (g, t) => {
-      const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, C.orange); gr.addColorStop(1, C.amber); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-      blobs(g, t, ['#ffffff', C.orangeD], 0.18, 700);
-      const n = Math.round(D.finds.length * P(t, 0.1, 1.1, E.out));
-      g.save(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = font(900, 360); g.globalAlpha = P(t, 0, 0.3); g.fillText(String(n), W / 2, 900); g.restore();
-      textLines(g, ['tespit ettik'], W / 2, 1020, 80, t, 0.3, { f: font(800, 84), color: '#fff', align: 'center' });
-      // önem dağılımı çubuğu
+    add('fintro', 2.4, false, (g, t) => {
+      rings(g, 780, 900, t);
+      ribbon(g, [1150, 1180, 820, 1200, 760, 1720, 1150, 1760], C.orange, 66, P(t, 0.1, 1.2, E.inOut));
+      ribbon(g, [-60, 1300, 220, 1260, 240, 1700, 520, H + 60], C.cyanL, 62, P(t, 0.25, 1.3, E.inOut));
+      logoHead(g, t);
+      const n = Math.round(D.finds.length * P(t, 0.15, 1.0));
+      g.save(); g.font = font(900, 430); g.letterSpacing = '-18px'; const nw = g.measureText(String(D.finds.length)).width; g.globalAlpha *= P(t, 0.05, 0.4);
+      g.fillStyle = gradH(g, X0, X0 + nw); g.fillText(String(n), X0 - 10, 700); g.restore();
+      let y = headline(g, [['konu tespit ettik,', 'ink'], ['çözümleri hazır.', 'grad']], X0, 760, 104, t, 0.3);
+      // önem dağılımı: renk noktalı haplar
       const cnt = SEVERITY.map(s => ({ s, n: D.finds.filter(f => (f.severity || 'orta') === s.k).length })).filter(x => x.n).reverse();
-      const k = P(t, 0.6, 1.5, E.inOut), bw = W - 240; let x = 120;
-      cnt.forEach(({ s, n }) => { const w = bw * n / D.finds.length * k; rr(g, x, 1130, Math.max(0, w - 6), 34, 17); g.fillStyle = s.k === 'yuksek' || s.k === 'acil' ? '#fff' : s.c; g.fill(); x += bw * n / D.finds.length * k; });
-      g.save(); g.globalAlpha = P(t, 1.2, 1.7); let lx = 120;
-      cnt.forEach(({ s, n }) => { lx += pill(g, lx, 1200, `${s.t} ${n}`, { bg: 'rgba(255,255,255,.22)', f: font(700, 32, FB), h: 58, dot: s.k === 'yuksek' || s.k === 'acil' ? '#fff' : s.c }) + 14; });
-      g.restore();
-      textLines(g, ['Her birini çözümüyle birlikte anlatıyoruz'], W / 2, 1400, 50, t, 1.3, { f: font(600, 40, FB), color: 'rgba(255,255,255,.92)', align: 'center' });
+      let x = X0 - 10; y += 60;
+      cnt.forEach(({ s, n: c }, i) => {
+        const k = P(t, 0.9 + i * 0.12, 1.4 + i * 0.12); if (k <= 0) return;
+        g.save(); g.globalAlpha *= k; g.font = font(700, 34, FB); const tw = g.measureText(`${s.t} · ${c}`).width + 90;
+        if (x + tw > W - X0) { x = X0 - 10; y += 100; }
+        shadow(g, 24, 8, 0.1); rr(g, x, y, tw, 80, 40); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+        g.beginPath(); g.arc(x + 42, y + 40, 13, 0, Math.PI * 2); g.fillStyle = s.c; g.fill();
+        g.fillStyle = C.ink; g.fillText(`${s.t} · ${c}`, x + 66, y + 52); g.restore(); x += tw + 16;
+      });
+      badge(g, 850, 420, 120, C.cyan, ['Çözüm', 'odaklı'], 'check', P(t, 1.0, 1.5, E.back), { icColor: C.green });
     });
     F.forEach((f, i) => {
-      const sv = sevOf(f.severity || 'orta'), img = D.fimg[f.id];
+      const sv = sevOf(f.severity || 'orta'), img = D.fimg[f.id], ct = catOf(f.category).t;
       add('find', 4.6, false, (g, t, d) => {
-        g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
-        const ph = 1020;
-        g.save(); rr(g, 0, 0, W, ph + 60, 0); g.clip();
-        if (img) cover(g, img, 0, 0, W, ph + 60, 1.06 + 0.12 * t / d, 0.4 - 0.8 * t / d, -0.2);
-        else {   // fotoğraf yoksa: önem renginde degrade + büyük kategori simgesi
-          const gr = g.createLinearGradient(0, 0, W, ph); gr.addColorStop(0, sv.c); gr.addColorStop(1, C.dark); g.fillStyle = gr; g.fillRect(0, 0, W, ph + 60);
-          blobs(g, t, ['#ffffff'], 0.12, 600); g.save(); g.globalAlpha = 0.9; drawIcon(g, catOf(f.category).ic, W / 2, 470, 300 + 20 * Math.sin(t * 2), '#fff', 1.4); g.restore();
+        logoHead(g, t, 500, 92);
+        const px = 90, py = 230, pw = W - 180, ph = 640;
+        photoCard(g, img, px, py, pw, ph, t, d, P(t, 0.05, 0.55), (x, y, w, h) => {
+          const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, sv.c); gr.addColorStop(1, C.cardD); g.fillStyle = gr; g.fillRect(x, y, w, h);
+          rings(g, x + w / 2, y + h / 2, t, true, 3); drawIcon(g, catOf(f.category).ic, x + w / 2, y + h / 2, 260 + 14 * Math.sin(t * 2), '#fff', 1.5);
+        });
+        if (img) {   // dikkat halkası
+          const pk = (t * 0.9) % 1, cx = W / 2, cy = py + ph * 0.45; g.save(); g.strokeStyle = '#fff'; g.lineWidth = 7; g.globalAlpha = (1 - pk) * 0.95 * P(t, 0.4, 0.8);
+          g.beginPath(); g.arc(cx, cy, 50 + pk * 150, 0, Math.PI * 2); g.stroke(); g.globalAlpha = P(t, 0.4, 0.8); g.fillStyle = sv.c; g.beginPath(); g.arc(cx, cy, 20, 0, Math.PI * 2); g.fill(); g.restore();
         }
-        const sh = g.createLinearGradient(0, 0, 0, 260); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sh; g.fillRect(0, 0, W, 260);
-        g.restore();
-        // dikkat halkası
-        if (img) { const pk = (t * 0.9) % 1; g.save(); g.strokeStyle = sv.c; g.lineWidth = 8; g.globalAlpha = (1 - pk) * 0.9; g.beginPath(); g.arc(W / 2, 470, 60 + pk * 170, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; g.fillStyle = sv.c; g.beginPath(); g.arc(W / 2, 470, 22, 0, Math.PI * 2); g.fill(); g.restore(); }
-        g.save(); g.globalAlpha = P(t, 0.1, 0.5);
-        pill(g, 90, 110, `Tespit ${i + 1} / ${D.finds.length}`, { bg: 'rgba(17,18,20,.55)', f: font(700, 32, FB), h: 60 });
-        pill(g, W - 90, 110, sv.t, { bg: sv.c, f: font(800, 32, FB), h: 60, align: 'right' });
-        g.restore();
-        // içerik kartı
-        const ky = P(t, 0.15, 0.65), cy = ph - 80 + (1 - ky) * 120;
-        g.save(); g.globalAlpha = ky; g.shadowColor = 'rgba(17,18,20,.12)'; g.shadowBlur = 40; g.shadowOffsetY = -6;
-        rr(g, 40, cy, W - 80, H - cy + 60, 56); g.fillStyle = '#fff'; g.fill(); g.restore();
-        let y = cy + 100;
-        const ct = catOf(f.category).t, same = f.room && ct.toLocaleLowerCase('tr').includes(f.room.toLocaleLowerCase('tr'));
-        textLines(g, [[ct, same ? '' : f.room].filter(Boolean).join(' · ').toLocaleUpperCase('tr')], 100, y, 50, t, 0.35, { f: font(700, 34, FB), color: C.tealD });
-        g.font = font(800, 70); const tl = wrap(g, f.title || ct, W - 200, 2);
-        y = textLines(g, tl, 100, y + 88, 80, t, 0.45, { f: font(800, 70) });
-        if (f.desc) { g.font = font(500, 42, FB); y = textLines(g, wrap(g, f.desc, W - 200, 3), 100, y + 24, 56, t, 0.65, { f: font(500, 42, FB), color: C.muted }); }
-        // çözüm paneli
-        const ks = P(t, 1.5, 2.1, E.out); if (ks > 0) {
-          g.font = font(600, 42, FB);
-          const al = wrap(g, f.action || 'Uygulama yöntemi ve maliyeti teklifimizde ayrıntılı olarak yer alıyor.', W - 260, 4);
-          const ph2 = 160 + al.length * 58, py = Math.min(H - 150 - ph2, y + 50) + (1 - ks) * 160;
-          g.save(); g.globalAlpha = ks; rr(g, 70, py, W - 140, ph2, 44);
-          const gr = g.createLinearGradient(70, py, W - 70, py + ph2); gr.addColorStop(0, C.teal); gr.addColorStop(1, C.tealD); g.fillStyle = gr; g.fill();
-          g.beginPath(); g.arc(150, py + 82, 44, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
-          drawIcon(g, 'check', 150, py + 82, 50, C.teal, 3.2 * P(t, 1.8, 2.2));
-          g.font = font(800, 40); g.fillStyle = '#fff'; g.fillText('ÇÖZÜMÜMÜZ', 220, py + 96);
+        badge(g, W - 170, py + 10, 100, sv.c, [sv.t], 'alert', P(t, 0.45, 0.9, E.back));
+        chip(g, px + 20, py + ph - 60, `Tespit ${i + 1} / ${D.finds.length}`, 'search', C.ink, P(t, 0.5, 0.9), { h: 96 });
+        let y = py + ph + 130;
+        textLines(g, [[ct, sameAs(ct, f.room) ? '' : f.room].filter(Boolean).join(' · ').toLocaleUpperCase('tr')], X0, y, 44, t, 0.55, { f: font(700, 32, FB), color: C.cyan });
+        const tl = nameRows(g, f.title || ct, 74, XW, 2);
+        y = headline(g, tl.map(s => [s, 'ink']), X0, y + 18, 74, t, 0.6);
+        if (f.desc) { g.font = font(500, 38, FB); y = accent(g, wrap(g, f.desc, XW - 40, 2), X0, y + 56, t, 0.85, { size: 38 }); }
+        // çözüm kartı: degrade çerçeveli beyaz kart + yeşil onay
+        const ks = P(t, 1.6, 2.2); if (ks > 0) {
+          g.font = font(600, 40, FB);
+          const al = wrap(g, f.action || 'Uygulama yöntemi ve maliyeti teklifimizde ayrıntılı olarak yer alıyor.', XW - 150, 4);
+          const ch = 150 + al.length * 54, cy = Math.min(H - M - 60 - ch, y + 40) + (1 - ks) * 120, cx = X0 - 30, cw = XW + 60;
+          g.save(); g.globalAlpha *= ks;
+          shadow(g, 50, 18, 0.14); rr(g, cx, cy, cw, ch, 50); g.fillStyle = gradD(g, cx, cy, cx + cw, cy + ch); g.fill(); noShadow(g);
+          rr(g, cx + 8, cy + 8, cw - 16, ch - 16, 43); g.fillStyle = '#fff'; g.fill();
+          g.beginPath(); g.arc(cx + 92, cy + 86, 40, 0, Math.PI * 2); g.fillStyle = C.green; g.fill(); drawIcon(g, 'check', cx + 92, cy + 86, 46, '#fff', 3.4 * P(t, 1.9, 2.3));
+          g.font = font(800, 44); g.fillStyle = C.ink; g.fillText('Çözümümüz', cx + 156, cy + 102);
           g.restore();
-          textLines(g, al, 120, py + 180, 58, t, 1.9, { f: font(600, 42, FB), color: '#fff', stagger: 0.12 });
+          textLines(g, al, cx + 60, cy + 178, 54, t, 2.0, { f: font(600, 40, FB), color: C.ink2, stagger: 0.12 });
         }
-        footer(g, false, P(t, 0.3, 0.8));
       });
     });
-  } else if (o.finds) add('nofind', 2.6, false, (g, t) => {
-    g.fillStyle = C.bg; g.fillRect(0, 0, W, H); blobs(g, t, [C.teal + '66', C.sage + '66'], 0.5);
-    g.save(); g.globalAlpha = P(t, 0, 0.5); g.beginPath(); g.arc(W / 2, 760, 150, 0, Math.PI * 2); g.fillStyle = C.teal; g.fill(); drawIcon(g, 'check', W / 2, 760, 170, '#fff', 3 * P(t, 0.2, 0.8)); g.restore();
-    textLines(g, ['Kritik bir sorun', 'tespit edilmedi'], W / 2, 1060, 110, t, 0.4, { f: font(800, 96), align: 'center' });
+  } else if (o.finds) add('nofind', 2.8, false, (g, t) => {
+    rings(g, W / 2, 1100, t); logoHead(g, t);
+    appTile(g, W / 2, 1150, 400, P(t, 0.2, 0.8, E.back), true);
+    headline(g, [['Kritik bir sorun', 'ink'], ['tespit edilmedi.', 'grad']], X0, 380, 112, t, 0.3);
   });
 
   // 6) hedef görsel / rölöve
-  if (o.visual && (D.renders.length || D.plan)) add('visual', 3.8, true, (g, t, d) => {
-    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, C.tealD); gr.addColorStop(1, '#06464A'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    blobs(g, t, [C.cyan, C.amber], 0.25, 650);
-    textLines(g, [D.renders.length ? 'Hedeflediğimiz sonuç' : 'Mekanınızı ölçtük'], 90, 300, 60, t, 0.05, { f: font(700, 42, FB), color: '#BFF3F4' });
-    textLines(g, [D.renders.length ? 'Yeni yaşam alanınız' : 'Rölöve planınız'], 90, 420, 110, t, 0.15, { f: font(800, 100), color: '#fff' });
-    const k = P(t, 0.3, 0.9, E.out), x = 70, y = 520 + (1 - k) * 80, w = W - 140, h = 1100;
-    g.save(); g.globalAlpha = k; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 50; g.shadowOffsetY = 20; rr(g, x, y, w, h, 48); g.fillStyle = '#fff'; g.fill(); g.restore();
-    g.save(); g.globalAlpha = k; rr(g, x, y, w, h, 48); g.clip();
-    if (D.renders.length) {
-      const n = D.renders.length, seg = d / n, idx = Math.min(n - 1, Math.floor(t / seg)), lt = t - idx * seg;
-      cover(g, D.renders[idx], x, y, w, h, 1.04 + 0.1 * lt / seg, 0.3 - 0.6 * lt / seg, 0);
-      if (idx > 0 && lt < 0.5) { g.globalAlpha = 1 - lt / 0.5; cover(g, D.renders[idx - 1], x, y, w, h, 1.14, -0.3, 0); }
-    } else { const kr = P(t, 0.5, 2.6, E.inOut); g.beginPath(); g.rect(x, y, w * kr, h); g.clip(); contain(g, D.plan, x + 30, y + 30, w - 60, h - 60); }
-    g.restore();
-    footer(g, true, P(t, 0.3, 0.8));
+  if (o.visual && (D.renders.length || D.plan)) add('visual', 3.8, false, (g, t, d) => {
+    rings(g, W / 2, 1150, t);
+    ribbon(g, [-60, 900, 260, 860, 280, 1500, 560, H + 60], C.cyanL, 66, P(t, 0.2, 1.3, E.inOut));
+    ribbon(g, [1150, 1000, 820, 1040, 900, 1700, 1150, 1720], C.orange, 60, P(t, 0.3, 1.4, E.inOut));
+    logoHead(g, t);
+    const y = headline(g, D.renders.length ? [['Hedeflenen', 'ink'], ['sonuç', 'grad']] : [['Rölöve', 'ink'], ['planınız', 'grad']], X0, 280, 128, t, 0.1);
+    const py = y + 90, ph = H - M - 120 - py;
+    photoCard(g, null, 110, py, W - 220, ph, t, d, P(t, 0.3, 0.9), (x, yy, w, h) => {
+      g.fillStyle = '#fff'; g.fillRect(x, yy, w, h);
+      if (D.renders.length) {
+        const n = D.renders.length, seg = d / n, idx = Math.min(n - 1, Math.floor(t / seg)), lt = t - idx * seg;
+        cover(g, D.renders[idx], x, yy, w, h, 1.04 + 0.1 * lt / seg, 0.3 - 0.6 * lt / seg, 0);
+        if (idx > 0 && lt < 0.5) { g.save(); g.globalAlpha = 1 - lt / 0.5; cover(g, D.renders[idx - 1], x, yy, w, h, 1.14, -0.3, 0); g.restore(); }
+      } else { const kr = P(t, 0.6, 2.6, E.inOut); g.save(); g.beginPath(); g.rect(x, yy, w * kr, h); g.clip(); contain(g, D.plan, x + 20, yy + 20, w - 40, h - 40); g.restore(); }
+    });
+    badge(g, 880, py + 10, 110, C.cyan, D.renders.length ? ['Size özel', 'tasarım'] : ['Ölçülü', 'çizim'], D.renders.length ? 'sparkle' : 'ruler', P(t, 0.9, 1.4, E.back));
   });
 
   // 7) özet sayılar
-  add('stats', 3.6, false, (g, t) => {
-    g.fillStyle = C.bg; g.fillRect(0, 0, W, H); blobs(g, t, [C.cyan + '55', C.orange + '33'], 0.45);
-    textLines(g, ['Kısaca'], 90, 300, 60, t, 0.05, { f: font(700, 42, FB), color: C.tealD });
-    textLines(g, ['Keşif özeti'], 90, 420, 120, t, 0.15, { f: font(800, 116) });
+  add('stats', 3.8, true, (g, t) => {
+    rings(g, 800, 700, t, true);
+    ribbon(g, [1150, 380, 860, 420, 960, 760, 1150, 820], C.orange, 56, P(t, 0.2, 1.2, E.inOut));
+    logoHead(g, t);
+    const y = headline(g, [['Keşif', 'white'], ['özeti', 'grad']], X0, 280, 140, t, 0.1, { dark: true });
     const m = D.met, tiles = [
-      { v: m.rooms.length, s: 'mahal', ic: 'home', c: C.teal },
-      { v: m.floor || 0, s: 'm² alan', ic: 'ruler', c: C.cyan, dec: 1 },
-      { v: D.reqs.length, s: 'talep', ic: 'list', c: C.amber },
-      { v: D.finds.length, s: 'tespit', ic: 'alert', c: C.orange },
+      { v: m.rooms.length, s: 'mahal', ic: 'home', c: C.cyan },
+      { v: m.floor || 0, s: 'm² alan', ic: 'ruler', c: C.orange },
+      { v: D.reqs.length, s: 'talep', ic: 'list', c: C.orange },
+      { v: D.finds.length, s: 'tespit', ic: 'alert', c: C.cyan },
     ];
+    const ty = y + 80, tw = (XW + 20 - 24) / 2, th = 330;
     tiles.forEach((tl, i) => {
       const k = P(t, 0.35 + i * 0.15, 0.95 + i * 0.15, E.back); if (k <= 0) return;
-      const x = 90 + (i % 2) * 465, y = 540 + Math.floor(i / 2) * 400, w = 435, h = 370;
-      g.save(); g.translate(x + w / 2, y + h / 2); g.scale(0.85 + 0.15 * k, 0.85 + 0.15 * k); g.globalAlpha = clamp(k);
-      g.shadowColor = 'rgba(17,18,20,.08)'; g.shadowBlur = 30; g.shadowOffsetY = 10; rr(g, -w / 2, -h / 2, w, h, 44); g.fillStyle = '#fff'; g.fill(); g.shadowColor = 'transparent';
-      rr(g, -w / 2 + 36, -h / 2 + 36, 96, 96, 28); g.fillStyle = tl.c + '22'; g.fill(); drawIcon(g, tl.ic, -w / 2 + 84, -h / 2 + 84, 54, tl.c, 2.2);
-      const v = tl.v * P(t, 0.5 + i * 0.15, 1.6 + i * 0.15, E.out);
-      g.font = font(900, 120); g.fillStyle = C.ink; g.fillText(tl.dec ? fmtNum(v, 0) : String(Math.round(v)), -w / 2 + 36, h / 2 - 90);
-      g.font = font(600, 40, FB); g.fillStyle = C.muted; g.fillText(tl.s, -w / 2 + 36, h / 2 - 36);
+      const x = X0 - 10 + (i % 2) * (tw + 24), yy = ty + Math.floor(i / 2) * (th + 24);
+      g.save(); g.translate(x + tw / 2, yy + th / 2); g.scale(0.85 + 0.15 * k, 0.85 + 0.15 * k); g.globalAlpha *= clamp(k);
+      rr(g, -tw / 2, -th / 2, tw, th, 44); g.fillStyle = C.cardD2; g.fill();
+      g.beginPath(); g.arc(-tw / 2 + 80, -th / 2 + 80, 44, 0, Math.PI * 2); g.fillStyle = tl.c; g.fill(); drawIcon(g, tl.ic, -tw / 2 + 80, -th / 2 + 80, 46, '#fff', 2.2);
+      const v = tl.v * P(t, 0.5 + i * 0.15, 1.6 + i * 0.15), s = String(Math.round(v));
+      g.font = font(900, 120); g.letterSpacing = '-5px'; const w = g.measureText(s).width;
+      g.fillStyle = gradH(g, -tw / 2 + 36, -tw / 2 + 36 + Math.max(w, 120)); g.fillText(s, -tw / 2 + 36, th / 2 - 82);
+      g.letterSpacing = '0px'; g.font = font(600, 36, FB); g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText(tl.s, -tw / 2 + 40, th / 2 - 34);
       g.restore();
     });
     if (o.price && D.total) {
-      const k = P(t, 1.1, 1.6); g.save(); g.globalAlpha = k;
-      rr(g, 90, 1360 + (1 - k) * 40, W - 180, 220, 44); g.fillStyle = C.dark; g.fill();
-      g.font = font(600, 38, FB); g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText('Teklif tutarı (KDV dahil)', 140, 1440 + (1 - k) * 40);
-      g.font = font(900, 76); g.fillStyle = '#fff'; g.fillText(fmtMoney(D.total * P(t, 1.2, 2.4)).replace(',00', ''), 140, 1530 + (1 - k) * 40);
+      const k = P(t, 1.1, 1.6), yy = ty + 2 * (th + 24) + (1 - k) * 40, x = X0 - 10, w = XW + 20;
+      g.save(); g.globalAlpha *= k;
+      rr(g, x, yy, w, 220, 50); g.fillStyle = gradD(g, x, yy, x + w, yy + 220); g.fill(); rr(g, x + 6, yy + 6, w - 12, 208, 45); g.fillStyle = C.cardD2; g.fill();
+      g.font = font(600, 36, FB); g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText('Teklif tutarı (KDV dahil)', x + 50, yy + 80);
+      g.font = font(900, 80); g.fillStyle = '#fff'; g.fillText(fmtMoney(D.total * P(t, 1.2, 2.4)).replace(',00', ''), x + 48, yy + 170);
       g.restore();
     }
-    footer(g, false, P(t, 0.3, 0.8));
   });
 
-  // 8) neden biz — süreç güvencesi
-  add('trust', 5.4, true, (g, t) => {
-    g.fillStyle = C.dark; g.fillRect(0, 0, W, H); blobs(g, t, [C.teal, C.orange, C.cyan], 0.32, 720);
-    waves(g, 90, 300, 260, P(t, 0, 0.9), C.cyan, 9);
-    textLines(g, ['Süreç bizde,', 'keyfi sizde.'], 90, 560, 128, t, 0.15, { f: font(800, 120), color: '#fff' });
-    g.font = font(500, 40, FB); textLines(g, wrap(g, 'TadilatBodrum.com ile tadilatınız baştan sona planlı ilerler.', W - 180, 2), 90, 820, 54, t, 0.5, { f: font(500, 40, FB), color: 'rgba(255,255,255,.75)' });
-    D.lines.forEach((l, i) => {
-      const k = P(t, 0.9 + i * 0.5, 1.4 + i * 0.5, E.out); if (k <= 0) return;
-      const y = 980 + i * 170;
-      g.save(); g.globalAlpha = k; g.translate((1 - k) * 80, 0);
-      rr(g, 90, y, W - 180, 140, 36); g.fillStyle = 'rgba(255,255,255,.08)'; g.fill();
-      g.beginPath(); g.arc(166, y + 70, 42, 0, Math.PI * 2); g.fillStyle = brandGrad(g, 124, y, 208, y + 140); g.fill();
-      drawIcon(g, 'check', 166, y + 70, 46, '#fff', 3.2 * P(t, 1.1 + i * 0.5, 1.5 + i * 0.5));
-      g.font = font(600, 38, FB); g.fillStyle = '#fff'; const wl = wrap(g, l, W - 400, 2);
-      wl.forEach((s, j) => g.fillText(s, 240, y + 70 + 13 - (wl.length - 1) * 23 + j * 46));
+  // 8) güvence: "Süreç bizde, keyfi sizde."
+  add('trust', 5.6, false, (g, t) => {
+    rings(g, W / 2, 1150, t);
+    logoHead(g, t);
+    let y = headline(g, [['Süreç bizde,', 'ink'], ['keyfi sizde.', 'grad']], X0, 280, 132, t, 0.1);
+    g.font = font(500, 40, FB); y = accent(g, wrap(g, 'Keşiften teslime, tadilatınızı baştan sona biz planlıyor ve yönetiyoruz.', XW - 40, 2), X0, y + 70, t, 0.45, { size: 40 });
+    const rows = D.lines, rh = 136, gap = 20, y0 = y + 50;
+    rows.forEach((l, i) => {
+      const k = P(t, 0.9 + i * 0.45, 1.4 + i * 0.45); if (k <= 0) return;
+      const yy = y0 + i * (rh + gap), x = X0 - 10 + (1 - k) * 80;
+      g.save(); g.globalAlpha *= k;
+      shadow(g, 30, 10, 0.08); rr(g, x, yy, XW + 20, rh, rh / 2); g.fillStyle = '#fff'; g.fill(); noShadow(g);
+      g.strokeStyle = C.line; g.lineWidth = 2; g.stroke();
+      g.beginPath(); g.arc(x + rh / 2, yy + rh / 2, 44, 0, Math.PI * 2); g.fillStyle = i % 2 ? C.orange : C.cyan; g.fill();
+      drawIcon(g, 'check', x + rh / 2, yy + rh / 2, 46, '#fff', 3.4 * P(t, 1.1 + i * 0.45, 1.5 + i * 0.45));
+      g.font = font(600, 36, FB); g.fillStyle = C.ink; const wl = wrap(g, l, XW - rh - 40, 2);
+      wl.forEach((s, j) => g.fillText(s, x + rh + 8, yy + rh / 2 + 13 - (wl.length - 1) * 22 + j * 44));
       g.restore();
     });
+    // "Tek ekip. Net süreç. Güvenilir sonuç." (şablon dili)
+    const ky = y0 + rows.length * (rh + gap) + 70, kk = P(t, 1.2 + rows.length * 0.45, 1.7 + rows.length * 0.45);
+    if (kk > 0) {
+      g.save(); g.globalAlpha *= kk; g.fillStyle = C.cyan; rr(g, X0, ky - 44, 7, 60, 4); g.fill();
+      g.font = font(700, 42, FB); g.fillStyle = C.ink; const a = 'Tek ekip. Net süreç. '; g.fillText(a, X0 + 34, ky); const aw = g.measureText(a).width;
+      g.fillStyle = C.orange; g.fillText('Güvenilir sonuç.', X0 + 34 + aw, ky); g.restore();
+    }
+    trustRow(g, H - M - 110, t, 1.4 + rows.length * 0.45);
   });
 
-  // 9) kapanış: logo + iletişim
-  add('outro', 3.6, false, (g, t) => {
-    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); blobs(g, t, [C.cyan + '44', C.amber + '33'], 0.5);
-    const k = P(t, 0, 0.7, E.back);
-    if (D.logo) { const lw = 900, lh = lw * D.logo.height / D.logo.width; g.save(); g.globalAlpha = clamp(k); g.translate(W / 2, 640); g.scale(0.8 + 0.2 * k, 0.8 + 0.2 * k); g.drawImage(D.logo, -lw / 2, -lh / 2, lw, lh); g.restore(); }
-    const kb = P(t, 0.4, 1.0, E.inOut); g.fillStyle = brandGrad(g, W / 2 - 300, 0, W / 2 + 300, 0); rr(g, W / 2 - 300 * kb, 860, 600 * kb, 12, 6); g.fill();
-    textLines(g, [D.total ? 'Teklifiniz hazır.' : 'Hayalinizdeki mekân', D.total ? 'Hemen başlayalım.' : 'bir mesaj uzağınızda.'], W / 2, 1010, 92, t, 0.5, { f: font(800, 80), align: 'center' });
-    const rows = [[D.co.whatsapp || D.co.phone, 'phone'], [D.co.web || 'tadilatbodrum.com', 'globe'], [D.co.email, 'mail']].filter(r => r[0]);
+  // 9) kapanış: logo, çağrı, iletişim
+  add('outro', 3.8, false, (g, t) => {
+    rings(g, W / 2, 1480, t);
+    ribbon(g, [-60, 1240, 240, 1190, 360, 1720, 700, H + 60], C.cyanL, 72, P(t, 0.2, 1.3, E.inOut));
+    ribbon(g, [1150, 1060, 760, 1100, 820, 1700, 1150, 1720], C.orange, 64, P(t, 0.3, 1.4, E.inOut));
+    g.save(); g.globalAlpha *= P(t, 0, 0.4); logo(g, W / 2, 130, 760); g.restore();
+    let y = headline(g, D.total ? [['Teklifiniz', 'ink'], ['hazır,', 'grad'], ['başlayalım!', 'ink']] : [['Hayalinizdeki', 'ink'], ['mekân', 'grad'], ['bir mesaj uzakta!', 'ink']], X0, 360, 124, t, 0.2);
+    const rows = [[D.co.web || 'tadilatbodrum.com', null], [D.co.whatsapp || D.co.phone, 'chat'], [D.co.email, 'mail']].filter(r => r[0]);
+    y += 110;
     rows.forEach(([s, ic], i) => {
-      const kk = P(t, 1.0 + i * 0.2, 1.5 + i * 0.2); if (kk <= 0) return;
-      const y = 1260 + i * 120; g.save(); g.globalAlpha = kk; g.font = font(700, 46, FB); const tw = g.measureText(s).width, x0 = W / 2 - (tw + 80) / 2;
-      drawIcon(g, ic, x0 + 28, y - 16, 52, C.teal, 2.2); g.fillStyle = C.ink; g.fillText(s, x0 + 80, y); g.restore();
+      const k = P(t, 0.8 + i * 0.15, 1.3 + i * 0.15); if (k <= 0) return;
+      g.save(); g.globalAlpha *= k;
+      if (!ic) { g.fillStyle = C.cyan; rr(g, X0, y - 40, 7, 54, 4); g.fill(); g.font = font(800, 46); g.fillStyle = C.orange; g.fillText(s, X0 + 34, y); }
+      else { drawIcon(g, ic, X0 + 24, y - 15, 52, C.cyan, 2.2); g.font = font(600, 42, FB); g.fillStyle = C.ink; g.fillText(s, X0 + 74, y); }
+      g.restore(); y += 84;
     });
-    const kw = P(t, 0.3, 1.6); waves(g, W / 2 - 160, 1660, 320, kw, C.teal, 8, 3, 30, 10);
+    appTile(g, W / 2, 1520, 360, P(t, 0.6, 1.3, E.back), true);
+    badge(g, 860, 1240, 112, C.cyan, ['Hızlı', 'Randevu'], 'calendar', P(t, 1.2, 1.7, E.back));
   });
 
-  // süreyi sınırla (güvenlik): toplam ≤ MAX_T
+  // süreyi sınırla: toplam ≤ MAX_T
   let tot = S.reduce((a, s) => a + s.dur, 0);
   if (tot > MAX_T) { const k = MAX_T / tot; S.forEach(s => { s.dur *= k; }); tot = MAX_T; }
   let a = 0; S.forEach(s => { s.t0 = a; a += s.dur; });
   return { scenes: S, dur: tot };
 }
 
-/* sahne geçişi: marka degradeli eğik bant ekranı süpürür */
+/* sahne geçişi: camgöbeği + turuncu eğik şeritler ekranı süpürür */
 function transition(g, p) {
   if (p <= 0 || p >= 1) return;
-  const x = lerp(-1.6, 1.6, E.inOut(p)) * (W + H);
-  g.save(); g.translate(W / 2 + x * 0.5, H / 2); g.rotate(-0.42);
-  const bw = H * 1.25; g.fillStyle = brandGrad(g, -bw / 2, 0, bw / 2, 0); g.fillRect(-bw / 2, -H * 1.2, bw, H * 2.4);
+  const e = E.inOut(p), bw = 2500, pos = lerp(-2900, 2900, e);
+  g.save(); g.translate(W / 2, H / 2); g.rotate(-0.5);
+  g.fillStyle = C.cyanL; g.fillRect(pos - bw / 2, -H * 1.5, bw, H * 3);
+  g.fillStyle = C.orange; g.fillRect(pos + bw / 2, -H * 1.5, 340, H * 3);
   g.restore();
 }
 
 export function makeTimeline(D) {
-  const tl = buildScenes(D), TR = 0.32;
+  const tl = buildScenes(D), TR = 0.34;
   tl.frame = (g, t) => {
     t = clamp(t, 0, tl.dur - 1e-4);
     const S = tl.scenes; let i = S.findIndex(s => t < s.t0 + s.dur); if (i < 0) i = S.length - 1;
     const s = S[i];
-    g.save(); s.draw(g, t - s.t0, s.dur); g.restore();
-    // hikâye çubuğu
-    if (s.k !== 'intro') {
-      const n = S.length - 1, gap = 10, bw = (W - 160 - gap * (n - 1)) / n;
-      for (let j = 1; j < S.length; j++) {
-        const x = 80 + (j - 1) * (bw + gap), f = j < i ? 1 : j > i ? 0 : (t - s.t0) / s.dur;
-        g.fillStyle = s.dark ? 'rgba(255,255,255,.28)' : 'rgba(17,18,20,.12)'; rr(g, x, 46, bw, 8, 4); g.fill();
-        if (f > 0) { g.fillStyle = s.dark ? '#fff' : C.ink; rr(g, x, 46, bw * f, 8, 4); g.fill(); }
-      }
-    }
-    // geçişler: sahne sınırlarında
+    g.save(); g.letterSpacing = '0px'; g.textBaseline = 'alphabetic'; frame(g, s.dark);
+    rr(g, M, M, W - 2 * M, H - 2 * M, CR); g.clip();
+    s.draw(g, t - s.t0, s.dur);
+    g.restore();
     for (let j = 1; j < S.length; j++) { const b = S[j].t0, p = (t - (b - TR)) / (2 * TR); if (p > 0 && p < 1) transition(g, p); }
-    // son 0,4 sn: beyaza yumuşak kapanış yok — son kare logo ile kalır
   };
   return tl;
 }
