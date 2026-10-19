@@ -169,7 +169,9 @@ export class Plan3D {
       fl.position.y = 0.002; fl.receiveShadow = true; fl.userData.room = r.id; fl.name = 'Zemin ' + (r.name || '');
       g.add(fl); this.floors.push(fl);
       if (this.opt.ceiling && !this.opt.cut) {
-        const cg = new THREE.ShapeGeometry(shape); cg.rotateX(Math.PI / 2);
+        // tavan aşağı bakmalı: +90° döndürmede şeklin y'si doğrudan z olur, bu yüzden plan y'si ters çevrilmeden verilir
+        // (zemindeki -y şekliyle döndürülünce tavan plan üzerinde aynalanıp kayıyordu)
+        const cg = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), M(p.y))))); cg.rotateX(Math.PI / 2);
         const c = new THREE.Mesh(cg, this.std('#FAFAF8', 0.95));
         c.position.y = M(r.h || meta.wallH); c.receiveShadow = true; c.name = 'Tavan';
         g.add(c);
