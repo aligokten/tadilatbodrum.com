@@ -27,5 +27,12 @@ export async function decodeShare(s) {
   const raw = kind === 'z' ? await pipe(u8, new DecompressionStream('deflate-raw')) : u8;
   return JSON.parse(new TextDecoder().decode(raw));
 }
-/* görüntüleyici adresi: uygulamanın çalıştığı yerdeki goster.html */
+/* kısa bağlantı kimliği: 9 karakter, karışabilen harfler (0/O, 1/l/I) yok — 57^9 ≈ 6·10^15 olasılık; belgeler listelenemediği için tahmin edilemez */
+export function newShareId(n = 9) {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(n));
+  return [...r].map(x => A[x % A.length]).join('');
+}
+export const shortUrl = id => `${location.origin}/p/${id}`;
+
+/* görüntüleyici adresi: uygulamanın çalıştığı yerdeki goster.html (uzun bağlantı: veri # içinde) */
 export const viewerBase = () => location.origin + '/saha/goster.html';

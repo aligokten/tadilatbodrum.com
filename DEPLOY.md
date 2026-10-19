@@ -112,6 +112,23 @@ gsutil cors set storage-cors.json gs://saggplus.firebasestorage.app
 Bu ayar yalnızca belirtilen sitelerden okuma (GET) izni verir; dosya erişim kuralları değişmez.
 Yapılmazsa PDF yine oluşur, sadece bulut fotoğrafları PDF'te boş görünür (Yazdır seçeneğinde görünür).
 
+## 5d) Müşteri paylaşım bağlantıları — kısa link (bir kez)
+
+Saha uygulamasında **Müşteriyle paylaş** kısa bağlantı üretir (`kesif.tadilatbodrum.com/p/Ab3kX9mQz`).
+Çizim Firestore'da `sites/tadilatbodrum/shares/{kimlik}` belgesinde durur. Bunun için kurala tek satır eklenmeli
+(Firestore saggplus ile paylaşımlı olduğundan dosya deploy edilmez, Console'dan eklenir):
+
+1. Firebase Console → **saggplus** → Firestore Database → **Rules**
+2. `match /sites/tadilatbodrum { … }` bloğunun içinde, `match /saha/{id} …` satırının hemen altına ekleyin:
+   ```
+   match /shares/{id}       { allow get: if true; allow list: if false; allow write: if isTBAdmin(); }
+   ```
+3. **Publish**.
+
+Kural eklenene kadar uygulama otomatik olarak uzun bağlantıya (çizim bağlantının içinde) döner; paylaşım yine çalışır.
+Kimse bağlantıları listeleyemez; yalnızca kimliği bilen tek belgeyi okuyabilir. Bağlantı "Müşteriyle paylaş" penceresinden
+güncellenebilir (aynı link, yeni çizim) ya da kapatılabilir.
+
 ## 6) Keşif randevusu bildirimi (telefona anlık push)
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function

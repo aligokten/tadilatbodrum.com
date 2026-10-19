@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.19-2';
+export const APP_VERSION = '2026.10.19-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1038,38 +1038,84 @@ function planScreen() {
   setMode(mode).then(() => { if (qs.get('r')) renderDialog(); if (qs.get('import')) S.editor.importDialog(); });
 }
 
-/* müşteriyle paylaşım: çizim bağlantıya gömülür (share.js), müşteri goster.html'de 3D kuşbakışı + 2D plan görür */
+/* müşteriyle paylaşım: kısa bağlantı (bulutta sites/…/shares/{id}) ya da — yerel modda / kural eksikse —
+ * çizimin bağlantının # kısmına gömüldüğü uzun bağlantı. Müşteri goster.html'de 3D kuşbakışı + 2D plan görür. */
 async function shareDialog(j, dw, plan) {
   if (!hasContent(plan)) return toast('Çizim boş', 'err');
-  const { encodeShare, slimPlan, viewerBase } = await import('./share.js');
-  const co = S.settings.company || {};
-  const r = await modal({ title: 'Müşteriyle paylaş', wide: false, body: `
+  const { encodeShare, slimPlan, viewerBase, newShareId, shortUrl } = await import('./share.js');
+  const co = S.settings.company || {}, cloud = !!S.be.saveShare;
+  const mine = () => (j.shares || []).filter(x => x.dw === dw.id);
+  const makePayload = (t, s, v2, contact) => {
+    const p = { v: 1, t, s, v2, p: slimPlan(plan) };
+    if (contact) p.co = { phone: co.phone || '', wa: co.whatsapp || co.phone || '', web: co.web || '' };
+    return p;
+  };
+  const msg = (t, url) => `Merhaba${j.customer.name ? ' ' + j.customer.name.split(' ')[0] : ''}, ${t || 'projeniz'} için hazırladığımız 3D modeli ve planı telefonunuzdan inceleyebilirsiniz:\n${url}\n\nTadilatBodrum.com`;
+  const rulesHelp = `<p class="warn small">Kısa bağlantı için Firebase kuralına bir satır eklenmesi gerekiyor (DEPLOY.md → "Müşteri paylaşım bağlantıları"). Şimdilik uzun bağlantı oluşturuldu; çalışır.</p>`;
+  const listHtml = () => mine().length ? `<h4 style="margin-top:6px">Bu çizimin bağlantıları</h4>${mine().map(x => `
+    <div class="sh-row" data-sid="${x.id}"><div><b>${esc(x.title || dw.name)}</b><small>${esc(shortUrl(x.id).replace(/^https?:\/\//, ''))} · ${fmtDate(x.u || x.t, true)}</small></div>
+      <div class="row"><button class="btn btn-xs btn-ghost" data-sa="up" title="Bağlantıyı değiştirmeden çizimin güncel halini yükle">${icon('rotate')}Güncelle</button><button class="btn btn-xs btn-ghost" data-sa="send">${icon('share')}Gönder</button><button class="btn btn-xs btn-ghost danger-t" data-sa="del" title="Bağlantıyı kapat">${icon('trash')}</button></div></div>`).join('')}
+    <p class="muted small">"Güncelle" çizimde yaptığınız değişiklikleri aynı bağlantıya yükler; müşteri yeniden açtığında yeni hali görür. Silinen bağlantı açılmaz.</p>` : '';
+  let action = null;
+  const r = await modal({ title: 'Müşteriyle paylaş', body: `
     <p class="muted small">Müşteriniz bağlantıyı telefonunda açınca yalnızca bu çizimin <b>3D kuşbakışı modelini</b> ve <b>ölçülü 2D planını</b> görür; düzenleyemez. Keşif, teklif, fotoğraf ve diğer iş bilgileri paylaşılmaz.</p>
     <label>Başlık<input class="inp" id="shT" value="${esc(dw.kind === 'rolove' ? 'Mevcut durum (rölöve)' : dw.name)}"></label>
     <label>Alt başlık<input class="inp" id="shS" value="${esc(j.customer.name ? `Sayın ${j.customer.name}` : '')}"></label>
     <div class="grid2"><label>İlk açılış<select class="inp" id="shV"><option value="3d">3D model</option><option value="2d">2D plan</option></select></label>
-    <label class="check" style="align-self:end"><input type="checkbox" id="shC" ${co.phone || co.whatsapp ? 'checked' : ''}> WhatsApp / arama düğmesi</label></div>`,
-    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Bağlantı oluştur', cls: 'btn-primary', icon: 'share' }] });
-  if (r?.k !== 'ok') return;
-  const payload = { v: 1, t: $('#shT', r.el).value.trim(), s: $('#shS', r.el).value.trim(), v2: $('#shV', r.el).value, p: slimPlan(plan) };
-  if ($('#shC', r.el).checked) payload.co = { phone: co.phone || '', wa: co.whatsapp || co.phone || '', web: co.web || '' };
-  const url = `${viewerBase()}#${await encodeShare(payload)}`;
-  const text = `Merhaba${j.customer.name ? ' ' + j.customer.name.split(' ')[0] : ''}, ${payload.t || 'projeniz'} için hazırladığımız 3D modeli ve planı telefonunuzdan inceleyebilirsiniz:\n${url}\n\nTadilatBodrum.com`;
-  const long = url.length > 6000;
+    <label class="check" style="align-self:end"><input type="checkbox" id="shC" ${co.phone || co.whatsapp ? 'checked' : ''}> WhatsApp / arama düğmesi</label></div>
+    ${cloud ? '' : '<p class="muted small">Yerel modda kısa bağlantı oluşturulamaz; çizim bağlantının içine gömülür (uzun bağlantı).</p>'}
+    <div id="shList">${listHtml()}</div>`,
+    actions: [{ k: 'no', t: 'Kapat' }, { k: 'ok', t: 'Yeni bağlantı oluştur', cls: 'btn-primary', icon: 'share' }],
+    onOpen: (el, close) => {
+      el.onclick = async e => {
+        const b = e.target.closest('[data-sa]'); if (!b) return;
+        const sid = b.closest('[data-sid]').dataset.sid, rec = (j.shares || []).find(x => x.id === sid);
+        if (b.dataset.sa === 'del') {
+          if (!await confirmDlg('Bağlantı kapatılsın mı? Müşteri bu bağlantıyı artık açamaz.', 'Kapat')) return;
+          try { await S.be.deleteShare(sid); } catch (err) { return toast('Silinemedi: ' + (err.code || err.message), 'err'); }
+          j.shares = j.shares.filter(x => x.id !== sid); save(); $('#shList', el).innerHTML = listHtml(); toast('Bağlantı kapatıldı');
+        } else { action = { kind: b.dataset.sa, rec }; close({ k: 'act', el }); }
+      };
+    } });
+  if (!r || r.k === 'no') return;
+  let url, title, note = '';
+  if (r.k === 'act') {   // var olan bağlantı: güncelle / tekrar gönder
+    const { rec } = action; title = rec.title; url = shortUrl(rec.id);
+    if (action.kind === 'up') {
+      const p = makePayload(rec.title, rec.sub || '', rec.v2 || '3d', rec.co !== false);
+      try { await S.be.saveShare(rec.id, { d: await encodeShare(p), t: rec.t, u: Date.now() }); rec.u = Date.now(); save(); toast('Bağlantı güncellendi — müşteri yeni hali görecek'); }
+      catch (err) { return toast('Güncellenemedi: ' + (err.code || err.message), 'err'); }
+    }
+  } else {
+    title = $('#shT', r.el).value.trim();
+    const sub = $('#shS', r.el).value.trim(), v2 = $('#shV', r.el).value, contact = $('#shC', r.el).checked;
+    const enc = await encodeShare(makePayload(title, sub, v2, contact));
+    if (cloud) {
+      const id = newShareId();
+      try {
+        await S.be.saveShare(id, { d: enc, t: Date.now() });
+        (j.shares ||= []).push({ id, dw: dw.id, title, sub, v2, co: contact, t: Date.now() }); save();
+        url = shortUrl(id);
+      } catch (err) { console.warn('kısa bağlantı', err); note = rulesHelp; }
+    }
+    url ||= `${viewerBase()}#${enc}`;
+    logEvt(`Müşteriyle paylaşıldı: ${title || dw.name}`);
+  }
+  const text = msg(title, url), long = url.length > 6000;
   await modal({ title: 'Bağlantı hazır', body: `
-    <p class="muted small">Bağlantı ${fmtNum(url.length / 1000, 1)} bin karakter. Çizim bağlantının içinde taşınır; sunucuya yüklenmez. Çizimi sonradan değiştirirseniz yeni bağlantı oluşturun.</p>
-    ${long ? '<p class="warn small">Çizim büyük olduğu için bağlantı uzun. WhatsApp\'a doğrudan açmak yerine "Paylaş" ya da "Kopyala" kullanın.</p>' : ''}
-    <textarea class="inp" rows="3" readonly id="shU" style="font-size:12px">${esc(url)}</textarea>
+    ${note}
+    <p class="muted small">${url.length < 100 ? 'Kısa bağlantı. Çizimi değiştirirseniz "Müşteriyle paylaş" → "Güncelle" ile aynı bağlantıyı yenileyebilirsiniz.' : `Uzun bağlantı (${fmtNum(url.length / 1000, 1)} bin karakter): çizim bağlantının içinde taşınır. Çizimi değiştirirseniz yeni bağlantı oluşturun.`}</p>
+    ${long ? '<p class="warn small">Bağlantı çok uzun. WhatsApp\'a doğrudan açmak yerine "Paylaş" ya da "Kopyala" kullanın.</p>' : ''}
+    <textarea class="inp" rows="${url.length < 100 ? 1 : 3}" readonly id="shU" style="font-size:13px">${esc(url)}</textarea>
     <div class="row wrap">
       <a class="btn btn-primary" id="shWa" href="${esc(waLink(j.customer.phone, text))}" target="_blank" rel="noopener">${icon('chat')}WhatsApp'ta gönder</a>
       ${navigator.share ? `<button class="btn btn-ghost" id="shSh">${icon('share')}Paylaş</button>` : ''}
       <button class="btn btn-ghost" id="shCp">${icon('copy')}Kopyala</button>
       <a class="btn btn-ghost" href="${esc(url)}" target="_blank" rel="noopener">${icon('eye')}Önizle</a>
     </div>`, actions: [{ k: 'ok', t: 'Kapat' }], onOpen: el => {
-    $('#shCp', el).onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Bağlantı kopyalandı'); } catch { $('#shU', el).select(); document.execCommand('copy'); toast('Bağlantı kopyalandı'); } };
-    const sh = $('#shSh', el); if (sh) sh.onclick = () => navigator.share({ title: payload.t || 'Projeniz', text: text.replace(url, '').trim(), url }).catch(() => {});
+    $('#shCp', el).onclick = async () => { try { await navigator.clipboard.writeText(url); } catch { $('#shU', el).select(); document.execCommand('copy'); } toast('Bağlantı kopyalandı'); };
+    const sh = $('#shSh', el); if (sh) sh.onclick = () => navigator.share({ title: title || 'Projeniz', text: text.replace(url, '').trim(), url }).catch(() => {});
   } });
-  logEvt(`Müşteriyle paylaşıldı: ${payload.t || dw.name}`);
 }
 
 async function ensure3d() {

@@ -11,6 +11,10 @@
       "cleanUrls": true,
       "rewrites": [
         {
+          "source": "/p/**",
+          "destination": "/saha/goster.html"
+        },
+        {
           "source": "/admin",
           "destination": "/admin/index.html"
         },
@@ -61,6 +65,10 @@
         "saha/README.md"
       ],
       "rewrites": [
+        {
+          "source": "/p/**",
+          "destination": "/saha/goster.html"
+        },
         {
           "source": "**",
           "destination": "/saha/index.html"

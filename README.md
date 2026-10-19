@@ -53,7 +53,7 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 - **2D rölöve editörü** → otomatik **3D model** → **gerçekçi render** (path tracing)
 - Elektrik (priz, anahtar, sigorta kutusu, aydınlatma…) ve sıhhi tesisat (yer sifonu, musluk, pis su gideri…) **sembol kütüphanesi**; duvara otomatik yaslanır, teklifte nokta sayısı olarak metrajlanır
 - Kapı ve pencerelerde **model** (tek / çift / sürgü / gömme / katlanır kapı; açılır, çift açılım, vasistas, sürme, sabit pencere) ve **kullanım** (giriş, banyo, balkon, fransız balkon…) seçenekleri
-- **Müşteriyle paylaş**: çizimin 3D kuşbakışı modelini ve ölçülü 2D planını müşterinin telefonundan açabileceği salt-okunur bağlantı (`saha/goster.html`); çizim bağlantının # kısmına sıkıştırılarak gömülür, sunucuya yüklenmez — WhatsApp ile tek dokunuşla gönderilir
+- **Müşteriyle paylaş**: çizimin 3D kuşbakışı modelini ve ölçülü 2D planını müşterinin telefonundan açabileceği salt-okunur kısa bağlantı (`kesif.tadilatbodrum.com/p/KİMLİK` → `saha/goster.html`); bağlantı güncellenebilir / kapatılabilir; yerel modda ya da kural eklenmeden çizim bağlantının içine gömülür — WhatsApp ile tek dokunuşla gönderilir (kural: DEPLOY.md 5d)
 - Balkon / teras / galeri boşluğu için duvar çizer gibi **korkuluk aracı** (metal dikey/yatay, cam panel, dolu parapet); fransız pencere korkuluklu ya da korkuluksuz
 - Metrajı plandan alan **teklif aracı** + yazdırılabilir/PDF teklif
 - Müşteriye WhatsApp'tan gönderilecek **video rapor**: 1080×1920 dikey MP4, en çok 1 dk; logo açılışı, talepler, tespitler ve çözümler, özet, "Süreç bizde" güvence sahnesi ve iletişim (WebCodecs H.264 + mp4-muxer, sentez arka plan müziği); anket (beklentiler) ve mahal bazlı keşif sahneleri
