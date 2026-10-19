@@ -12,7 +12,7 @@ import { mergeJob, assignInPlace } from './merge.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.19-1';
+export const APP_VERSION = '2026.10.19-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -932,6 +932,7 @@ function planScreen() {
         <select class="ps-dw" id="psDw" aria-label="Çizim">${drawingsOf(j).map(d => `<option value="${d.id}" ${d.id === dw.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}<option value="+">+ Yeni çizim…</option></select></div>
       <div class="seg big" id="psMode"><button data-m="2d">2D Plan</button><button data-m="3d">${icon('cube')}3D</button><button data-m="split" class="hide-m">Yan yana</button></div>
       <div class="ps-act">
+        <button class="btn btn-ghost btn-sm" data-share title="3D modeli ve 2D planı müşteriye bağlantıyla gönder">${icon('share')}<span>Müşteriyle paylaş</span></button>
         <button class="btn btn-ghost btn-sm" data-exp title="2D çizimi ve 3D modeli dışa aktar (DXF, SketchUp, 3DS, STL…)">${icon('download')}<span>Dışa aktar</span></button>
         <button class="btn btn-primary btn-sm" data-render>${icon('sparkle')}<span>Render</span></button>
       </div>
@@ -995,6 +996,7 @@ function planScreen() {
     const p3 = new Plan3D(host);
     try { await p3.init(); p3.setPlan(S.editor.plan); return await fn(p3); } finally { p3.dispose(); host.remove(); }
   };
+  $('[data-share]').onclick = () => shareDialog(j, S.dw, S.editor.plan);
   $('[data-exp]').onclick = async () => {
     if (!hasContent(S.editor.plan)) return toast('Çizim boş', 'err');
     const opts = [
@@ -1034,6 +1036,40 @@ function planScreen() {
   };
   $('[data-render]').onclick = async () => { if (mode === '2d') await setMode('3d'); renderDialog(); };
   setMode(mode).then(() => { if (qs.get('r')) renderDialog(); if (qs.get('import')) S.editor.importDialog(); });
+}
+
+/* müşteriyle paylaşım: çizim bağlantıya gömülür (share.js), müşteri goster.html'de 3D kuşbakışı + 2D plan görür */
+async function shareDialog(j, dw, plan) {
+  if (!hasContent(plan)) return toast('Çizim boş', 'err');
+  const { encodeShare, slimPlan, viewerBase } = await import('./share.js');
+  const co = S.settings.company || {};
+  const r = await modal({ title: 'Müşteriyle paylaş', wide: false, body: `
+    <p class="muted small">Müşteriniz bağlantıyı telefonunda açınca yalnızca bu çizimin <b>3D kuşbakışı modelini</b> ve <b>ölçülü 2D planını</b> görür; düzenleyemez. Keşif, teklif, fotoğraf ve diğer iş bilgileri paylaşılmaz.</p>
+    <label>Başlık<input class="inp" id="shT" value="${esc(dw.kind === 'rolove' ? 'Mevcut durum (rölöve)' : dw.name)}"></label>
+    <label>Alt başlık<input class="inp" id="shS" value="${esc(j.customer.name ? `Sayın ${j.customer.name}` : '')}"></label>
+    <div class="grid2"><label>İlk açılış<select class="inp" id="shV"><option value="3d">3D model</option><option value="2d">2D plan</option></select></label>
+    <label class="check" style="align-self:end"><input type="checkbox" id="shC" ${co.phone || co.whatsapp ? 'checked' : ''}> WhatsApp / arama düğmesi</label></div>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Bağlantı oluştur', cls: 'btn-primary', icon: 'share' }] });
+  if (r?.k !== 'ok') return;
+  const payload = { v: 1, t: $('#shT', r.el).value.trim(), s: $('#shS', r.el).value.trim(), v2: $('#shV', r.el).value, p: slimPlan(plan) };
+  if ($('#shC', r.el).checked) payload.co = { phone: co.phone || '', wa: co.whatsapp || co.phone || '', web: co.web || '' };
+  const url = `${viewerBase()}#${await encodeShare(payload)}`;
+  const text = `Merhaba${j.customer.name ? ' ' + j.customer.name.split(' ')[0] : ''}, ${payload.t || 'projeniz'} için hazırladığımız 3D modeli ve planı telefonunuzdan inceleyebilirsiniz:\n${url}\n\nTadilatBodrum.com`;
+  const long = url.length > 6000;
+  await modal({ title: 'Bağlantı hazır', body: `
+    <p class="muted small">Bağlantı ${fmtNum(url.length / 1000, 1)} bin karakter. Çizim bağlantının içinde taşınır; sunucuya yüklenmez. Çizimi sonradan değiştirirseniz yeni bağlantı oluşturun.</p>
+    ${long ? '<p class="warn small">Çizim büyük olduğu için bağlantı uzun. WhatsApp\'a doğrudan açmak yerine "Paylaş" ya da "Kopyala" kullanın.</p>' : ''}
+    <textarea class="inp" rows="3" readonly id="shU" style="font-size:12px">${esc(url)}</textarea>
+    <div class="row wrap">
+      <a class="btn btn-primary" id="shWa" href="${esc(waLink(j.customer.phone, text))}" target="_blank" rel="noopener">${icon('chat')}WhatsApp'ta gönder</a>
+      ${navigator.share ? `<button class="btn btn-ghost" id="shSh">${icon('share')}Paylaş</button>` : ''}
+      <button class="btn btn-ghost" id="shCp">${icon('copy')}Kopyala</button>
+      <a class="btn btn-ghost" href="${esc(url)}" target="_blank" rel="noopener">${icon('eye')}Önizle</a>
+    </div>`, actions: [{ k: 'ok', t: 'Kapat' }], onOpen: el => {
+    $('#shCp', el).onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Bağlantı kopyalandı'); } catch { $('#shU', el).select(); document.execCommand('copy'); toast('Bağlantı kopyalandı'); } };
+    const sh = $('#shSh', el); if (sh) sh.onclick = () => navigator.share({ title: payload.t || 'Projeniz', text: text.replace(url, '').trim(), url }).catch(() => {});
+  } });
+  logEvt(`Müşteriyle paylaşıldı: ${payload.t || dw.name}`);
 }
 
 async function ensure3d() {
