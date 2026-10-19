@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<base href="/saha/">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Projeniz — TadilatBodrum.com</title>
+<meta name="description" content="TadilatBodrum.com — projenizin 3D modeli ve 2D planı.">
+<meta property="og:title" content="Projeniz — TadilatBodrum.com">
+<meta property="og:description" content="Projenizin 3D modelini ve 2D planını telefonunuzdan inceleyin.">
+<meta property="og:image" content="https://kesif.tadilatbodrum.com/saha/assets/icon-512.png">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="assets/icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@700;800&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "three/examples/jsm/": "./vendor/three/addons/" } }
+</script>
+<style>
+  :root{ --cyan:#13C4D8; --orange:#FE6B02; --ink:#0B0B0C; --muted:#5B6067; --line:#E7E9EB; --bg:#F4F5F6;
+    --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px); }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  header{flex:none;background:#fff;padding:calc(10px + var(--safe-t)) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+  header img{height:34px;width:auto;flex:none}
+  .ttl{min-width:0;flex:1;text-align:right}
+  .ttl b{display:block;font-family:'Inter Tight',Inter,sans-serif;font-weight:800;font-size:16px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ttl small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  main{flex:1;position:relative;min-height:0}
+  .pane{position:absolute;inset:0}
+  .pane[hidden],.tools[hidden],footer[hidden],.tabs[hidden],.hint[hidden]{display:none}
+  #p3{background:#E9F1F2}
+  #p3 canvas{display:block;width:100%;height:100%;touch-action:none}
+  #p2{background:#fff;overflow:hidden;touch-action:none}
+  #p2 .svgw{position:absolute;inset:0;transform-origin:0 0}
+  #p2 svg{width:100%;height:100%;display:block}
+  .tabs{position:absolute;left:50%;top:12px;transform:translateX(-50%);display:flex;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:999px;padding:4px;box-shadow:0 6px 20px rgba(11,11,12,.12);z-index:5}
+  .tabs button{white-space:nowrap;padding:9px 18px;border-radius:999px;font-weight:700;font-size:14px;color:var(--muted)}
+  .tabs button.on{background:var(--ink);color:#fff}
+  .tools{position:absolute;right:12px;bottom:calc(84px + var(--safe-b));display:flex;flex-direction:column;gap:8px;z-index:5}
+  .tools button{width:46px;height:46px;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(11,11,12,.14);display:grid;place-items:center;font-size:12px;font-weight:700}
+  .tools button.on{background:var(--cyan);color:#fff}
+  .tools svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .hint{position:absolute;left:50%;top:70px;transform:translateX(-50%);background:rgba(11,11,12,.72);color:#fff;font-size:12.5px;padding:7px 13px;border-radius:999px;white-space:nowrap;pointer-events:none;transition:opacity .6s;z-index:4}
+  footer{flex:none;background:#fff;border-top:1px solid var(--line);padding:10px 12px calc(10px + var(--safe-b));display:flex;gap:8px}
+  footer a{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:14px;font-weight:700;font-size:15px;text-decoration:none}
+  footer .wa{background:#25D366;color:#fff}
+  footer .tel{background:var(--bg);color:var(--ink)}
+  footer svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .msg{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:14px;text-align:center;padding:24px;color:var(--muted)}
+  .msg b{color:var(--ink);font-size:17px}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--orange);animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .legend{position:absolute;left:12px;bottom:calc(84px + var(--safe-b));background:rgba(255,255,255,.94);border-radius:14px;padding:10px 12px;font-size:12.5px;box-shadow:0 6px 18px rgba(11,11,12,.1);max-width:60%;z-index:4}
+  .legend div{display:flex;justify-content:space-between;gap:14px}
+  .legend b{font-weight:700}
+  .legend .tot{border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+  @media (min-width:900px){ header img{height:40px} .tools,.legend{bottom:24px} footer{justify-content:center} footer a{flex:0 0 260px} }
+</style>
+</head>
+<body>
+<header><img src="assets/logo.png" alt="TadilatBodrum.com"><div class="ttl"><b id="t">Projeniz</b><small id="st"></small></div></header>
+<main>
+  <div class="tabs" role="tablist"><button class="on" data-v="3d" role="tab">3D Model</button><button data-v="2d" role="tab">2D Plan</button></div>
+  <section class="pane" id="p3"><div class="msg"><div class="spin"></div><p>3D model hazırlanıyor…</p></div></section>
+  <section class="pane" id="p2" hidden></section>
+  <div class="tools" id="tools3">
+    <button data-c="frame" title="Kuşbakışı"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg></button>
+    <button data-c="top" title="Üstten"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg></button>
+    <button data-c="cut" class="on" title="Duvarları kesitli göster"><svg viewBox="0 0 24 24"><path d="M3 17h18M6 17V9l6-4 6 4v8"/><path d="M3 12h18" stroke-dasharray="2 3"/></svg></button>
+  </div>
+  <div class="tools" id="tools2" hidden>
+    <button data-z="fit" title="Sığdır"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="hint" id="hint">Döndürmek için sürükleyin · iki parmakla yakınlaştırın</div>
+</main>
+<footer id="foot" hidden></footer>
+<script type="module" src="js/goster.js"></script>
+</body>
+</html>
