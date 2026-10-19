@@ -209,6 +209,15 @@ class CloudBackend {
     return { ...clone(DEFAULT_SETTINGS), ...(d.exists() ? d.data() : {}) };
   }
   saveSettings(v) { return this.fs.setDoc(this.#doc('saha', 'settings'), clone(v)); }
+  /* müşteri paylaşım bağlantıları (sites/…/shares/{id}): kimliği bilen herkes okur, kimse listeleyemez.
+   * Kural eksikse yazma 'permission-denied' ile reddedilir; çevrimdışıyken beklememek için süre sınırı var. */
+  async saveShare(id, data) {
+    await Promise.race([
+      this.fs.setDoc(this.#doc('shares', id), clone(data)),
+      new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('Sunucuya ulaşılamadı'), { code: 'timeout' })), 15000)),
+    ]);
+  }
+  deleteShare(id) { return this.fs.deleteDoc(this.#doc('shares', id)); }
 }
 
 export const MODE_KEY = 'tb-saha-mode';

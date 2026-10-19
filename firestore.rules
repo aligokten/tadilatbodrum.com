@@ -35,6 +35,10 @@ service cloud.firestore {
       // Saha koordinasyon uygulaması (/saha) — müşteri verisi, yalnızca admin
       match /jobs/{id}         { allow read, write: if isTBAdmin(); }
       match /saha/{id}         { allow read, write: if isTBAdmin(); }
+
+      // Müşteri paylaşım bağlantıları (kesif.tadilatbodrum.com/p/KİMLİK): kimliği bilen okur,
+      // kimse listeleyemez (tahmin edilemeyen 9 karakterlik kimlik); yalnızca admin yazar/siler.
+      match /shares/{id}       { allow get: if true; allow list: if false; allow write: if isTBAdmin(); }
     }
   }
 }

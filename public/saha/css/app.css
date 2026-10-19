@@ -814,3 +814,8 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
   .vr{flex-direction:column;align-items:stretch}
   .vr-stage{height:min(58vh,560px);align-self:center}
 }
+
+/* müşteri paylaşım bağlantıları */
+.sh-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);flex-wrap:wrap}
+.sh-row b{display:block;font-size:14px}
+.sh-row small{color:var(--muted);font-size:12px}

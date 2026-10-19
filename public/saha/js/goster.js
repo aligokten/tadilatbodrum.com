@@ -9,15 +9,27 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fail = (t, d) => { $('#p3').innerHTML = `<div class="msg"><b>${esc(t)}</b><p>${esc(d)}</p></div>`; $('.tabs').hidden = true; $('#tools3').hidden = true; $('#hint').hidden = true; };
 
+/* kısa bağlantı (/p/KİMLİK): veri Firestore'dan REST ile okunur (SDK yüklenmez; kural: yalnızca tekil okuma serbest)
+ * uzun bağlantı (#…): veri bağlantının içinde */
+async function loadShort(id) {
+  const { firebaseConfig: c, SITE_ID } = await import('/js/firebase-config.js');
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${c.projectId}/databases/(default)/documents/sites/${SITE_ID}/shares/${encodeURIComponent(id)}?key=${c.apiKey}`);
+  if (r.status === 404 || r.status === 403) throw Object.assign(new Error('gone'), { gone: true });
+  if (!r.ok) throw new Error('http ' + r.status);
+  return (await r.json()).fields?.d?.stringValue;
+}
 let data;
 try {
-  const h = location.hash.slice(1);
+  const sid = (location.pathname.match(/\/p\/([A-Za-z0-9]{6,20})\/?$/) || [])[1];
+  const h = sid ? await loadShort(sid) : location.hash.slice(1);
   if (!h) throw new Error('empty');
   data = await decodeShare(h);
   if (!data?.p?.walls) throw new Error('bad');
-} catch {
-  fail('Bağlantı açılamadı', 'Bağlantı eksik ya da bozuk görünüyor. Lütfen size gönderilen bağlantının tamamını açın.');
-  throw new Error('paylaşım verisi okunamadı');
+} catch (e) {
+  if (e.gone) fail('Bu bağlantı artık geçerli değil', 'Bağlantı kaldırılmış olabilir. Güncel bağlantı için bizimle iletişime geçin.');
+  else if (e instanceof TypeError) fail('Bağlantı açılamadı', 'İnternet bağlantınızı kontrol edip sayfayı yenileyin.');
+  else fail('Bağlantı açılamadı', 'Bağlantı eksik ya da bozuk görünüyor. Lütfen size gönderilen bağlantının tamamını açın.');
+  throw e;
 }
 const plan = data.p;
 plan.rails ||= []; plan.labels ||= []; plan.dims ||= []; plan.items ||= []; plan.openings ||= []; plan.rooms ||= [];
