@@ -129,6 +129,27 @@ Kural eklenene kadar uygulama otomatik olarak uzun bağlantıya (çizim bağlant
 Kimse bağlantıları listeleyemez; yalnızca kimliği bilen tek belgeyi okuyabilir. Bağlantı "Müşteriyle paylaş" penceresinden
 güncellenebilir (aynı link, yeni çizim) ya da kapatılabilir.
 
+## 5e) İş sonu müşteri değerlendirmesi (bir kez)
+
+İş ekranındaki **Değerlendirme linki gönder** müşteriye `kesif.tadilatbodrum.com/d/KİMLİK` bağlantısı gönderir; yanıtlar
+`sites/tadilatbodrum/feedback/{kimlik}` belgesine yazılır ve uygulama açıldığında işe kaydedilir. Firestore → Rules'ta,
+`match /sites/tadilatbodrum { … }` bloğunun içine (5d'deki `shares` satırının altına) ekleyip **Publish** edin:
+
+```
+match /feedback/{id} {
+  allow get: if true;
+  allow list, create, delete: if isTBAdmin();
+  allow update: if isTBAdmin() || (
+    resource.data.status == 'pending' && request.resource.data.status == 'done'
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'answers', 'doneAt'])
+    && request.resource.data.answers is map && request.resource.data.answers.size() <= 20
+    && request.resource.data.doneAt is int);
+}
+```
+
+Müşteri yalnızca kendisine gönderilen kaydı, yalnızca bir kez doldurabilir. Ayarlar → Firma'ya **Google yorum bağlantısı**
+girilirse 4 ve üzeri puan veren müşteriye teşekkür ekranında "Google'da da değerlendirin" düğmesi gösterilir.
+
 ## 6) Keşif randevusu bildirimi (telefona anlık push)
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function

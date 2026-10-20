@@ -15,6 +15,10 @@
           "destination": "/saha/goster.html"
         },
         {
+          "source": "/d/**",
+          "destination": "/saha/degerlendir.html"
+        },
+        {
           "source": "/admin",
           "destination": "/admin/index.html"
         },
@@ -68,6 +72,10 @@
         {
           "source": "/p/**",
           "destination": "/saha/goster.html"
+        },
+        {
+          "source": "/d/**",
+          "destination": "/saha/degerlendir.html"
         },
         {
           "source": "**",

@@ -39,6 +39,18 @@ service cloud.firestore {
       // Müşteri paylaşım bağlantıları (kesif.tadilatbodrum.com/p/KİMLİK): kimliği bilen okur,
       // kimse listeleyemez (tahmin edilemeyen 9 karakterlik kimlik); yalnızca admin yazar/siler.
       match /shares/{id}       { allow get: if true; allow list: if false; allow write: if isTBAdmin(); }
+
+      // İş sonu müşteri değerlendirmesi (kesif.tadilatbodrum.com/d/KİMLİK): müşteri kaydı okur ve yalnızca bir kez,
+      // yalnızca status / answers / doneAt alanlarını değiştirerek 'done' yapabilir; listeleme ve silme yalnızca admin.
+      match /feedback/{id} {
+        allow get: if true;
+        allow list, create, delete: if isTBAdmin();
+        allow update: if isTBAdmin() || (
+          resource.data.status == 'pending' && request.resource.data.status == 'done'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'answers', 'doneAt'])
+          && request.resource.data.answers is map && request.resource.data.answers.size() <= 20
+          && request.resource.data.doneAt is int);
+      }
     }
   }
 }

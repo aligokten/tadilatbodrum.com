@@ -56,6 +56,9 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 - **Müşteriyle paylaş**: çizimin 3D kuşbakışı modelini ve ölçülü 2D planını müşterinin telefonundan açabileceği salt-okunur kısa bağlantı (`kesif.tadilatbodrum.com/p/KİMLİK` → `saha/goster.html`); bağlantı güncellenebilir / kapatılabilir; yerel modda ya da kural eklenmeden çizim bağlantının içine gömülür — WhatsApp ile tek dokunuşla gönderilir (kural: DEPLOY.md 5d)
 - Balkon / teras / galeri boşluğu için duvar çizer gibi **korkuluk aracı** (metal dikey/yatay, cam panel, dolu parapet); fransız pencere korkuluklu ya da korkuluksuz
 - Metrajı plandan alan **teklif aracı** + yazdırılabilir/PDF teklif
+- Teklif formu iki seçenekli: **ayrıntılı** (birim fiyat + tutar) ya da **özet** (kalem ve miktarlar, yalnızca toplam)
+- Müşteri konumu **haritadan işaretlenir** (Leaflet + OpenStreetMap / uydu, adres arama); yol tarifi ve raporda konum
+- İş sonu **müşteri değerlendirme anketi** (`/d/KİMLİK`): yıldız puanları, tavsiye skoru, yorum, yayın izni; yanıtlar işe kaydedilir, panoda memnuniyet ortalaması ve CSV (kural: DEPLOY.md 5e)
 - Müşteriye WhatsApp'tan gönderilecek **video rapor**: 1080×1920 dikey MP4, en çok 1 dk; logo açılışı, talepler, tespitler ve çözümler, özet, "Süreç bizde" güvence sahnesi ve iletişim (WebCodecs H.264 + mp4-muxer, sentez arka plan müziği); anket (beklentiler) ve mahal bazlı keşif sahneleri
 
 ## Dosya yapısı

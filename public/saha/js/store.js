@@ -218,6 +218,15 @@ class CloudBackend {
     ]);
   }
   deleteShare(id) { return this.fs.deleteDoc(this.#doc('shares', id)); }
+  /* iş sonu değerlendirme anketi (sites/…/feedback/{id}): müşteri yalnızca bekleyen kaydı bir kez doldurabilir */
+  async createFeedback(id, data) {
+    await Promise.race([
+      this.fs.setDoc(this.#doc('feedback', id), clone(data)),
+      new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('Sunucuya ulaşılamadı'), { code: 'timeout' })), 15000)),
+    ]);
+  }
+  async getFeedback(id) { const d = await this.fs.getDocFromServer(this.#doc('feedback', id)).catch(() => this.fs.getDoc(this.#doc('feedback', id))); return d.exists() ? d.data() : null; }
+  deleteFeedback(id) { return this.fs.deleteDoc(this.#doc('feedback', id)); }
 }
 
 export const MODE_KEY = 'tb-saha-mode';
