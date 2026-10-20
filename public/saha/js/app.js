@@ -11,10 +11,11 @@ import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
 import { mergeJob, assignInPlace } from './merge.js';
 import { dirLink } from './mappick.js';
 import { FEEDBACK_Q, STAR_Q, fbScore } from './feedbackq.js';
+import { renderExec, execProgress, execAlerts } from './exec.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.20-1';
+export const APP_VERSION = '2026.10.20-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -337,7 +338,7 @@ function jobCard(j) {
         ${j.plan?.walls?.length ? `<span>${icon('ruler')}Rölöve</span>` : ''}${(j.drawings || []).some(d => hasContent(d.plan)) ? `<span>${icon('layers')}Proje</span>` : ''}
         ${tot ? `<span class="money">${fmtMoney(tot)}</span>` : ''}
       </div>
-      <div class="bar" title="Anket %${pr.pct}"><i style="width:${pr.pct}%"></i></div>
+      ${j.exec ? `<div class="bar ex" title="Uygulama %${execProgress(j.exec)}${execAlerts(j.exec).late ? ' · gecikme var' : ''}"><i style="width:${execProgress(j.exec)}%"></i></div>` : `<div class="bar" title="Anket %${pr.pct}"><i style="width:${pr.pct}%"></i></div>`}
     </div>
   </a>`;
 }
@@ -377,6 +378,7 @@ const TABS = [
   { k: 'rolove', t: 'Rölöve & 3D', ic: 'ruler' },
   { k: 'foto', t: 'Fotoğraflar', ic: 'camera' },
   { k: 'teklif', t: 'Teklif', ic: 'file' },
+  { k: 'uygulama', t: 'Uygulama', ic: 'roller' },
 ];
 
 function jobView(tab) {
@@ -396,12 +398,13 @@ function jobView(tab) {
     <section class="tab-body" id="tb"></section>`;
   $('.tabs .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const tb = $('#tb');
-  ({ genel: tabGenel, talepler: tabTalepler, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif }[tab] || tabGenel)(tb);
+  ({ genel: tabGenel, talepler: tabTalepler, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
 }
 function badge(k) {
   const j = S.job;
   const n = { talepler: j.requests.filter(r => r.status !== 'kapsamdisi').length, kesif: j.findings.length, foto: j.photos.length }[k];
   if (k === 'anket') { const p = surveyProgress(j.survey.answers).pct; return p ? `<i class="tbadge">${p}%</i>` : ''; }
+  if (k === 'uygulama') { if (!j.exec) return ''; const A = execAlerts(j.exec), w = A.late + A.mats + A.nok; return `<i class="tbadge ${w ? 'warn' : ''}">${w || execProgress(j.exec) + '%'}</i>`; }
   return n ? `<i class="tbadge">${n}</i>` : '';
 }
 
@@ -457,6 +460,9 @@ function tabGenel(tb) {
         </div>
       </div>
     </div>
+    ${j.exec || ['onay', 'uygulama'].includes(j.status) ? `<a class="card ex-mini" href="#/is/${j.id}/uygulama">
+      <div class="row-between"><h3>${icon('roller')}Uygulama</h3>${j.exec ? `<b>%${execProgress(j.exec)}</b>` : '<span class="btn btn-primary btn-sm">Başlat</span>'}</div>
+      ${j.exec ? `<div class="bar ex"><i style="width:${execProgress(j.exec)}%"></i></div><p class="muted small">${(() => { const A = execAlerts(j.exec); return [A.late && `${A.late} adım gecikmede`, A.mats && `${A.mats} malzeme termini yaklaşıyor`, A.nok && `${A.nok} kontrol uygunsuz`].filter(Boolean).join(' · ') || 'Her şey planlandığı gibi'; })()}</p>` : '<p class="muted small">Teklif onaylandı — iş programı, ekip yönlendirme, malzeme ve kontrol föyü için uygulamayı başlatın.</p>'}</a>` : ''}
     <div class="card fb-card" id="fbCard"></div>
     <div class="card">
       <div class="row-between"><h3>${icon('note')}Notlar ve iş geçmişi</h3><button class="btn btn-ghost btn-sm" data-note>${icon('plus')}Not ekle</button></div>
@@ -836,6 +842,15 @@ function tabFoto(tb) {
   $$('[data-up]', tb).forEach(i => i.onchange = async () => { await addPhotos(i.files, { tag: $('#ptag', tb).value }); tabFoto(tb); });
   $('#pf', tb).onclick = e => { const b = e.target.closest('.chip'); if (!b) return; sessionStorage.setItem('tb-ptag', b.dataset.v); tabFoto(tb); };
   $$('[data-ph]', tb).forEach(b => b.onclick = () => lightbox(b.dataset.ph, () => tabFoto(tb)));
+}
+
+/* ── Uygulama: iş programı, ekip, malzeme, kontrol föyü, günlük, hakediş ── */
+function tabUygulama(tb) {
+  renderExec(tb, S.job, {
+    settings: S.settings, save: () => { save(); const pl = $('.jh-act .pill'), s = statusOf(S.job.status); if (pl) { pl.textContent = s.t; pl.style.setProperty('--c', s.c); } },
+    saveSettings: () => S.be.saveSettings(S.settings).catch(e => toast(e.message, 'err')),
+    logEvt, addPhotos, hydratePhotos, lightbox, printDoc, docHeader, docFooter,
+  });
 }
 
 /* ── Teklif ── */

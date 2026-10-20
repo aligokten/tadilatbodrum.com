@@ -840,3 +840,64 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .fb-list{display:grid;gap:8px;margin-top:12px;max-height:50vh;overflow:auto}
 .fb-item{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm)}
 .fb-item p{margin:6px 0;color:var(--ink-2);font-size:14px}
+
+/* ── uygulama / iş takibi ── */
+.ex-tabs{display:flex;overflow-x:auto;margin-bottom:14px;max-width:100%}
+.ex-tabs button{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;position:relative}
+.ex-tabs .ic{width:16px;height:16px}
+.tbadge.warn{background:var(--orange);color:#fff}
+.ex-start{max-width:640px;margin:0 auto;text-align:center;align-items:center}
+.ex-start .grid2{width:100%;text-align:left}
+.ex-head{gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.ex-head p{flex:1;min-width:240px}
+.ex-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+.ex-kpis .kpi{gap:4px}.ex-kpis .kpi small{color:var(--muted);font-weight:600}.ex-kpis .kpi b{font-family:var(--fd);font-size:22px}
+.ex-kpis .bad{color:var(--orange-d);font-weight:600;font-size:13px}.ex-kpis span{font-size:13px}
+.ex-ring{align-items:center;justify-content:center}
+.ex-ring .ring-in{width:110px;height:110px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(closest-side,#fff 76%,transparent 77%),conic-gradient(var(--teal) calc(var(--p)*1%),var(--line-2) 0)}
+.ex-ring b{font-family:var(--fd);font-size:26px}.ex-ring small{color:var(--muted)}
+.gantt{display:grid;gap:6px}
+.g-row{display:grid;grid-template-columns:minmax(120px,30%) 1fr;gap:10px;align-items:center;font-size:13px}
+.g-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-track{position:relative;height:18px;background:var(--line-2);border-radius:9px}
+.g-bar{position:absolute;top:2px;bottom:2px;border-radius:7px;background:var(--c)}
+.g-bar.late{background:repeating-linear-gradient(45deg,var(--orange) 0 6px,#f59a6f 6px 12px)}
+.g-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.ex-list{display:grid;gap:10px}
+.ex-task{border-left:5px solid var(--c);gap:10px}
+.ex-task.late{box-shadow:0 0 0 1.5px var(--orange) inset,var(--sh)}
+.ex-row1{display:flex;gap:10px;align-items:center}
+.ex-n{width:28px;height:28px;border-radius:50%;background:var(--line-2);display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.ex-title{font-weight:700}
+.ex-st{max-width:170px}
+.ex-row2{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.ex-row2 label{font-size:12px;color:var(--muted)}
+.ex-crew{display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:1;min-width:220px}
+.ex-crew .lbl{font-size:12px;color:var(--muted)}
+.ex-crew select{max-width:180px}
+.chip.sm{height:30px;font-size:12.5px;cursor:pointer}
+.ex-act{flex-wrap:wrap;gap:6px;align-items:center}
+.ex-mats{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 6px;border-bottom:1px solid var(--line)}
+.tbl td{padding:5px 6px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.tbl .r{text-align:right}.tbl .nowrap{white-space:nowrap}
+.tbl .inp.sm{min-height:34px;padding:4px 8px}
+.tbl .num{width:84px;text-align:right}.tbl .unit{width:64px}
+.tbl tr.late td{background:#FDEDE5}
+.ex-chk{gap:6px}
+.chk-row{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line-2)}
+.chk-row .chk-note{grid-column:1/-1}
+.chk-row.s-ok .chk-t{color:#1F7A47}.chk-row.s-nok .chk-t{color:var(--orange-d);font-weight:600}.chk-row.s-na .chk-t{color:var(--muted);text-decoration:line-through}
+.chk-ph{width:40px;height:40px;object-fit:cover;border-radius:8px}
+.seg.sm button{padding:6px 10px;font-size:12.5px}
+.ex-diary{display:grid;gap:10px;margin-top:12px}
+.dy p{color:var(--ink-2)}
+.ex-mini{display:flex;flex-direction:column;gap:8px}
+.ex-mini b{font-family:var(--fd);font-size:22px}
+.bar.ex i{background:linear-gradient(90deg,var(--teal),#1F9D55)}
+@media (max-width:720px){
+  .chk-row{grid-template-columns:1fr auto}
+  .chk-row .seg{grid-column:1/-1}
+  .g-row{grid-template-columns:110px 1fr}
+}
