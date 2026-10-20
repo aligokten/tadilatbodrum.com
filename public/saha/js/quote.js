@@ -126,6 +126,9 @@ export function renderQuote(root, job, settings, save, ctx) {
           <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
           ${T.profit ? `<p class="muted small">Kalem fiyatları maliyet olarak girilir. ${q.profitMode === 'spread' ? 'Teklif çıktısında kâr birim fiyatlara dağıtılır; müşteri ayrı kâr satırı görmez.' : 'Teklif çıktısında "Genel giderler ve yüklenici kârı" ayrı satır olarak görünür.'} Net kâr (iskonto sonrası): <b>${fmtMoney(T.profit - T.disc)}</b></p>` : ''}
           <div class="col">
+            <label>Müşteriye gidecek teklif formu<select class="inp" data-q="format">
+              <option value="detayli" ${q.format !== 'ozet' ? 'selected' : ''}>Ayrıntılı — her kalemin birim fiyatı ve tutarı</option>
+              <option value="ozet" ${q.format === 'ozet' ? 'selected' : ''}>Özet — kalemler ve miktarlar, yalnızca toplam fiyat</option></select></label>
             <button class="btn btn-primary" data-act="print">${icon('print')}Teklifi yazdır / PDF</button>
             <button class="btn btn-ghost" data-act="wa">${icon('chat')}WhatsApp ile gönder</button>
             <button class="btn btn-ghost btn-sm danger-t" data-act="reset">${icon('trash')}Teklifi sil</button>
@@ -150,6 +153,7 @@ export function renderQuote(root, job, settings, save, ctx) {
   };
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
+    if (k === 'format') { q.format = e.target.value; save(); return; }
     if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
@@ -239,10 +243,12 @@ async function printQuote(job, settings, ctx) {
     if (urls.length) imgs = `<section class="p-imgs">${urls.map((u, i) => `<figure><img src="${u}"><figcaption>${esc(ph[i].caption || (ph[i].tag === 'render' ? 'Görselleştirme' : 'Rölöve'))}</figcaption></figure>`).join('')}</section>`;
   }
   let n = 0;
-  const k = priceK(q), spread = k !== 1;
+  const k = priceK(q), spread = k !== 1, brief = q.format === 'ozet';   // özet: kalem ve miktarlar, fiyat yok — yalnızca toplam
   const rows = CATEGORIES.map(cat => {
     const its = q.items.filter(i => i.cat === cat.k); if (!its.length) return '';
     const st = its.reduce((s, i) => s + i.qty * i.price * k, 0);
+    if (brief) return `<tr class="grp"><td colspan="4">${esc(cat.t)}</td></tr>` +
+      its.map(i => `<tr><td class="c">${++n}</td><td>${esc(i.desc).replace(/\n/g, '<br>')}</td><td class="r">${fmtNum(i.qty)}</td><td>${esc(i.unit)}</td></tr>`).join('');
     return `<tr class="grp"><td colspan="5">${esc(cat.t)}</td><td class="r">${fmtMoney(st)}</td></tr>` +
       its.map(i => `<tr><td class="c">${++n}</td><td>${esc(i.desc).replace(/\n/g, '<br>')}</td><td class="r">${fmtNum(i.qty)}</td><td>${esc(i.unit)}</td><td class="r">${fmtMoney(i.price * k)}</td><td class="r">${fmtMoney(i.qty * i.price * k)}</td></tr>`).join('');
   }).join('');
@@ -254,14 +260,17 @@ async function printQuote(job, settings, ctx) {
       <div><small>İş kodu</small><b>${esc(job.code)}</b>${esc(job.property?.type || '')}</div>
     </section>
     ${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}
-    <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th><th class="r">Birim fiyat</th><th class="r">Tutar</th></tr></thead><tbody>${rows}</tbody></table>
-    <section class="p-totals">
+    <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th>${brief ? '' : '<th class="r">Birim fiyat</th><th class="r">Tutar</th>'}</tr></thead><tbody>${rows}</tbody></table>
+    ${brief ? `<section class="p-totals">
+      <div class="tline grand"><span>Toplam teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
+      <div class="tline"><span>${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${T.disc ? ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır` : ''}</span><b></b></div>
+    </section>` : `<section class="p-totals">
       ${T.profit && !spread ? `<div class="tline"><span>İş kalemleri toplamı</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Genel giderler ve yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>${fmtMoney(T.profit)}</b></div>` : ''}
       <div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>
       ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
       ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : '<div class="tline"><span>KDV</span><b>Hariç</b></div>'}
       <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
-    </section>
+    </section>`}
     ${q.notes ? `<section class="p-notes"><h4>Notlar</h4><p>${esc(q.notes).replace(/\n/g, '<br>')}</p></section>` : ''}
     ${imgs}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}

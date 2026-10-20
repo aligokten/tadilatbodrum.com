@@ -9,10 +9,12 @@ import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, n
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
 import { mergeJob, assignInPlace } from './merge.js';
+import { dirLink } from './mappick.js';
+import { FEEDBACK_Q, STAR_Q, fbScore } from './feedbackq.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.19-3';
+export const APP_VERSION = '2026.10.20-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -286,6 +288,8 @@ function dashboard() {
       ${[['talep', 'Yeni talep', 'chat'], ['kesif', 'Keşifte', 'scan'], ['teklif', 'Teklif aşaması', 'file'], ['uygulama', 'Uygulamada', 'roller']].map(([k, t, ic]) => `
         <button class="stat" data-f="${k}"><span class="ic-badge" style="--c:${statusOf(k).c}">${icon(ic)}</span><b>${cnt(k)}</b><small>${t}</small></button>`).join('')}
       <div class="stat wide"><span class="ic-badge">${icon('file')}</span><b>${fmtMoney(pipeline).replace(',00', '')}</b><small>Bekleyen teklif hacmi</small></div>
+      ${(() => { const d = S.jobs.filter(j => j.feedback?.status === 'done'); if (!d.length) return ''; const avg = d.reduce((s, j) => s + fbScore(j.feedback.answers), 0) / d.length;
+        return `<button class="stat wide" data-reviews><span class="ic-badge" style="--c:#F7A21B">${icon('star')}</span><b>${fmtNum(avg, 1)} ★</b><small>Müşteri memnuniyeti · ${d.length} değerlendirme</small></button>`; })()}
     </section>
     ${upcoming.length ? `<section class="card upcoming"><h3>${icon('calendar')}Yaklaşan keşifler</h3>${upcoming.map(j => `
       <a href="#/is/${j.id}" class="up-row"><span class="up-date"><b>${new Date(j.kesifDate).getDate()}</b>${new Date(j.kesifDate).toLocaleDateString('tr-TR', { month: 'short' })}</span>
@@ -310,6 +314,8 @@ function dashboard() {
   $('#fl').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; sessionStorage.setItem('tb-filter', b.dataset.v); $$('#fl .chip').forEach(x => x.classList.toggle('on', x === b)); draw(); };
   $$('.stat[data-f]').forEach(b => b.onclick = () => { sessionStorage.setItem('tb-filter', b.dataset.f); dashboard(); });
   $('[data-new2]').onclick = newJobDialog;
+  const rv = $('[data-reviews]'); if (rv) rv.onclick = reviewsDialog;
+  syncFeedback(S.jobs.filter(j => j.feedback?.status === 'pending').slice(0, 12)).then(n => { if (n && location.hash.replace(/^#\/?/, '') === '') dashboard(); });
 }
 
 function jobCard(j) {
@@ -421,10 +427,16 @@ function tabGenel(tb) {
           <label>E-posta<input class="inp" type="email" data-f="customer.email"></label>
           <label>Bizi nereden buldu<input class="inp" data-f="customer.source" list="dl-src"></label>
           <label>Bölge<input class="inp" data-f="customer.district" list="dl-d"></label>
-          <label>Konum linki<div class="inp-btn"><input class="inp" data-f="customer.mapsUrl" placeholder="Google Maps"><button class="icon-btn" data-geo title="Şu anki konumu al">${icon('map')}</button></div></label>
         </div>
         <label>Adres<textarea class="inp" rows="2" data-f="customer.address"></textarea></label>
-        ${j.customer.mapsUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(j.customer.mapsUrl)}" target="_blank" rel="noopener">${icon('map')}Yol tarifi</a>` : ''}
+        <div class="geo-row">
+          ${j.customer.geo?.lat ? `<span class="geo-pin">${icon('map')}<span><b>Konum işaretli</b><small>${j.customer.geo.lat.toFixed(5)}, ${j.customer.geo.lng.toFixed(5)}</small></span></span>` : `<span class="muted small">${j.customer.mapsUrl ? 'Konum linki kayıtlı (eski kayıt). Haritadan işaretleyerek kesinleştirin.' : 'Konum henüz işaretlenmedi.'}</span>`}
+          <div class="row wrap">
+            <button class="btn btn-${j.customer.geo?.lat ? 'ghost' : 'primary'} btn-sm" data-geo>${icon('map')}${j.customer.geo?.lat ? 'Konumu düzelt' : 'Haritadan işaretle'}</button>
+            ${j.customer.geo?.lat || j.customer.mapsUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(j.customer.geo?.lat ? dirLink(j.customer.geo) : j.customer.mapsUrl)}" target="_blank" rel="noopener">${icon('chevR')}Yol tarifi</a>` : ''}
+            ${j.customer.geo?.lat ? `<button class="btn btn-ghost btn-sm" data-geoshare title="Konumu WhatsApp ile ekibe gönder">${icon('share')}Konumu gönder</button>` : ''}
+          </div>
+        </div>
         <datalist id="dl-d">${DISTRICTS.map(d => `<option value="${d}">`).join('')}</datalist>
         <datalist id="dl-src">${['Instagram', 'Google', 'Web sitesi', 'Tavsiye', 'Tabela', 'Eski müşteri'].map(d => `<option value="${d}">`).join('')}</datalist>
       </div>
@@ -445,6 +457,7 @@ function tabGenel(tb) {
         </div>
       </div>
     </div>
+    <div class="card fb-card" id="fbCard"></div>
     <div class="card">
       <div class="row-between"><h3>${icon('note')}Notlar ve iş geçmişi</h3><button class="btn btn-ghost btn-sm" data-note>${icon('plus')}Not ekle</button></div>
       <ul class="timeline">${j.log.slice(0, 30).map(l => `<li><time>${fmtDate(l.t, true)}</time><p>${esc(l.text)}</p></li>`).join('')}</ul>
@@ -457,13 +470,22 @@ function tabGenel(tb) {
     </div>`;
   bindFields(tb, j, p => { save(); if (p === 'customer.name') $('.jh-t h1').textContent = j.customer.name || 'İsimsiz müşteri'; });
   $$('[data-st]', tb).forEach(b => b.onclick = () => { j.status = b.dataset.st; logEvt(`Durum: ${statusOf(j.status).t}`); jobView('genel'); });
-  $('[data-geo]', tb).onclick = e => {
+  $('[data-geo]', tb).onclick = async e => {
     e.preventDefault();
-    navigator.geolocation?.getCurrentPosition(p => {
-      j.customer.mapsUrl = `https://maps.google.com/?q=${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}`;
-      save(); jobView('genel'); toast('Konum eklendi');
-    }, () => toast('Konum alınamadı', 'err'), { enableHighAccuracy: true, timeout: 10000 });
+    const { pickLocation, mapsLink } = await import('./mappick.js');
+    const c = j.customer, g = await pickLocation({ geo: c.geo, query: [c.address, c.district].filter(Boolean).join(', ') });
+    if (!g) return;
+    c.geo = { lat: g.lat, lng: g.lng, t: Date.now() };
+    c.mapsUrl = mapsLink(c.geo);
+    // adres boşsa haritadan gelen adresi öner
+    if (g.address) {
+      if (!c.address && (g.address.street || g.address.neighbourhood)) c.address = [g.address.neighbourhood, g.address.street].filter(Boolean).join(', ');
+      if (!c.district && g.address.district) c.district = g.address.district;
+    }
+    logEvt('Konum haritadan işaretlendi'); save(); jobView('genel'); toast('Konum kaydedildi');
   };
+  const gs = $('[data-geoshare]', tb);
+  if (gs) gs.onclick = () => { const c = j.customer; window.open(waLink('', `${c.name || j.code} — ${[c.district, c.address].filter(Boolean).join(', ')}\n${dirLink(c.geo)}`), '_blank'); };
   $('[data-note]', tb).onclick = async () => { const t = await promptDlg('Not ekle', '', 'Görüşme, karar, hatırlatma…'); if (t) { logEvt(t); jobView('genel'); } };
   $('[data-cancel]', tb).onclick = () => { j.status = j.status === 'iptal' ? 'talep' : 'iptal'; logEvt(j.status === 'iptal' ? 'İş iptal edildi' : 'İptal geri alındı'); jobView('genel'); };
   $('[data-del]', tb).onclick = async () => {
@@ -471,6 +493,7 @@ function tabGenel(tb) {
     await S.be.deleteJob(j); S.jobs = S.jobs.filter(x => x.id !== j.id); openJob(null); location.hash = '#/'; toast('İş silindi');
   };
   $('[data-report]', tb).onclick = printReport;
+  renderFeedback(j, $('#fbCard', tb));
   $('[data-video]', tb).onclick = async () => { const { openVideoReport } = await import('./video.js'); openVideoReport(j, S.settings, S.be); };
 }
 
@@ -1118,6 +1141,87 @@ async function shareDialog(j, dw, plan) {
   } });
 }
 
+/* ── iş sonu müşteri değerlendirmesi ──
+ * Bağlantı (/d/KİMLİK) müşteriye WhatsApp ile gönderilir; yanıt bulutta sites/…/feedback/{id}'ye yazılır,
+ * uygulama açıldığında işe (j.feedback) kopyalanır — her iş için kalıcı kayıt. */
+const fbUrl = id => `${location.origin}/d/${id}`;
+const starsTxt = v => '★★★★★'.slice(0, Math.round(v)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(v));
+async function syncFeedback(jobs) {
+  if (!S.be.getFeedback) return 0;
+  let n = 0;
+  for (const j of jobs) {
+    try {
+      const d = await S.be.getFeedback(j.feedback.id);
+      if (d?.status === 'done' && j.feedback.status !== 'done') {
+        Object.assign(j.feedback, { status: 'done', answers: d.answers || {}, doneAt: d.doneAt || Date.now() });
+        j.log.unshift({ t: Date.now(), text: `Müşteri değerlendirmesi geldi: ${fmtNum(fbScore(j.feedback.answers), 1)} ★` });
+        if (j === S.job) save(); else await S.be.saveJob(j, null).catch(() => {});
+        n++;
+      }
+    } catch { /* kural / bağlantı yok: sessiz */ }
+  }
+  return n;
+}
+function renderFeedback(j, el) {
+  if (!el) return;
+  const f = j.feedback, cloud = !!S.be.createFeedback;
+  if (f?.status === 'done') {
+    const a = f.answers || {}, sc = fbScore(a);
+    el.innerHTML = `<div class="row-between"><h3>${icon('star')}Müşteri değerlendirmesi</h3><span class="fb-big">${fmtNum(sc, 1)} <i>★</i></span></div>
+      <div class="fb-grid">${STAR_Q.map(q => `<div><span>${esc(q.t)}</span><b class="fb-st">${a[q.id] ? starsTxt(a[q.id]) : '—'}</b></div>`).join('')}
+        ${a.nps !== undefined ? `<div><span>Tavsiye (0–10)</span><b>${a.nps}</b></div>` : ''}</div>
+      ${a.yorum ? `<blockquote class="fb-quote">“${esc(a.yorum)}”</blockquote>` : ''}
+      <p class="muted small">${fmtDate(f.doneAt, true)} · ${a.izin ? 'Web sitesinde yayınlanmasına izin verdi' : 'Yayın izni yok'}</p>`;
+    return;
+  }
+  if (f?.status === 'pending') {
+    el.innerHTML = `<div class="row-between"><h3>${icon('star')}Müşteri değerlendirmesi</h3><span class="pill" style="--c:#F2A33A">Yanıt bekleniyor</span></div>
+      <p class="muted small">Bağlantı ${fmtDate(f.t, true)} tarihinde oluşturuldu: <a href="${esc(fbUrl(f.id))}" target="_blank" rel="noopener">${esc(fbUrl(f.id).replace(/^https?:\/\//, ''))}</a></p>
+      <div class="row wrap"><a class="btn btn-primary btn-sm" href="${esc(waLink(j.customer.phone, fbMsg(j)))}" target="_blank" rel="noopener">${icon('chat')}WhatsApp'ta tekrar gönder</a>
+        <button class="btn btn-ghost btn-sm" data-fb="check">${icon('rotate')}Yanıtı kontrol et</button>
+        <button class="btn btn-ghost btn-sm danger-t" data-fb="cancel">${icon('trash')}İptal</button></div>`;
+  } else {
+    el.innerHTML = `<h3>${icon('star')}Müşteri değerlendirmesi</h3>
+      <p class="muted small">İş bitince müşteriye bir dakikalık memnuniyet anketi gönderin: genel memnuniyet, işçilik, takvime uyum, temizlik, iletişim, fiyat/performans, tavsiye puanı ve yorum. Yanıtlar bu işe kaydedilir.</p>
+      ${cloud ? `<div class="row"><button class="btn ${j.status === 'teslim' ? 'btn-primary' : 'btn-ghost'} btn-sm" data-fb="new">${icon('star')}Değerlendirme linki gönder</button></div>` : '<p class="warn small">Değerlendirme anketi bulut modunda çalışır.</p>'}`;
+  }
+  el.onclick = async e => {
+    const a = e.target.closest('[data-fb]')?.dataset.fb; if (!a) return;
+    if (a === 'new') {
+      const id = (await import('./share.js')).newShareId(10);
+      const rec = { status: 'pending', t: Date.now(), name: (j.customer.name || '').split(' ')[0], title: j.code, reviewUrl: S.settings.company?.reviewUrl || '' };
+      try { await S.be.createFeedback(id, rec); }
+      catch (err) { return toast(err.code === 'permission-denied' ? 'Firebase kuralı eksik — DEPLOY.md "5e" adımını uygulayın' : 'Oluşturulamadı: ' + (err.code || err.message), 'err'); }
+      j.feedback = { id, status: 'pending', t: rec.t }; logEvt('Değerlendirme anketi gönderildi'); save();
+      window.open(waLink(j.customer.phone, fbMsg(j)), '_blank');
+      renderFeedback(j, el);
+    } else if (a === 'check') {
+      const n = await syncFeedback([j]); if (n) { save(); renderFeedback(j, el); toast('Değerlendirme alındı'); } else toast('Henüz yanıt yok');
+    } else if (a === 'cancel') {
+      if (!await confirmDlg('Değerlendirme bağlantısı iptal edilsin mi? Müşteri bağlantıyı açamaz.', 'İptal et')) return;
+      await S.be.deleteFeedback(j.feedback.id).catch(() => {}); delete j.feedback; save(); renderFeedback(j, el);
+    }
+  };
+  if (f?.status === 'pending' && !renderFeedback.busy) { renderFeedback.busy = true; syncFeedback([j]).then(n => { renderFeedback.busy = false; if (n && el.isConnected) { save(); renderFeedback(j, el); toast('Müşteri değerlendirmesi geldi'); } }); }
+}
+const fbMsg = j => `Merhaba${j.customer.name ? ' ' + j.customer.name.split(' ')[0] : ''}, TadilatBodrum.com olarak işinizi tamamladık. Bizimle çalıştığınız için teşekkür ederiz! Deneyiminizi 1 dakikada değerlendirebilir misiniz?\n${fbUrl(j.feedback.id)}`;
+function reviewsDialog() {
+  const list = S.jobs.filter(j => j.feedback?.status === 'done').sort((a, b) => (b.feedback.doneAt || 0) - (a.feedback.doneAt || 0));
+  const avg = k => { const v = list.map(j => +j.feedback.answers?.[k]).filter(x => x >= 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
+  const nps = (() => { const v = list.map(j => j.feedback.answers?.nps).filter(x => x !== undefined && x !== null); if (!v.length) return null; return Math.round(100 * (v.filter(x => x >= 9).length - v.filter(x => x <= 6).length) / v.length); })();
+  modal({ title: 'Müşteri değerlendirmeleri', wide: true, body: `
+    <div class="fb-grid">${STAR_Q.map(q => `<div><span>${esc(q.t)}</span><b>${fmtNum(avg(q.id), 1)} ★</b></div>`).join('')}${nps !== null ? `<div><span>NPS (tavsiye skoru)</span><b>${nps}</b></div>` : ''}</div>
+    <div class="fb-list">${list.map(j => { const a = j.feedback.answers || {}; return `<a class="fb-item" href="#/is/${j.id}"><div class="row-between"><b>${esc(j.customer.name || j.code)}</b><span>${fmtNum(fbScore(a), 1)} ★</span></div>
+      ${a.yorum ? `<p>“${esc(a.yorum)}”</p>` : ''}<small class="muted">${esc(j.code)} · ${fmtDate(j.feedback.doneAt)}${a.izin ? ' · yayın izni var' : ''}</small></a>`; }).join('')}</div>`,
+    actions: [{ k: 'csv', t: 'CSV indir', icon: 'download' }, { k: 'ok', t: 'Kapat', cls: 'btn-primary' }] }).then(r => {
+    if (r?.k !== 'csv') return;
+    const head = ['İş kodu', 'Müşteri', 'Tarih', ...FEEDBACK_Q.map(q => q.t)];
+    const rows = list.map(j => [j.code, j.customer.name, new Date(j.feedback.doneAt || 0).toLocaleDateString('tr-TR'), ...FEEDBACK_Q.map(q => { const v = j.feedback.answers?.[q.id]; return q.type === 'check' ? (v ? 'Evet' : 'Hayır') : v ?? ''; })]);
+    const csv = '\ufeff' + [head, ...rows].map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
+    downloadBlob(new Blob([csv], { type: 'text/csv' }), 'degerlendirmeler.csv');
+  });
+}
+
 async function ensure3d() {
   if (S.p3) { S.p3.setPlan(S.editor.plan); return S.p3; }
   const { Plan3D } = await import('./plan3d.js');
@@ -1234,11 +1338,11 @@ async function printReport() {
     ${docHeader(S.settings, 'Keşif Raporu', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Keşif <b>${fmtDate(j.kesifDate || j.createdAt)}</b></span><span>Rapor <b>${fmtDate(Date.now())}</b></span></div>`)}
     <section class="p-cust">
       <div><small>Müşteri</small><b>${esc(j.customer.name)}</b>${esc(j.customer.phone)}</div>
-      <div><small>Adres</small><b>${esc(j.customer.district)}</b>${esc(j.customer.address)}</div>
+      <div><small>Adres</small><b>${esc(j.customer.district)}</b>${esc(j.customer.address)}${j.customer.geo?.lat ? `<br><a href="${esc(dirLink(j.customer.geo))}">Haritada konum (${j.customer.geo.lat.toFixed(5)}, ${j.customer.geo.lng.toFixed(5)})</a>` : ''}</div>
       <div><small>Sorumlu</small><b>${esc(j.assigned || '—')}</b>${esc(statusOf(j.status).t)}</div>
     </section>
     ${j.summary ? `<p class="p-intro">${esc(j.summary)}</p>` : ''}
-    ${drawingsOf(j).filter(d => d.plan?.walls?.length).map(d => `<section><h3>${d.main ? 'Rölöve (mevcut durum)' : esc(d.name)} ${d.main ? '' : `<small>(${kindOf(d.kind).t})</small>`}</h3><div class="p-plan"><img src="${planImageUrl(d.plan, 900, 520)}" alt="${esc(d.name)}"></div></section>`).join('')}
+    ${drawingsOf(j).filter(d => hasContent(d.plan)).map(d => `<section><h3>${d.main ? 'Rölöve (mevcut durum)' : esc(d.name)} ${d.main ? '' : `<small>(${kindOf(d.kind).t})</small>`}</h3><div class="p-plan"><img src="${planImageUrl(d.plan, 900, 520)}" alt="${esc(d.name)}"></div></section>`).join('')}
     ${met.rooms.length ? `<section><h3>Mahal metrajı <small>(${esc(met.src)})</small></h3><table class="p-table"><thead><tr><th>Mahal</th><th class="r">Zemin m²</th><th class="r">Net duvar m²</th><th class="r">Çevre m</th></tr></thead><tbody>
       ${met.rooms.map(r => `<tr><td>${esc(r.name)}</td><td class="r">${fmtNum(r.area)}</td><td class="r">${fmtNum(r.wallArea)}</td><td class="r">${fmtNum(r.perim)}</td></tr>`).join('')}
       <tr class="grp"><td>Toplam</td><td class="r">${fmtNum(met.floor)}</td><td class="r">${fmtNum(met.wall)}</td><td class="r">${fmtNum(met.perim)}</td></tr></tbody></table></section>` : ''}
@@ -1266,6 +1370,7 @@ function settingsView() {
           <label>Telefon<input class="inp" data-f="company.phone"></label>
           <label>E-posta<input class="inp" data-f="company.email"></label>
           <label>Web<input class="inp" data-f="company.web"></label>
+          <label>Google yorum bağlantısı<input class="inp" data-f="company.reviewUrl" placeholder="https://g.page/r/…/review"></label>
           <label>Vergi no<input class="inp" data-f="company.taxNo"></label>
           <label>IBAN<input class="inp" data-f="company.iban"></label>
         </div>

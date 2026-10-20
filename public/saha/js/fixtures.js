@@ -65,7 +65,8 @@ export function fixtureCounts(plan) {
 export function fixtureSvg(it, px) {
   const w = it.w, d = it.d, c = it.color || fixtureOf(it.type)?.c || E;
   const sw = px(1.3), y0 = -d / 2, m = Math.min(w, d);
-  const S = (s, extra = '') => `<path d="${s}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
+  // extra içinde stroke / stroke-width verilirse varsayılanı yazma (yinelenen öznitelik geçersiz SVG olur → raporda plan görünmez)
+  const S = (s, extra = '') => `<path d="${s}" fill="none"${/(^|\s)stroke=/.test(extra) ? '' : ` stroke="${c}"`}${/stroke-width=/.test(extra) ? '' : ` stroke-width="${sw}"`} stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
   const circ = (x, y, r, fill = '#fff', col = c) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${col}" stroke-width="${sw}"/>`;
   const txt = (s, x = 0, y = 0, fs = m * 0.42, col = c) => `<text x="${x}" y="${y}" font-size="${fs}" fill="${col}" text-anchor="middle" dominant-baseline="central" font-weight="700" font-family="Inter,system-ui,sans-serif"${it.rot > 90 && it.rot <= 270 ? ` transform="rotate(180 ${x} ${y})"` : ''}>${s}</text>`;
   const rect = (x, y, ww, hh, fill = '#fff') => `<rect x="${x}" y="${y}" width="${ww}" height="${hh}" rx="${Math.min(ww, hh) * 0.12}" fill="${fill}" stroke="${c}" stroke-width="${sw}"/>`;
