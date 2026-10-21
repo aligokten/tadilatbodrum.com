@@ -1,7 +1,7 @@
 /* ═══ TadilatBodrum Saha — tadilat koordinasyon uygulaması ═══
  * Rota (hash): #/  ·  #/is/:id/:sekme  ·  #/is/:id/plan  ·  #/ayarlar
  */
-import { openLocal, openCloud, MODE_KEY, newJob, uid, compressImage } from './store.js';
+import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } from './store.js';
 import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
@@ -13,10 +13,11 @@ import { mergeJob, assignInPlace } from './merge.js';
 import { dirLink } from './mappick.js';
 import { FEEDBACK_Q, STAR_Q, fbScore } from './feedbackq.js';
 import { renderExec, execProgress, execAlerts } from './exec.js';
+import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.21-6';
+export const APP_VERSION = '2026.10.21-7';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -66,6 +67,7 @@ async function boot() {
   }
   const mode = localStorage.getItem(MODE_KEY);
   if (mode === 'local') return start(await openLocal());
+  if (mode === DEMO_MODE) return startDemo();
   app.innerHTML = splash('Bağlanılıyor…');
   try {
     const be = await openCloud();
@@ -84,9 +86,10 @@ function loginView(be, err = '') {
       <img src="assets/logo.png" alt="TadilatBodrum.com" class="login-logo">
       <h1>Saha <span class="grad">Koordinasyon</span></h1>
       <p class="muted">Keşif, rölöve, anket ve teklif — tek noktadan.</p>
-      ${be ? `<label>Kullanıcı adı<input class="inp" name="u" autocomplete="username" required placeholder="admin"></label>
+      ${be ? '' : `<p class="warn">${icon('alert')} Buluta bağlanılamadı${err ? ': ' + esc(err) : ''}. İnternet yoksa yerel modda çalışabilirsiniz.</p>`}
+      <label>Kullanıcı adı<input class="inp" name="u" autocomplete="username" required placeholder="admin"></label>
       <label>Şifre<input class="inp" type="password" name="p" autocomplete="current-password" required></label>
-      <button class="btn btn-primary btn-lg">${icon('cloud')}Giriş yap</button>` : `<p class="warn">${icon('alert')} Buluta bağlanılamadı${err ? ': ' + esc(err) : ''}. İnternet yoksa yerel modda çalışabilirsiniz.</p>`}
+      <button class="btn btn-primary btn-lg">${icon('cloud')}Giriş yap</button>
       <p class="form-err" hidden></p>
       <div class="or"><span>veya</span></div>
       <button type="button" class="btn btn-ghost" data-local>${icon('device')}Bu cihazda yerel çalış</button>
@@ -96,11 +99,23 @@ function loginView(be, err = '') {
   f.onsubmit = async e => {
     e.preventDefault();
     const btn = $('button.btn-primary', f); btn.disabled = true;
-    try { await be.signIn(f.u.value.trim(), f.p.value); localStorage.setItem(MODE_KEY, 'cloud'); start(be); }
+    // demo hesabı: bulut yerine ayrı, yalnızca bu cihazdaki demo veritabanı
+    if (f.u.value.trim().toLocaleLowerCase('tr') === DEMO_USER && f.p.value === DEMO_PASS) { localStorage.setItem(MODE_KEY, DEMO_MODE); return startDemo(); }
+    try { if (!be) throw new Error('offline'); await be.signIn(f.u.value.trim(), f.p.value); localStorage.setItem(MODE_KEY, 'cloud'); start(be); }
     catch { const er = $('.form-err', f); er.hidden = false; er.textContent = 'Kullanıcı adı veya şifre hatalı.'; btn.disabled = false; }
   };
   $('[data-local]', f).onclick = async () => { localStorage.setItem(MODE_KEY, 'local'); start(await openLocal()); };
 }
+
+/* demo: ilk girişte (ya da sıfırlamada) örnek işler ve varsayılan ayarlar */
+async function seedDemo(be, reset = false) {
+  if (reset) { for (const j of await be.listJobs()) await be.deleteJob(j); await be.saveSettings(structuredClone(DEFAULT_SETTINGS)); }
+  if (reset || !(await be.listJobs()).length) {
+    const st = await be.getSettings().catch(() => structuredClone(DEFAULT_SETTINGS));
+    for (const j of demoJobs(st)) await be.saveJob(j);
+  }
+}
+async function startDemo() { const be = await openDemo(); await seedDemo(be); return start(be); }
 
 async function start(be) {
   S.be = be;
@@ -133,9 +148,10 @@ function shell() {
         <div class="mode">${icon(S.be.kind === 'cloud' ? 'cloud' : 'device')}<span>${esc(S.be.label)}</span></div>
         <span class="save-state" id="saveState"></span>
         <span class="app-ver">Sürüm ${APP_VERSION}</span>
-        <button data-logout>${icon('logout')}<span>${S.be.kind === 'cloud' ? 'Çıkış' : 'Mod değiştir'}</span></button>
+        <button data-logout>${icon('logout')}<span>${S.be.kind === 'cloud' ? 'Çıkış' : S.be.demo ? 'Demodan çık' : 'Mod değiştir'}</span></button>
       </div>
     </aside>
+    ${S.be.demo ? `<div class="demo-bar">${icon('play')}<b>DEMO</b><span>Örnek verilerle deneme hesabı · kayıtlar yalnızca bu cihazda</span></div>` : ''}
     <main id="view"></main>
     <nav class="bottom-nav">
       <a href="#/" data-nav="home">${icon('home')}<span>İşler</span></a>
@@ -803,24 +819,7 @@ function tabRolove(tb) {
   $('[data-up]', tb).onchange = async e => { await addPhotos(e.target.files, { tag: 'rolove' }); tabRolove(tb); };
   $$('[data-ph]', tb).forEach(b => b.onclick = () => lightbox(b.dataset.ph, () => tabRolove(tb)));
   $('[data-tpl]', tb)?.addEventListener('click', () => {
-    const p = emptyPlan();
-    const salon = rectRoom(p, 0, 0, 520, 420, 'Salon');
-    const mutfak = rectRoom(p, 520 + 15, 0, 300, 420, 'Mutfak');
-    const yatak = rectRoom(p, 0, 420 + 15, 380, 360, 'Yatak Odası');
-    const banyo = rectRoom(p, 380 + 15, 420 + 15, 230, 260, 'Banyo');
-    mutfak.floor = 'seramik'; banyo.floor = 'mermer'; banyo.wallColor = '#DDE4E4'; salon.floor = 'parke';
-    const w = id => p.walls.find(x => x.id === id);
-    const op = (wid, type, pos, wd, hh, sill) => wid && p.openings.push({ id: uid('o'), wallId: wid, type, pos, w: wd, h: hh, sill, flip: false, side: 1 });
-    op(salon.walls[0], 'window', 260, 180, 150, 80); op(salon.walls[3], 'door', 200, 100, 215, 0);
-    op(mutfak.walls[0], 'window', 150, 120, 120, 100); op(mutfak.walls[3] || salon.walls[1], 'gap', 210, 120, 220, 0);
-    op(yatak.walls[3], 'window', 180, 140, 140, 90); op(yatak.walls[0] || salon.walls[2], 'door', 280, 90, 210, 0);
-    op(banyo.walls[0] || yatak.walls[1], 'door', 120, 80, 210, 0); op(banyo.walls[1], 'window', 130, 60, 60, 150);
-    const it = (type, x, y, rot = 0, wd, d) => { const f = { koltuk: [85, 85, 85, '#C7A27A'], kanepe: [220, 90, 85, '#9AA3AE'], sehpa: [110, 60, 40, '#6E5341'], tv: [180, 45, 50, '#2E3135'], yatak: [160, 200, 50, '#ECE8E1'], gardirop: [200, 60, 240, '#F2F0EC'], tezgah: [300, 62, 90, '#F4F4F2'], ada: [180, 90, 90, '#22B8C8'], buzdolabi: [70, 70, 190, '#D9DCDF'], klozet: [38, 60, 40, '#FFFFFF'], lavabo: [80, 48, 85, '#FFFFFF'], dus: [90, 90, 5, '#F5F5F5'], bitki: [50, 50, 120, '#4F8A4B'], masa: [180, 90, 75, '#8A6A4F'] }[type]; p.items.push({ id: uid('i'), type, label: type, x, y, w: wd || f[0], d: d || f[1], h: f[2], z: 0, rot, color: f[3] }); };
-    it('kanepe', 260, 340, 180); it('sehpa', 260, 270); it('tv', 260, 25); it('bitki', 480, 380); it('koltuk', 75, 290, 90);
-    it('tezgah', 535 + 31, 210, 270, 300); it('ada', 535 + 185, 250, 90); it('buzdolabi', 535 + 260, 40);
-    it('yatak', 190, 435 + 260, 180); it('gardirop', 190, 435 + 31, 0);
-    it('klozet', 395 + 30, 435 + 230, 180); it('lavabo', 395 + 150, 435 + 236, 180); it('dus', 395 + 185, 435 + 50);
-    p.items.forEach(x => { x.label = { koltuk: 'Berjer', kanepe: 'Kanepe', sehpa: 'Sehpa', tv: 'TV', bitki: 'Bitki', masa: 'Masa', tezgah: 'Tezgah', ada: 'Ada', buzdolabi: 'Buzdolabı', yatak: 'Yatak', gardirop: 'Gardırop', klozet: 'WC', lavabo: 'Lavabo', dus: 'Duş' }[x.type]; });
+    const p = samplePlan();
     j.plan = p; save(); location.hash = `#/is/${j.id}/plan`;
   });
 }
@@ -1482,9 +1481,9 @@ function settingsView() {
     <div class="grid-2">
       <div class="card">
         <h3>${icon(S.be.kind === 'cloud' ? 'cloud' : 'device')}Çalışma modu: ${esc(S.be.label)}</h3>
-        <p class="muted small">${S.be.kind === 'cloud' ? 'Veriler Firebase\'de saklanır, tüm ekip aynı kayıtları görür. İnternet kesildiğinde değişiklikler cihazda bekletilir ve bağlantı gelince eşitlenir.' : 'Veriler yalnızca bu cihazda (tarayıcı veritabanı) saklanır. Düzenli yedek alın veya buluta geçin.'}</p>
+        <p class="muted small">${S.be.demo ? 'Demo hesabındasınız: bulut ve gerçek müşteri kayıtları kullanılmaz. Örnek işler ve yaptığınız değişiklikler yalnızca bu cihazda, ayrı bir demo veritabanında saklanır.' : S.be.kind === 'cloud' ? 'Veriler Firebase\'de saklanır, tüm ekip aynı kayıtları görür. İnternet kesildiğinde değişiklikler cihazda bekletilir ve bağlantı gelince eşitlenir.' : 'Veriler yalnızca bu cihazda (tarayıcı veritabanı) saklanır. Düzenli yedek alın veya buluta geçin.'}</p>
         <div class="row wrap">
-          ${S.be.kind === 'local' ? `<button class="btn btn-primary btn-sm" data-tocloud>${icon('cloud')}Buluta giriş yap ve aktar</button>` : `<button class="btn btn-ghost btn-sm" data-fromlocal>${icon('upload')}Bu cihazdaki yerel işleri buluta aktar</button>`}
+          ${S.be.demo ? `<button class="btn btn-ghost btn-sm" data-demoreset>${icon('rotate')}Demo verilerini sıfırla</button>` : S.be.kind === 'local' ? `<button class="btn btn-primary btn-sm" data-tocloud>${icon('cloud')}Buluta giriş yap ve aktar</button>` : `<button class="btn btn-ghost btn-sm" data-fromlocal>${icon('upload')}Bu cihazdaki yerel işleri buluta aktar</button>`}
         </div>
       </div>
       <div class="card">
@@ -1539,6 +1538,10 @@ function settingsView() {
       S.jobs = await S.be.listJobs(); toast(`${d.jobs.length} kayıt yüklendi`);
     } catch (er) { toast(er.message, 'err'); }
   };
+  $('[data-demoreset]')?.addEventListener('click', async () => {
+    if (!await confirmDlg('Demo hesabındaki tüm işler silinip örnek işler yeniden oluşturulacak.', 'Sıfırla')) return;
+    await flushSave(); await seedDemo(S.be, true); location.hash = ''; location.reload();
+  });
   $('[data-tocloud]')?.addEventListener('click', async () => {
     try {
       const be = await openCloud();
