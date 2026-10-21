@@ -8,7 +8,7 @@ import { V, wallLen, wallDir, polyCentroid, pointInPoly } from './plan-geom.js';
 import { floorTexture } from './textures.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
-import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves } from './openings.js';
+import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
 
 let THREE, OrbitControls, RoomEnvironment;
 async function loadThree() {
@@ -258,7 +258,7 @@ export class Plan3D {
         glazed(X(a), X(b), sy0, sy1, z, open ? 0.055 : 0.03, open ? 0.06 : 0.04, fr, wu.frost);
         if (wm !== 'surme' && a > 0) box(0.02, hgt, D, X(a), y0 + hgt / 2, 0, fr);
         if (open && wm !== 'sabit') {
-          const hx = wm === 'vasistas' ? (X(a) + X(b)) / 2 : (a === 0 && !(wm === 'tek' && o.flip) ? X(b) - 0.06 : X(a) + 0.06);
+          const hx = wm === 'vasistas' ? (X(a) + X(b)) / 2 : (winHingeAtStart(o, a) ? X(b) - 0.06 : X(a) + 0.06);
           handle(hx, wm === 'vasistas' ? sy1 - 0.08 : sy0 + (sy1 - sy0) * 0.5, sd * 0.05, wm !== 'vasistas');
         }
       });

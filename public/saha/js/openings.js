@@ -20,8 +20,9 @@ export const DOOR_USES = [
 ];
 export const WIN_MODELS = [
   { k: 'tek',      t: 'Tek kanat açılır' },
+  { k: 'tekacvas', t: 'Tek kanat açılır + vasistas (çift açılım)' },
   { k: 'cift',     t: 'Çift kanat açılır' },
-  { k: 'acvas',    t: 'Açılır + vasistas (çift açılım)' },
+  { k: 'acvas',    t: 'Çift kanat açılır + vasistas (çift açılım)' },
   { k: 'vasistas', t: 'Vasistas (üstten devrilir)' },
   { k: 'uclu',     t: 'Üç bölmeli (orta sabit)' },
   { k: 'surme',    t: 'Sürme (kaydırmalı)' },
@@ -48,6 +49,11 @@ export const frameColor = o => o.fc || (o.type === 'door' ? doorUse(o).fc : '#F4
 export const leafColor = o => o.lc || doorUse(o).lc;
 export const modelName = o => o.type === 'door' ? pick(DOOR_MODELS, doorModel(o)).t : o.type === 'window' ? pick(WIN_MODELS, winModel(o)).t : 'Boşluk';
 // pencere dış korkuluğu: açıklıkta elle seçildiyse o, yoksa kullanım varsayılanı
+// tek kanatlı modeller (menteşe yönü çevrilebilir) ve vasistas (üstten devrilme) açılımı olanlar
+export const winSingle = o => ['tek', 'tekacvas'].includes(winModel(o));
+export const winTilt = o => ['vasistas', 'acvas', 'tekacvas'].includes(winModel(o));
+/* kanadın menteşesi başlangıç (x0) tarafında mı */
+export const winHingeAtStart = (o, x0) => x0 === 0 && !(winSingle(o) && o.flip);
 export const winRail = o => o.type === 'window' && (o.rail ?? !!winUse(o).rail);
 
 /* çizilen korkuluk (balkon, teras, merdiven boşluğu…) türleri */
@@ -79,7 +85,7 @@ export function applyUse(o, k, wallL = Infinity) {
 /* pencere kanat düzeni: [x0, x1] (0..1), açılır mı */
 export function sashes(o) {
   switch (winModel(o)) {
-    case 'tek': case 'vasistas': return [[0, 1, 1]];
+    case 'tek': case 'tekacvas': case 'vasistas': return [[0, 1, 1]];
     case 'cift': case 'acvas': return [[0, 0.5, 1], [0.5, 1, 1]];
     case 'uclu': return [[0, 1 / 3, 1], [1 / 3, 2 / 3, 0], [2 / 3, 1, 1]];
     case 'surme': return [[0, 0.54, 1], [0.46, 1, 1]];

@@ -3,7 +3,7 @@
  * pencere iç taraftan, kapı açıldığı taraftan görünür. Açılım sembolü: kesik çizgili üçgenin tepesi kol (açılan) tarafını gösterir.
  */
 import { V, wallDir, wallNormal, pointInPoly } from './plan-geom.js';
-import { doorModel, doorUse, winModel, winUse, winRail, sashes, leaves, frameColor, leafColor, modelName, useName, FRAME_COLORS, LEAF_COLORS } from './openings.js';
+import { doorModel, doorUse, winModel, winUse, winRail, winHingeAtStart, sashes, leaves, frameColor, leafColor, modelName, useName, FRAME_COLORS, LEAF_COLORS } from './openings.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n, d = 2) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: d });
@@ -27,6 +27,7 @@ function opening(o, mir) {
   if (o.type === 'window') {
     const m = winModel(o);
     if (m === 'tek') return `Menteşe ${side(o.flip ? 1 : 0)}`;
+    if (m === 'tekacvas') return `Menteşe ${side(o.flip ? 1 : 0)} + vasistas`;
     return { cift: 'Ortadan açılır', acvas: 'Ortadan açılır + vasistas', vasistas: 'Üstten devrilir', uclu: 'Yan kanatlar açılır, orta sabit', surme: 'Sürme', sabit: 'Açılmaz' }[m] || '';
   }
   return '—';
@@ -106,9 +107,9 @@ export function elevationSvg(o, { mir = false, gap = 0, code = '' } = {}) {
         rect(ia, ja, ib - ia, jb - ja, glass, ink, 0.8);
         if (!op) { text((ia + ib) / 2, (ja + jb) / 2 + 4, 'SABİT', { size: 9, c: mut }); continue; }
         if (m === 'vasistas') { tri(ia, ib, ja, jb, 'b'); continue; }
-        const atStart = f0 === 0 && !(m === 'tek' && o.flip), hf = atStart ? f0 : f1;
+        const hf = winHingeAtStart(o, f0) ? f0 : f1;
         tri(ia, ib, ja, jb, F(hf) < 0.5 ? 'l' : 'r');
-        if (m === 'acvas') tri(ia, ib, ja, jb, 'b');
+        if (m === 'acvas' || m === 'tekacvas') tri(ia, ib, ja, jb, 'b');
         const hx = F(hf) < 0.5 ? ib - 4 : ia + 4; rect(hx - 1.5, (ja + jb) / 2 - 8, 3, 16, ink, 'none', 0);   // kol
       }
     }
