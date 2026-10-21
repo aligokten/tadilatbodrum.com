@@ -12,10 +12,10 @@ import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as 
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline,
+  offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef,
 } from './plan-geom.js';
 
-const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
+const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
   .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
   .rname{font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
 
@@ -344,7 +344,8 @@ export class PlanEditor {
     // seçili nesnenin tutamaçları
     const so = this.obj(this.sel);
     if (so && this.sel.kind === 'wall') {
-      for (const k of ['a', 'b']) if (V.dist(p, so[k]) < 12 / this.s) return { kind: 'wall', id: so.id, handle: k };
+      const rf = wallRef(so, this.plan.meta.wallT, this.plan);
+      for (const k of ['a', 'b']) if (V.dist(p, rf[k]) < 12 / this.s) return { kind: 'wall', id: so.id, handle: k };
     }
     if (so && this.sel.kind === 'rail') {
       for (const k of ['a', 'b']) if (V.dist(p, so[k]) < 12 / this.s) return { kind: 'rail', id: so.id, handle: k };
@@ -623,7 +624,10 @@ export class PlanEditor {
       const q = offsetOpen(c.pts, off, chainSide(c.pts, c.flip));
       walls.forEach((w, i) => { w.a = q[i]; w.b = q[i + 1]; });
     }
-    walls.forEach(w => { w.t = this.plan.meta.wallT; ['a', 'b'].forEach(k => { w[k] = { x: +w[k].x.toFixed(2), y: +w[k].y.toFixed(2) }; }); });
+    walls.forEach((w, i) => {
+      w.t = this.plan.meta.wallT; ['a', 'b'].forEach(k => { w[k] = { x: +w[k].x.toFixed(2), y: +w[k].y.toFixed(2) }; });
+      w.face = V.dot(V.sub(c.pts[i], w.a), wallNormal(w)) >= 0 ? 1 : -1;   // tutamaçlar işaretlenen yüz noktalarında kalsın
+    });
   }
 
   finishChain() {
@@ -659,9 +663,11 @@ export class PlanEditor {
     const sd = { x: this.snapLen(dRaw.x), y: this.snapLen(dRaw.y) };
     if (ht.kind === 'wall') {
       if (ht.handle) {
-        const other = ht.handle === 'a' ? o.b : o.a;
-        const np = this.snapPt(wp, other, o.id);
-        this.endsAt(o[ht.handle]).forEach(([w, k]) => { w[k] = { ...np }; });
+        // tutamaç çizim çizgisinde (yüz ya da eksen); eksen aynı ofsetle izler
+        const rf = wallRef(o, this.plan.meta.wallT, this.plan), off = V.sub(o[ht.handle], rf[ht.handle]);
+        const other = ht.handle === 'a' ? rf.b : rf.a;
+        const np = V.add(this.snapPt(wp, other, o.id), off);
+        this.endsAt(o[ht.handle]).forEach(([w, k]) => { w[k] = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) }; });
         this.preview = null;
       } else {
         const n = wallNormal(o), k = this.snapLen(V.dot(dRaw, n)), sh = V.mul(n, k);
@@ -1107,7 +1113,10 @@ export class PlanEditor {
       o += `<polygon class="room ${live && this.sel?.id === r.id ? 'sel' : ''}" points="${r.pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="${f.c}" fill-opacity="0.28"/>`;
     }
     // duvarlar
-    for (const w of P.walls) o += `<line class="wall" x1="${w.a.x}" y1="${w.a.y}" x2="${w.b.x}" y2="${w.b.y}" stroke-width="${w.t || meta.wallT}"/>`;
+    for (const w of P.walls) {   // uçlar: ortak köşede yarım kalınlık uzar, serbest uçta tam noktada biter
+      const e = wallExt(P, w), u = wallDir(w), A = V.sub(w.a, V.mul(u, e.a)), B = V.add(w.b, V.mul(u, e.b));
+      o += `<line class="wall" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${w.t || meta.wallT}"/>`;
+    }
     // açıklıklar
     for (const op of P.openings) {
       const w = P.walls.find(x => x.id === op.wallId); if (!w) continue;
@@ -1217,9 +1226,10 @@ export class PlanEditor {
     }
     // duvar ölçüleri
     if (this.opt.dims) for (const w of P.walls) {
-      const L = wallLen(w); if (L * s < 34) continue;
+      // yüzden çizilen duvarda çizilen (yüz) uzunluğu, yüz tarafında yazılır
+      const rf = wallRef(w, meta.wallT, P), L = V.dist(rf.a, rf.b); if (L * s < 34) continue;
       const u = wallDir(w), n = wallNormal(w), m = V.lerp(w.a, w.b, 0.5), t = w.t || meta.wallT;
-      const tp = V.add(m, V.mul(n, -(t / 2 + px(9))));
+      const tp = V.add(m, V.mul(n, (w.face || -1) * (t / 2 + px(9))));
       let ang = Math.atan2(u.y, u.x) * 180 / Math.PI; if (ang > 90 || ang < -90) ang += 180;
       o += `<text class="wlen" x="${tp.x}" y="${tp.y}" font-size="${px(11)}" dy="${px(4)}" transform="rotate(${ang} ${tp.x} ${tp.y})">${fmtNum(L, 1)}</text>`;
     }
@@ -1240,8 +1250,9 @@ export class PlanEditor {
     const so = this.obj(this.sel);
     if (so) {
       if (this.sel.kind === 'wall') {
+        const rf = wallRef(so, this.plan.meta.wallT, this.plan);
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${this.T(so) + px(6)}"/>`;
-        o += [so.a, so.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
+        o += [rf.a, rf.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
       } else if (this.sel.kind === 'rail') {
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${px(12)}"/>`;
         o += [so.a, so.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
@@ -1405,7 +1416,7 @@ export class PlanEditor {
     } else if (s.kind === 'wall') {
       const ops = P.openings.filter(x => x.wallId === o.id);
       body = `<h4>Duvar</h4>
-        ${num('len', 'Uzunluk (eksen)', +wallLen(o).toFixed(1), 'cm', 0.5)}
+        ${o.face ? num('len', 'Uzunluk (çizilen yüz)', +(() => { const r = wallRef(o, P.meta.wallT, P); return V.dist(r.a, r.b); })().toFixed(1), 'cm', 0.5) : num('len', 'Uzunluk (eksen)', +wallLen(o).toFixed(1), 'cm', 0.5)}
         ${num('t', 'Kalınlık', this.T(o))}
         ${num('h', 'Yükseklik', o.h || P.meta.wallH)}
         <label>Renk (3D)<div class="swatches" data-k="color">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.color || '') === c ? 'on' : ''}" title="${c ? c : 'Varsayılan'}"></button>`).join('')}</div></label>
@@ -1504,7 +1515,8 @@ export class PlanEditor {
         else if (k === 'len' && this.sel.kind === 'rail') {
           const np = V.add(x.a, V.mul(V.norm(V.sub(x.b, x.a)), Math.max(1, v))); x.b = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) };
         } else if (k === 'len') {
-          const L = Math.max(1, v), np = V.add(x.a, V.mul(wallDir(x), L));
+          const r = x.face ? wallRef(x, P.meta.wallT, P) : null;   // yüz uzunluğu girildiyse eksen aynı farkla uzar
+          const L = Math.max(1, r ? wallLen(x) + v - V.dist(r.a, r.b) : v), np = V.add(x.a, V.mul(wallDir(x), L));
           this.endsAt(x.b).forEach(([w, kk]) => { w[kk] = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) }; });
         } else if (k === 'left') x.pos = Math.max(x.w / 2, Math.min(wallLen(this.wall(x.wallId)) - x.w / 2, v + x.w / 2));
         else if (k === 'rw' || k === 'rl') {
@@ -1527,6 +1539,12 @@ export class PlanEditor {
           x.model = v; this.opPick[x.type].model = v;
         } else if (k === 'w' && this.sel.kind === 'opening') {
           const L = wallLen(this.wall(x.wallId)); x.w = Math.min(v, L - 2); x.pos = Math.max(x.w / 2, Math.min(L - x.w / 2, x.pos));
+        } else if (k === 't' && this.sel.kind === 'wall' && x.face) {
+          // yüzden çizilmiş duvar: kalınlık değişince çizilen yüz yerinde kalır, eksen kayar
+          const sh = V.mul(wallNormal(x), x.face * (this.T(x) - v) / 2);
+          const ea = this.endsAt(x.a), eb = this.endsAt(x.b), A = V.add(x.a, sh), B = V.add(x.b, sh);
+          ea.forEach(([w, kk]) => { w[kk] = { x: +A.x.toFixed(2), y: +A.y.toFixed(2) }; }); eb.forEach(([w, kk]) => { w[kk] = { x: +B.x.toFixed(2), y: +B.y.toFixed(2) }; });
+          x.t = v;
         } else x[k] = v;
         this.changed();
         if (k === 'meta.wallT') this.renderHud();

@@ -162,3 +162,23 @@ export function itemOutline(it) {
   if (it.type === 'ukanepe') { const sd = Math.min(95, it.d * 0.45, it.w * 0.32); return [[x0, y0], [x1, y0], [x1, y1], [x1 - sd, y1], [x1 - sd, y0 + sd], [x0 + sd, y0 + sd], [x0 + sd, y1], [x0, y1]]; }
   return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 }
+
+/* duvar uçlarının uzatması: başka bir duvarla ortak uçta köşeyi doldurmak için yarım kalınlık,
+ * serbest uçta 0 — duvar işaretlenen noktada biter, taşmaz */
+export function wallExt(plan, w) {
+  const t = (w.t || plan.meta.wallT) / 2, shared = p => plan.walls.some(x => x !== w && (V.eq(x.a, p) || V.eq(x.b, p)));
+  return { a: shared(w.a) ? t : 0, b: shared(w.b) ? t : 0 };
+}
+/* duvarın çizim çizgisi: yüzden çizildiyse (w.face = ±1, eksene göre normal yönü) işaretlenen yüz, değilse eksen.
+ * plan verilirse köşede, yine yüzden çizilmiş komşu duvarla yüz çizgilerinin kesişimi alınır (çizilen köşe noktası) */
+export function wallRef(w, T, plan = null) {
+  if (!w.face) return { a: w.a, b: w.b };
+  const line = x => { const k = V.mul(wallNormal(x), x.face * (x.t || T) / 2); return { p: V.add(x.a, k), u: wallDir(x) }; };
+  const L = line(w), r = { a: L.p, b: V.add(L.p, V.mul(L.u, wallLen(w))) };
+  if (plan) for (const e of ['a', 'b']) {
+    const nb = plan.walls.find(x => x !== w && x.face && (V.eq(x.a, w[e]) || V.eq(x.b, w[e]))); if (!nb) continue;
+    const M = line(nb), den = V.cross(L.u, M.u); if (Math.abs(den) < 1e-6) continue;
+    r[e] = V.add(L.p, V.mul(L.u, V.cross(V.sub(M.p, L.p), M.u) / den));
+  }
+  return r;
+}

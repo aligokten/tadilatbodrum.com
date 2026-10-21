@@ -4,7 +4,7 @@
  *   • hızlı   — rasterize + yumuşak gölge + GTAO ortam kapatma + IBL
  *   • gerçekçi — GPU path tracing (three-gpu-pathtracer), ilerlemeli örnekleme
  */
-import { V, wallLen, wallDir, polyCentroid, pointInPoly } from './plan-geom.js';
+import { V, wallLen, wallDir, polyCentroid, pointInPoly, wallExt } from './plan-geom.js';
 import { floorTexture } from './textures.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
@@ -204,7 +204,8 @@ export class Plan3D {
         m.castShadow = m.receiveShadow = true; m.name = 'Duvar';
         g.add(m);
       };
-      let s = -t / 2;
+      const ex = wallExt(P, w);   // serbest uçta duvar işaretlenen noktada biter
+      let s = -ex.a;
       for (const o of ops) {
         const o0 = o.pos - o.w / 2, o1 = o.pos + o.w / 2;
         piece(s, o0, 0, H);
@@ -214,7 +215,7 @@ export class Plan3D {
         this.opening(o, w, u, ang, t, Math.min(top, H));
         s = o1;
       }
-      piece(s, L + t / 2, 0, H);
+      piece(s, L + ex.b, 0, H);
     }
 
     // korkuluklar
