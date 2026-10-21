@@ -47,10 +47,11 @@ export async function compressImage(file, max = 2048, q = 0.85) {
 class LocalBackend {
   kind = 'local';
   label = 'Bu cihaz (yerel)';
-  #db; #urls = new Map();
+  #db; #urls = new Map(); #name;
+  constructor(name = 'tb-saha') { this.#name = name; }
   async init() {
     this.#db = await new Promise((res, rej) => {
-      const r = indexedDB.open('tb-saha', 1);
+      const r = indexedDB.open(this.#name, 1);
       r.onupgradeneeded = () => {
         const d = r.result;
         d.createObjectStore('jobs', { keyPath: 'id' });
@@ -231,6 +232,12 @@ class CloudBackend {
 
 export const MODE_KEY = 'tb-saha-mode';
 export async function openLocal() { return new LocalBackend().init(); }
+/* demo hesabı: gerçek yerel işlerden ayrı veritabanı, bulut bağlantısı yok */
+export async function openDemo() {
+  const b = await new LocalBackend('tb-saha-demo').init();
+  b.label = 'Demo hesap'; b.demo = true;
+  return b;
+}
 export async function openCloud() {
   return Promise.race([
     new CloudBackend().load(),
