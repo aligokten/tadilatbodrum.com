@@ -7,6 +7,7 @@ import { icon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmt
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
+import { useName, modelName } from './openings.js';
 import { emptyPlan, planMetrics, rectRoom } from './plan-geom.js';
 import { mergeJob, assignInPlace } from './merge.js';
 import { dirLink } from './mappick.js';
@@ -15,7 +16,7 @@ import { renderExec, execProgress, execAlerts } from './exec.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.21-2';
+export const APP_VERSION = '2026.10.21-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1351,18 +1352,60 @@ async function toJpeg(blob) {
 /* doğrama listesi: kapı / pencere pozları, ölçülü görünüşler (PDF) */
 async function printJoinery(j, dw, plan) {
   if (!plan?.openings?.length) return toast('Çizimde kapı / pencere yok', 'err');
-  const r = await modal({ title: 'Doğrama listesi', body: `
-    <p class="muted small">${esc(dw.main ? 'Rölöve (mevcut durum)' : dw.name)} çizimindeki ${plan.openings.length} açıklık; aynı ölçü ve özellikteki kapı / pencereler tek pozda toplanır.</p>
-    <label>Montaj boşluğu (her kenar, cm)<input class="inp" type="number" id="jnGap" min="0" max="5" step="0.5" value="${S.settings.jnGap ?? 1}"></label>
-    <p class="muted small">İmalat ölçüsü = açıklık − 2 × boşluk (kapıda yükseklikten yalnızca üst boşluk düşülür). 0 girilirse imalat ölçüsü gösterilmez.</p>
-    <label class="check"><input type="checkbox" id="jnKey" checked> Anahtar plan (poz numaraları plan üzerinde)</label>`,
-    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'PDF hazırla', cls: 'btn-primary', icon: 'print' }] });
+  const { joineryHtml, joineryItems } = await import('./joinery.js');
+  const items = joineryItems(plan), off = new Set(j.jnOff?.[dw.id] || []);
+  const sel = new Set(items.map(x => x.o.id).filter(id => !off.has(id)));
+  const num = new Map(items.map((x, i) => [x.o.id, i + 1]));
+  const GR = [['door', 'Kapılar'], ['window', 'Pencereler'], ['opening', 'Kapısız boşluklar']].filter(([t]) => items.some(x => x.o.type === t));
+  // seçim haritası: her açıklığın sıra numarası plan üzerinde; seçilenler renkli
+  const ov = s => items.map(x => {
+    const p = { x: x.c.x - x.n.x * x.sd * (x.t / 2 + 14 / s), y: x.c.y - x.n.y * x.sd * (x.t / 2 + 14 / s) }, r = 10 / s;
+    return `<g class="jn-pin" data-o="${x.o.id}"><circle cx="${p.x}" cy="${p.y}" r="${r}"/><text x="${p.x}" y="${p.y + 4 / s}" font-size="${11 / s}" text-anchor="middle">${num.get(x.o.id)}</text></g>`;
+  }).join('');
+  const row = x => `<label class="jn-row"><input type="checkbox" data-o="${x.o.id}" ${sel.has(x.o.id) ? 'checked' : ''}><span class="jn-n">${num.get(x.o.id)}</span>
+    <span><b>${x.o.type === 'opening' ? 'Boşluk' : esc(useName(x.o))}</b> <small>${fmtNum(x.o.w, 1)} × ${fmtNum(x.o.h, 1)}${x.o.type === 'window' ? ' · parapet ' + fmtNum(x.o.sill || 0, 1) : ''}</small><br><small class="muted">${esc(x.where)}${x.o.type !== 'opening' ? ' · ' + esc(modelName(x.o)) : ''}</small></span></label>`;
+  const r = await modal({ title: 'Doğrama listesi', wide: true, body: `
+    <p class="muted small">${esc(dw.main ? 'Rölöve (mevcut durum)' : dw.name)} — listeye eklenecek kapı ve pencereleri seçin. Aynı ölçü ve özellikteki seçili doğramalar tek pozda toplanır.</p>
+    <div class="jn-pick">
+      <div class="jn-map">${planThumbSvg(plan, 600, 380, false, false, ov)}</div>
+      <div class="jn-side">
+        <div class="row wrap jn-quick"><button class="btn btn-xs btn-ghost" data-q="all">Tümü</button><button class="btn btn-xs btn-ghost" data-q="none">Hiçbiri</button>${GR.length > 1 ? GR.map(([t, n]) => `<button class="btn btn-xs btn-ghost" data-q="${t}">Yalnız ${n.toLocaleLowerCase('tr')}</button>`).join('') : ''}</div>
+        <div class="jn-list">${GR.map(([t, n]) => `<div class="jn-grp"><label class="jn-gh"><input type="checkbox" data-g="${t}"> ${n}</label>${items.filter(x => x.o.type === t).map(row).join('')}</div>`).join('')}</div>
+        <p class="small jn-cnt"></p>
+      </div>
+    </div>
+    <div class="grid2"><label>Montaj boşluğu (her kenar, cm)<input class="inp" type="number" id="jnGap" min="0" max="5" step="0.5" value="${S.settings.jnGap ?? 1}"></label>
+      <label class="check" style="align-self:end"><input type="checkbox" id="jnKey" checked> Anahtar plan (poz numaraları plan üzerinde)</label></div>
+    <p class="muted small">İmalat ölçüsü = açıklık − 2 × boşluk (kapıda yükseklikten yalnızca üst boşluk düşülür). 0 girilirse imalat ölçüsü gösterilmez.</p>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'PDF hazırla', cls: 'btn-primary', icon: 'print', validate: () => { if (!sel.size) { toast('En az bir kapı / pencere seçin', 'err'); return false; } return true; } }],
+    onOpen: el => {
+      const sync = () => {
+        $$('[data-o]', el).forEach(x => x.tagName === 'INPUT' ? (x.checked = sel.has(x.dataset.o)) : x.classList.toggle('on', sel.has(x.dataset.o)));
+        $$('[data-g]', el).forEach(g => { const ids = items.filter(x => x.o.type === g.dataset.g).map(x => x.o.id), n = ids.filter(id => sel.has(id)).length; g.checked = n === ids.length; g.indeterminate = n > 0 && n < ids.length; });
+        $('.jn-cnt', el).textContent = `${sel.size} / ${items.length} seçili`;
+      };
+      el.addEventListener('change', e => {
+        const t = e.target;
+        if (t.dataset.o) t.checked ? sel.add(t.dataset.o) : sel.delete(t.dataset.o);
+        if (t.dataset.g) items.filter(x => x.o.type === t.dataset.g).forEach(x => t.checked ? sel.add(x.o.id) : sel.delete(x.o.id));
+        sync();
+      });
+      el.addEventListener('click', e => {
+        const pin = e.target.closest('.jn-pin'), q = e.target.closest('[data-q]');
+        if (pin) { const id = pin.dataset.o; sel.has(id) ? sel.delete(id) : sel.add(id); $(`.jn-row [data-o="${id}"]`, el)?.closest('.jn-row').scrollIntoView({ block: 'nearest' }); }
+        if (q) { sel.clear(); items.filter(x => q.dataset.q === 'all' || q.dataset.q === x.o.type).forEach(x => sel.add(x.o.id)); }
+        if (pin || q) sync();
+      });
+      sync();
+    } });
   if (r?.k !== 'ok') return;
   const gap = Math.max(0, Math.min(5, +$('#jnGap', r.el).value || 0)), key = $('#jnKey', r.el).checked;
   if (S.settings.jnGap !== gap) { S.settings.jnGap = gap; S.be.saveSettings(S.settings).catch(() => {}); }
-  const { joineryHtml } = await import('./joinery.js');
+  // seçim çizim bazında hatırlanır (yeni eklenen açıklıklar varsayılan olarak seçili gelir)
+  const offNow = items.map(x => x.o.id).filter(id => !sel.has(id));
+  if (offNow.join() !== [...off].join()) { (j.jnOff ||= {})[dw.id] = offNow; save(); }
   const name = dw.main ? 'Rölöve (mevcut durum)' : dw.name;
-  const body = joineryHtml(plan, { gap, keyPlan: key ? ov => planImageUrl(plan, 900, 560, ov) : null });
+  const body = joineryHtml(plan, { gap, only: sel, keyPlan: key ? ov => planImageUrl(plan, 900, 560, ov) : null });
   printDoc(`<div class="pdoc">${docHeader(S.settings, 'Doğrama Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Doğrama Listesi ${j.code}`);
 }
 
