@@ -482,7 +482,7 @@ body.plan-mode #view{padding:0;max-width:none;height:100dvh;gap:0}
 .pe-svg .gmaj{stroke:#DDE2E6;fill:none}
 .room{stroke:none}
 .room.sel{fill-opacity:.45}
-.wall{stroke:#24272B;stroke-linecap:square}
+.wall{stroke:#24272B;stroke-linecap:butt}
 .win{fill:#fff;stroke:#24272B}
 .door,.jamb{fill:none;stroke:#24272B}
 .winarc{fill:none;stroke:#24272B;opacity:.65}
@@ -501,7 +501,7 @@ body.plan-mode #view{padding:0;max-width:none;height:100dvh;gap:0}
 .dimg path{fill:none;stroke:var(--teal-d)}
 .dimg text{fill:var(--teal-d);text-anchor:middle;font-weight:700;font-family:var(--f)}
 .dimg.sel path{stroke:var(--orange)} .dimg.sel text{fill:var(--orange)}
-.selline{stroke:var(--orange);stroke-opacity:.35;stroke-linecap:square}
+.selline{stroke:var(--orange);stroke-opacity:.35;stroke-linecap:butt}
 .selpoly{fill:none;stroke:var(--orange)}
 .hdl{fill:#fff;stroke:var(--orange)}
 .hdl.start{stroke:var(--teal);fill:var(--teal-50)}
@@ -510,7 +510,7 @@ body.plan-mode #view{padding:0;max-width:none;height:100dvh;gap:0}
 .vtx{fill:var(--teal);stroke:#fff}
 .prev{fill:rgba(0,175,176,.08);stroke:var(--teal);stroke-dasharray:6 4}
 polyline.prev{fill:none}
-.prevwall{stroke:var(--teal);stroke-opacity:.55;stroke-linecap:square}
+.prevwall{stroke:var(--teal);stroke-opacity:.55;stroke-linecap:butt}
 .snapface{stroke:var(--orange);stroke-linecap:round;opacity:.8}
 .boxsel{fill:rgba(0,175,176,.08);stroke:var(--teal)}
 .pe-bar .danger-t{color:#C2410C}
@@ -667,7 +667,7 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .p-room{break-inside:avoid;margin-bottom:8px}
 .p-plan{border:1px solid var(--line);border-radius:10px;padding:6px}
 .p-plan svg{width:100%;height:auto}
-.p-plan .wall{stroke:#24272B;stroke-linecap:square}
+.p-plan .wall{stroke:#24272B;stroke-linecap:butt}
 .ptable{width:100%;border-collapse:collapse;font-size:9.5pt}
 .ptable th{text-align:left;width:42%;padding:5px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;vertical-align:top}
 .ptable td{padding:5px 8px;border-bottom:1px solid var(--line);font-weight:600}
