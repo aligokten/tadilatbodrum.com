@@ -901,3 +901,9 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
   .chk-row .seg{grid-column:1/-1}
   .g-row{grid-template-columns:110px 1fr}
 }
+
+/* ── doğrama listesi ── */
+.jn-card{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start;padding:12px 0;border-bottom:1px solid var(--line);break-inside:avoid;page-break-inside:avoid}
+.jn-fig img{width:300px;height:auto;display:block}
+.jn-spec .ptable th{width:46%}
+.jn-items{margin-top:8px}

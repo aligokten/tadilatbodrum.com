@@ -1599,18 +1599,18 @@ function itemShape(it, isSel, px) {
   return `<rect class="${cls}" x="${x0}" y="${y0}" width="${w}" height="${d}" rx="${Math.min(6, w / 10)}" fill="${it.color}" fill-opacity="0.55" stroke-width="${sw}"/>${back(x0, -x0, y0 + bk)}`;
 }
 
-export function planThumbSvg(plan, W = 600, H = 380, standalone = false, dims = false) {
+export function planThumbSvg(plan, W = 600, H = 380, standalone = false, dims = false, overlay = null) {
   const b = planBounds(plan); if (!b) return '';
   const pad = 40, bw = Math.max(100, b.x1 - b.x0), bh = Math.max(100, b.y1 - b.y0);
   const s = Math.min((W - pad * 2) / bw, (H - pad * 2) / bh);
   const fake = { opt: { dims }, sel: null, bgUrl: '', dimPts: PlanEditor.prototype.dimPts };
-  const body = PlanEditor.prototype.drawPlan.call(fake, plan, s, false);
+  const body = PlanEditor.prototype.drawPlan.call(fake, plan, s, false) + (overlay ? overlay(s) : '');
   const head = standalone ? `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><style>${PLAN_CSS}</style><rect width="100%" height="100%" fill="#fff"/>` : `<svg class="plan-thumb" viewBox="0 0 ${W} ${H}">`;
   return `${head}<g transform="matrix(${s} 0 0 ${s} ${(W - bw * s) / 2 - b.x0 * s} ${(H - bh * s) / 2 - b.y0 * s})">${body}</g></svg>`;
 }
 
 /* belgeler (rapor/PDF) için: stilleri gömülü, harici CSS'e bağlı olmayan plan görseli (data URI) */
-export function planImageUrl(plan, W = 900, H = 520) {
-  const svg = planThumbSvg(plan, W, H, true); if (!svg) return '';
+export function planImageUrl(plan, W = 900, H = 520, overlay = null) {
+  const svg = planThumbSvg(plan, W, H, true, false, overlay); if (!svg) return '';
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
