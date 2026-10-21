@@ -32,8 +32,8 @@ function opening(o, mir) {
   return '—';
 }
 
-/* çizimdeki tüm açıklıklar → örnekler ve pozlar */
-export function joineryList(plan) {
+/* çizimdeki açıklıklar: mahal, açılım, plan konumu */
+export function joineryItems(plan) {
   const meta = plan.meta || {}, out = [];
   for (const o of plan.openings || []) {
     const w = plan.walls.find(x => x.id === o.wallId); if (!w) continue;
@@ -44,6 +44,12 @@ export function joineryList(plan) {
     const where = o.type === 'window' ? (inner || outer || '—') : [inner || 'Dış', outer || 'Dış'].filter((x, i, a) => a.indexOf(x) === i).join(' ↔ ');
     out.push({ o, t, c, n, sd, mir: sd < 0, where, open: opening(o, sd < 0) });
   }
+  return out;
+}
+
+/* seçilen açıklıklar (only: id kümesi; yoksa tümü) → pozlar */
+export function joineryList(plan, only = null) {
+  const out = joineryItems(plan).filter(x => !only || only.has(x.o.id));
   // aynı özellikteki açıklıklar tek poz
   const key = x => { const o = x.o; return [o.type, o.type === 'door' ? doorModel(o) : o.type === 'window' ? winModel(o) : '', o.use || '', Math.round(o.w), Math.round(o.h), Math.round(o.type === 'window' ? o.sill || 0 : 0), x.t, o.type === 'opening' ? '' : frameColor(o), o.type === 'door' ? leafColor(o) : '', winRail(o) ? 1 : 0].join('|'); };
   const types = new Map();
@@ -196,8 +202,8 @@ function keyPlanOverlay(list) {
 }
 
 /* rapor gövdesi (docHeader / docFooter app tarafında eklenir) */
-export function joineryHtml(plan, { gap = 1, keyPlan } = {}) {
-  const list = joineryList(plan);
+export function joineryHtml(plan, { gap = 1, keyPlan, only = null } = {}) {
+  const list = joineryList(plan, only);
   if (!list.length) return '';
   const all = list.flatMap(T => T.items);
   const by = t => all.filter(x => x.o.type === t), area = xs => xs.reduce((a, x) => a + x.o.w * x.o.h / 1e4, 0);
