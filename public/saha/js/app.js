@@ -16,7 +16,7 @@ import { renderExec, execProgress, execAlerts } from './exec.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.21-5';
+export const APP_VERSION = '2026.10.21-6';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1014,6 +1014,7 @@ function planScreen() {
       },
       printSheet: (title, body) => printDoc(`<div class="pdoc">${docHeader(S.settings, title, `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `${title} ${j.code}`),
       priceOf: (k, def) => S.settings.catalog?.find(c => c.id === k)?.price ?? def,
+      settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}),
     },
   });
   const setMode = async m => {
@@ -1043,6 +1044,7 @@ function planScreen() {
     const opts = [
       ['dxf2', '2D çizim', 'DXF', 'AutoCAD / ArchiCAD / NanoCAD — duvar, kapı, pencere, oda, mobilya, ölçü katmanlarıyla (mm)'],
       ['png', '2D çizim', 'PNG', 'Plan görseli — fotoğraflara da kaydedilir'],
+      ['cnc', 'Mutfak / dolap', 'CNC kesim şablonu (DXF)', 'Çizimdeki tüm mutfak ve dolapların parçaları levhalara yerleşik; menteşe ve raf pimi delikleri, kenar bandı işaretli'],
       ['dograma', 'Liste', 'Doğrama listesi (PDF)', 'Kapı ve pencereler: poz numaraları, ölçülü görünüşler, imalat ölçüleri, adet ve m²'],
       ['dae', '3D model', 'SketchUp (.dae)', 'SketchUp: Dosya → İçe aktar → Collada; malzeme renkleriyle'],
       ['3ds', '3D model', '3DS', '3ds Max, SketchUp Pro, Rhino, Blender (cm)'],
@@ -1057,6 +1059,11 @@ function planScreen() {
     try {
       if (k === 'png') return savePng();
       if (k === 'dograma') return printJoinery(j, dw, S.editor.plan);
+      if (k === 'cnc') {
+        const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
+        const { cncDialog } = await import('./cnc.js');
+        return cncDialog(cabs, { title: `${j.code} ${dw.main ? 'Rolove' : dw.name}`, fname: fname('x').replace(/\.x$/, ''), settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}) });
+      }
       if (k === 'dxf2') { const { planToDXF } = await import('./exporters.js'); downloadBlob(planToDXF(S.editor.plan), fname('dxf')); return toast('DXF indirildi'); }
       toast('3D model hazırlanıyor…');
       const ex = await import('./exporters.js');

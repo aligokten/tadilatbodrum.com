@@ -540,11 +540,12 @@ export function build3D(THREE, g, it, mat) {
 export function partsList(cab) {
   const s = cab.s, t = s.t, rows = [], hw = {}, kind = cab.kind;
   const frontName = 'Kapak · ' + pick(FRONTS, cab.mat.front).t, bodyName = 'Gövde · ' + pick(BODIES, cab.mat.body).t + ' 18 mm';
-  const add = (mod, part, matl, L, W, n = 1, band = '') => { if (L > 0 && W > 0 && n > 0) rows.push({ mod, part, mat: matl, L: Math.round(L * 10), W: Math.round(W * 10), n, band }); };
+  // ops: CNC işlemleri (hinge: menteşe kase delikleri, pins: raf pimi sıraları)
+  const add = (mod, part, matl, L, W, n = 1, band = '', ops = null) => { if (L > 0 && W > 0 && n > 0) rows.push({ mod, part, mat: matl, L: Math.round(L * 10), W: Math.round(W * 10), n, band, ...(ops ? { ops } : {}) }); };
   const H = (k, n) => { hw[k] = (hw[k] || 0) + n; };
   const hinges = h => h <= 100 ? 2 : h <= 160 ? 3 : h <= 210 ? 4 : 5;
   const carcass = (no, w, h, d, shelves, back = true) => {
-    add(no, 'Yan dikme', bodyName, h, d, 2, '1 uzun kenar');
+    add(no, 'Yan dikme', bodyName, h, d, 2, '1 uzun kenar', shelves ? { pins: true } : null);
     add(no, 'Alt / üst tabla', bodyName, w - 2 * t, d, 2, '1 uzun kenar');
     if (shelves) { add(no, 'Raf', bodyName, w - 2 * t - 0.2, d - 2, shelves, '1 uzun kenar'); H('Raf pimi', shelves * 4); }
     if (back) add(no, 'Arkalık', 'Arkalık · 8 mm', w - 0.4, h - 0.4, 1);
@@ -552,7 +553,7 @@ export function partsList(cab) {
   const fronts = (no, fs, kindK) => {
     for (const f of fs) {
       if (f.k === 'oven' || f.k === 'micro') continue;
-      add(no, f.k === 'drawer' ? 'Çekmece önü' : f.k === 'panel' ? 'Cihaz kapağı' : f.glass ? 'Camlı kapak (çerçeve)' : 'Kapak', frontName, f.h, f.w, 1, '4 kenar');
+      add(no, f.k === 'drawer' ? 'Çekmece önü' : f.k === 'panel' ? 'Cihaz kapağı' : f.glass ? 'Camlı kapak (çerçeve)' : 'Kapak', frontName, f.h, f.w, 1, '4 kenar', f.k === 'door' ? { hinge: hinges(f.h) } : null);
       if (f.k === 'door') H('Menteşe (frenli)', hinges(f.h));
       if (f.k === 'lift') H('Kapak kaldırma mekanizması', 1);
       if (f.k === 'drawer') { H('Çekmece rayı (tam açılır, takım)', 1); const bh = Math.max(8, Math.min(18, f.h - 6)), bw = f.w - 2 * t - 2.6, bd = (kindK === 'wardrobe' ? s.D : s.baseD) - 8; add(no, 'Çekmece yanı', bodyName, bd, bh, 2, '1 uzun kenar'); add(no, 'Çekmece ön/arka', bodyName, bw - 2 * t, bh, 2); add(no, 'Çekmece tabanı', 'Arkalık · 8 mm', bw, bd, 1); }
@@ -584,7 +585,7 @@ export function partsList(cab) {
       if (ty.filler) { add(no, 'Dolgu paneli', frontName, ty.tall ? s.tallH - s.plinth : s.carcH, m.w, 1, '2 uzun kenar'); sum.base += m.w / 100; return; }
       if (ty.tall) { carcass(no, m.w, s.tallH - s.plinth, s.baseD, ty.fridge ? 1 : ty.oven ? 2 : (ty.shelves || 4)); sum.tall += 1; H('Ayar ayağı', 4); }
       else {
-        add(no, 'Yan dikme', bodyName, s.carcH, s.baseD, 2, '1 uzun kenar');
+        add(no, 'Yan dikme', bodyName, s.carcH, s.baseD, 2, '1 uzun kenar', ty.shelves ? { pins: true } : null);
         add(no, 'Alt tabla', bodyName, m.w - 2 * t, s.baseD, 1, '1 uzun kenar');
         add(no, 'Üst kuşak', bodyName, m.w - 2 * t, 10, 2);
         if (!ty.appliance) add(no, 'Arkalık', 'Arkalık · 8 mm', m.w - 0.4, s.carcH - 0.4, 1);

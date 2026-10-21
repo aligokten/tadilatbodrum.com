@@ -923,3 +923,11 @@ figcaption{font-size:8pt;color:var(--muted);margin-top:2px}
 .jn-n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center}
 .jn-cnt{color:var(--muted);margin:0}
 @media (max-width:860px){.jn-pick{grid-template-columns:1fr}.jn-list{max-height:260px}}
+
+/* ── CNC kesim şablonu ── */
+.cnc-opts{margin-bottom:6px}
+.cnc-sum{margin:10px 0 6px}
+.cnc-prev{display:flex;flex-wrap:wrap;gap:12px;max-height:340px;overflow:auto}
+.cnc-prev figure{margin:0}
+.cnc-prev figcaption{font-size:12px;color:var(--muted);margin-bottom:3px}
+.cnc-prev svg{display:block;border-radius:4px}
