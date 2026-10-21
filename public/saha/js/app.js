@@ -15,7 +15,7 @@ import { renderExec, execProgress, execAlerts } from './exec.js';
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.21-1';
+export const APP_VERSION = '2026.10.21-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -767,6 +767,7 @@ function tabRolove(tb) {
           <a class="btn btn-primary btn-sm" href="${url}">${icon('edit')}${has ? 'Aç' : 'Çizime başla'}</a>
           ${has ? `<a class="btn btn-ghost btn-sm" href="${url}&v=3d">${icon('cube')}3D</a><a class="btn btn-ghost btn-sm" href="${url}&v=3d&r=1">${icon('sparkle')}Render</a>` : ''}
           ${d.main && !has ? `<a class="btn btn-ghost btn-sm" href="${url}&import=1">${icon('upload')}DXF / PDF aktar</a><button class="btn btn-ghost btn-sm" data-tpl>${icon('layers')}Örnek plan</button>` : ''}
+          ${d.plan?.openings?.length ? `<button class="btn btn-ghost btn-sm" data-dwa="jn" title="Kapı / pencere listesi, ölçülü (PDF)">${icon('print')}Doğrama listesi</button>` : ''}
           ${has ? `<button class="btn btn-ghost btn-sm" data-dwa="copy" title="Kopyasını oluştur">${icon('copy')}</button>` : ''}
           ${d.main ? '' : `<button class="btn btn-ghost btn-sm" data-dwa="ren" title="Yeniden adlandır">${icon('edit')}</button><button class="btn btn-ghost btn-sm danger-t" data-dwa="del" title="Sil">${icon('trash')}</button>`}
         </div>
@@ -789,6 +790,7 @@ function tabRolove(tb) {
   $('[data-newdw]', tb).onclick = () => newDrawingDialog(j);
   $$('[data-dwa]', tb).forEach(b => b.onclick = async () => {
     const id = b.closest('[data-dw]').dataset.dw, d = drawingOf(j, id), a = b.dataset.dwa;
+    if (a === 'jn') return printJoinery(j, d, d.plan);
     if (a === 'del') {
       if (!await confirmDlg(`"${d.name}" çizimi silinecek.`)) return;
       j.drawings = j.drawings.filter(x => x.id !== id); logEvt(`Çizim silindi: ${d.name}`);
@@ -1040,6 +1042,7 @@ function planScreen() {
     const opts = [
       ['dxf2', '2D çizim', 'DXF', 'AutoCAD / ArchiCAD / NanoCAD — duvar, kapı, pencere, oda, mobilya, ölçü katmanlarıyla (mm)'],
       ['png', '2D çizim', 'PNG', 'Plan görseli — fotoğraflara da kaydedilir'],
+      ['dograma', 'Liste', 'Doğrama listesi (PDF)', 'Kapı ve pencereler: poz numaraları, ölçülü görünüşler, imalat ölçüleri, adet ve m²'],
       ['dae', '3D model', 'SketchUp (.dae)', 'SketchUp: Dosya → İçe aktar → Collada; malzeme renkleriyle'],
       ['3ds', '3D model', '3DS', '3ds Max, SketchUp Pro, Rhino, Blender (cm)'],
       ['stl', '3D model', 'STL', '3D yazıcı / CAD (mm)'],
@@ -1052,6 +1055,7 @@ function planScreen() {
     const k = r?.k; if (!k || k === 'no') return;
     try {
       if (k === 'png') return savePng();
+      if (k === 'dograma') return printJoinery(j, dw, S.editor.plan);
       if (k === 'dxf2') { const { planToDXF } = await import('./exporters.js'); downloadBlob(planToDXF(S.editor.plan), fname('dxf')); return toast('DXF indirildi'); }
       toast('3D model hazırlanıyor…');
       const ex = await import('./exporters.js');
@@ -1344,6 +1348,24 @@ async function toJpeg(blob) {
 }
 
 /* ═════════ keşif raporu ═════════ */
+/* doğrama listesi: kapı / pencere pozları, ölçülü görünüşler (PDF) */
+async function printJoinery(j, dw, plan) {
+  if (!plan?.openings?.length) return toast('Çizimde kapı / pencere yok', 'err');
+  const r = await modal({ title: 'Doğrama listesi', body: `
+    <p class="muted small">${esc(dw.main ? 'Rölöve (mevcut durum)' : dw.name)} çizimindeki ${plan.openings.length} açıklık; aynı ölçü ve özellikteki kapı / pencereler tek pozda toplanır.</p>
+    <label>Montaj boşluğu (her kenar, cm)<input class="inp" type="number" id="jnGap" min="0" max="5" step="0.5" value="${S.settings.jnGap ?? 1}"></label>
+    <p class="muted small">İmalat ölçüsü = açıklık − 2 × boşluk (kapıda yükseklikten yalnızca üst boşluk düşülür). 0 girilirse imalat ölçüsü gösterilmez.</p>
+    <label class="check"><input type="checkbox" id="jnKey" checked> Anahtar plan (poz numaraları plan üzerinde)</label>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'PDF hazırla', cls: 'btn-primary', icon: 'print' }] });
+  if (r?.k !== 'ok') return;
+  const gap = Math.max(0, Math.min(5, +$('#jnGap', r.el).value || 0)), key = $('#jnKey', r.el).checked;
+  if (S.settings.jnGap !== gap) { S.settings.jnGap = gap; S.be.saveSettings(S.settings).catch(() => {}); }
+  const { joineryHtml } = await import('./joinery.js');
+  const name = dw.main ? 'Rölöve (mevcut durum)' : dw.name;
+  const body = joineryHtml(plan, { gap, keyPlan: key ? ov => planImageUrl(plan, 900, 560, ov) : null });
+  printDoc(`<div class="pdoc">${docHeader(S.settings, 'Doğrama Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Doğrama Listesi ${j.code}`);
+}
+
 async function printReport() {
   const j = S.job, met = jobMetrics(j);
   const urls = {};
