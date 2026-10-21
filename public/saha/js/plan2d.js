@@ -5,7 +5,7 @@ import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
-import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves } from './openings.js';
+import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
 
 /* mobilya seçim listesi: kategorilere göre gruplu */
@@ -1126,18 +1126,18 @@ export class PlanEditor {
         if (wm !== 'surme') S.forEach(([x0]) => { if (x0 > 0) d += L2(PT(x0, k1), PT(x0, -k1)); });
         o += `<path class="win" d="${d}" stroke-width="${px(1.3)}"/>`;
         // açılır kanat yayları (kesik çizgi, iç tarafa)
-        if (['tek', 'cift', 'acvas', 'uclu'].includes(wm)) {
+        if (['tek', 'tekacvas', 'cift', 'acvas', 'uclu'].includes(wm)) {
           let arcs = '';
           S.forEach(([x0, x1, open]) => {
             if (!open) return;
-            const atStart = x0 === 0 && !(wm === 'tek' && op.flip), hf = atStart ? x0 : x1, of = atStart ? x1 : x0, Ls = (x1 - x0) * op.w;
+            const atStart = winHingeAtStart(op, x0), hf = atStart ? x0 : x1, of = atStart ? x1 : x0, Ls = (x1 - x0) * op.w;
             const H = PT(hf, sd * k1), O = PT(of, sd * k1), L = V.add(H, V.mul(n, sd * Ls));
             const sweep = V.cross(V.sub(L, H), V.sub(O, H)) > 0 ? 1 : 0;
             arcs += `M${H.x} ${H.y}L${L.x} ${L.y}A${Ls} ${Ls} 0 0 ${sweep} ${O.x} ${O.y}`;
           });
           o += `<path class="winarc" d="${arcs}" stroke-width="${px(0.9)}" stroke-dasharray="${px(4)} ${px(3)}"/>`;
         }
-        if (wm === 'vasistas' || wm === 'acvas') { const c1 = PT(0.5, sd * (k1 + Math.min(op.w * 0.18, 18))); o += `<path class="winarc" d="${L2(PT(0.3, sd * k1), c1)}${L2(c1, PT(0.7, sd * k1))}" stroke-width="${px(0.9)}"/>`; }   // vasistas: üstten devrilme işareti
+        if (winTilt(op)) { const c1 = PT(0.5, sd * (k1 + Math.min(op.w * 0.18, 18))); o += `<path class="winarc" d="${L2(PT(0.3, sd * k1), c1)}${L2(c1, PT(0.7, sd * k1))}" stroke-width="${px(0.9)}"/>`; }   // vasistas: üstten devrilme işareti
         if (winRail(op)) {
           const k = -sd * (k1 + 5); let r = L2(PT(0, k), PT(1, k));
           for (let f = 0; f <= 1.0001; f += 0.125) r += L2(PT(f, -sd * k1), PT(f, k));
