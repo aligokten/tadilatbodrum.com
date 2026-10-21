@@ -154,3 +154,11 @@ export function polyRoom(plan, pts, name = 'Oda', withWalls = true) {
   plan.rooms.push(room);
   return room;
 }
+
+/* mobilyanın plandaki dış hattı (yerel eksen, merkez 0,0; arka -y): köşe koltuklar gerçek biçimiyle, diğerleri dikdörtgen */
+export function itemOutline(it) {
+  const x0 = -it.w / 2, y0 = -it.d / 2, x1 = -x0, y1 = -y0;
+  if (it.type === 'lkanepe') { const sd = Math.min(95, it.d * 0.45); return [[x0, y0], [x1, y0], [x1, y1], [x1 - sd, y1], [x1 - sd, y0 + sd], [x0, y0 + sd]]; }
+  if (it.type === 'ukanepe') { const sd = Math.min(95, it.d * 0.45, it.w * 0.32); return [[x0, y0], [x1, y0], [x1, y1], [x1 - sd, y1], [x1 - sd, y0 + sd], [x0 + sd, y0 + sd], [x0 + sd, y1], [x0, y1]]; }
+  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+}

@@ -2,7 +2,7 @@
  * 3D: Plan3D sahnesindeki ağlar dünya koordinatına çevrilip üçgenler olarak yazılır (three.js: metre, Y yukarı).
  * 2D: plan verisi (cm, y aşağı) doğrudan DXF çizgilerine, yaylara ve yazılara çevrilir (mm, y yukarı).
  */
-import { V, wallLen, wallDir, wallNormal, polyCentroid, roomMetrics, planBounds } from './plan-geom.js';
+import { V, wallLen, wallDir, wallNormal, polyCentroid, roomMetrics, planBounds, itemOutline } from './plan-geom.js';
 import { fixtureOf } from './fixtures.js';
 import { doorModel, winModel, winRail, railKind, sashes, leaves } from './openings.js';
 
@@ -233,7 +233,7 @@ export function planToDXF(plan) {
       continue;
     }
     const L = it.type === 'cabinet' ? 'MUTFAK' : 'MOBILYA';
-    poly(L, [pt(-it.w / 2, -it.d / 2), pt(it.w / 2, -it.d / 2), pt(it.w / 2, it.d / 2), pt(-it.w / 2, it.d / 2)]);
+    poly(L, itemOutline(it).map(([x, y]) => pt(x, y)));
     if (it.type === 'cabinet' && it.cab) {   // modül bölmeleri
       let x = -it.w / 2;
       for (const m of (it.cab.kind === 'wardrobe' ? it.cab.ward : it.cab.base) || []) { x += m.w; if (x < it.w / 2 - 0.5) line(L, pt(x, -it.d / 2), pt(x, it.d / 2)); }

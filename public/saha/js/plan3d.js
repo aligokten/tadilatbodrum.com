@@ -374,6 +374,36 @@ export class Plan3D {
         b2(sd, H * 0.3, 0.16, 0, H * 0.6, L2 / 2 - 0.08);
         break;
       }
+      case 'ukanepe': {
+        const sd = Math.min(0.95, D * 0.45, W * 0.32);
+        // arka kol boydan boya, iki yanda öne doğru uzantı
+        sofa(W, sd); g.children.forEach(c => { c.position.z += -D / 2 + sd / 2; });
+        const L2 = D - sd;
+        for (const sx of [-1, 1]) {
+          const ext = new THREE.Group(); ext.position.set(sx * (W / 2 - sd / 2), 0, sd / 2); g.add(ext);
+          const b2 = (bx, by, bz, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(bx, by, bz), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; ext.add(b); };
+          b2(sd, H * 0.45, L2, 0, H * 0.225 + 0.06, 0); b2(sd * 0.22, H * 0.55, L2, sx * (sd / 2 - sd * 0.11), H * 0.725, 0);
+          b2(sd, H * 0.3, 0.16, 0, H * 0.6, L2 / 2 - 0.08);
+        }
+        break;
+      }
+      case 'dondurucu': {   // tezgah altı ankastre derin dondurucu: dolap kapağı arkasında, 3 çekmece
+        box(W, 0.08, D - 0.05, 0, 0.04, -0.025, dark);
+        box(W, H - 0.08, D, 0, 0.08 + (H - 0.08) / 2, 0);
+        fronts(W, H - 0.08, D, 0.08, 3, false);
+        for (let i = 0; i < 3; i++) box(W * 0.4, 0.015, 0.025, 0, 0.08 + (H - 0.08) * (i + 1) / 3 - 0.05, D / 2 + 0.012, metal);
+        break;
+      }
+      case 'kasetklima': {  // çift yönlü kaset klima: gövde asma tavan içinde, panel tavanda; iki uzun kenarda üfleme
+        if (this.opt.cut) return g;
+        g.position.y = M(this.plan.meta.wallH);
+        box(W * 0.84, H - 0.02, D * 0.8, 0, -(H - 0.02) / 2 - 0.02, 0, this.std('#D9DCDF', 0.5));
+        box(W, 0.02, D, 0, -0.01, 0, white);
+        const slot = this.std('#2E3135', 0.5);
+        for (const sz of [-1, 1]) box(W * 0.78, 0.004, D * 0.12, 0, -0.022, sz * D * 0.36, slot);
+        box(W * 0.5, 0.003, D * 0.36, 0, -0.022, 0, this.std('#EEF0F2', 0.7));
+        break;
+      }
       case 'puf': cyl(W / 2, W / 2, H, 0, H / 2, 0, this.std(col, 0.95), 28); break;
       case 'yansehpa': cyl(W / 2, W / 2, 0.03, 0, H - 0.015, 0, m, 28); cyl(0.02, 0.02, H - 0.03, 0, (H - 0.03) / 2, 0, dark, 10); cyl(W * 0.3, W * 0.3, 0.02, 0, 0.01, 0, dark, 24); break;
       case 'kitaplik': {
