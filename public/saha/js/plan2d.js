@@ -12,7 +12,7 @@ import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as 
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom,
+  offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline,
 } from './plan-geom.js';
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:square}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
@@ -1204,9 +1204,8 @@ export class PlanEditor {
         continue;
       }
       const fs = Math.min(px(11), it.w / 5, 22);
-      o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})"><rect class="item ${isSel ? 'sel' : ''}" x="${-it.w / 2}" y="${-it.d / 2}" width="${it.w}" height="${it.d}" rx="${Math.min(6, it.w / 10)}" fill="${it.color}" fill-opacity="0.55" stroke-width="${px(1.2)}"/>
-        <line x1="${-it.w / 2}" y1="${-it.d / 2 + Math.min(10, it.d / 5)}" x2="${it.w / 2}" y2="${-it.d / 2 + Math.min(10, it.d / 5)}" class="itemback" stroke-width="${px(1)}"/>
-        ${fs > px(6) ? `<text class="itemtxt" y="${fs * 0.35}" font-size="${fs}"${it.rot > 90 && it.rot <= 270 ? ' transform="rotate(180)"' : ''}>${esc(it.label)}</text>` : ''}</g>`;
+      o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${itemShape(it, isSel, px)}
+        ${fs > px(6) ? `<text class="itemtxt" y="${(it.type === 'ukanepe' ? -it.d / 2 + Math.min(95, it.d * 0.45, it.w * 0.32) / 2 : 0) + fs * 0.35}" font-size="${fs}"${it.rot > 90 && it.rot <= 270 ? ' transform="rotate(180)"' : ''}>${esc(it.label)}</text>` : ''}</g>`;
     }
     // ölçü çizgileri
     for (const d of P.dims) {
@@ -1584,6 +1583,22 @@ export class PlanEditor {
 }
 
 /* küçük önizleme (iş detayında) — editör örneği oluşturmadan */
+/* mobilya plan sembolü: köşe koltuklar gerçek biçimiyle (itemOutline), tavan klimasında kesikli çerçeve + üfleme yönleri, diğerleri dikdörtgen */
+function itemShape(it, isSel, px) {
+  const w = it.w, d = it.d, x0 = -w / 2, y0 = -d / 2, cls = `item ${isSel ? 'sel' : ''}`, sw = px(1.2);
+  const back = (x1, x2, y) => `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" class="itemback" stroke-width="${px(1)}"/>`;
+  const poly = pts => `<polygon class="${cls}" points="${pts.map(p => p.join(',')).join(' ')}" fill="${it.color}" fill-opacity="0.55" stroke-width="${sw}"/>`;
+  const bk = Math.min(10, d / 5);
+  if (it.type === 'lkanepe' || it.type === 'ukanepe') return poly(itemOutline(it)) + back(x0, -x0, y0 + bk);
+  if (it.type === 'kasetklima') {
+    const a = Math.min(w, d) * 0.18;
+    return `<rect class="${cls}" x="${x0}" y="${y0}" width="${w}" height="${d}" fill="${it.color}" fill-opacity="0.35" stroke-width="${sw}" stroke-dasharray="${px(5)} ${px(3)}"/>
+      ${[-1, 1].map(s => `<line x1="${x0 + w * 0.12}" y1="${s * d * 0.36}" x2="${-x0 - w * 0.12}" y2="${s * d * 0.36}" class="itemback" stroke-width="${px(1.6)}"/>
+        <path d="M${-a / 2} ${s * d * 0.5}l${a / 2} ${s * a * 0.8}l${a / 2} ${-s * a * 0.8}" fill="none" class="itemback" stroke-width="${px(1.2)}"/>`).join('')}`;
+  }
+  return `<rect class="${cls}" x="${x0}" y="${y0}" width="${w}" height="${d}" rx="${Math.min(6, w / 10)}" fill="${it.color}" fill-opacity="0.55" stroke-width="${sw}"/>${back(x0, -x0, y0 + bk)}`;
+}
+
 export function planThumbSvg(plan, W = 600, H = 380, standalone = false, dims = false) {
   const b = planBounds(plan); if (!b) return '';
   const pad = 40, bw = Math.max(100, b.x1 - b.x0), bh = Math.max(100, b.y1 - b.y0);

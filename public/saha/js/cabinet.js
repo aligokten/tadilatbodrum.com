@@ -43,6 +43,7 @@ export const MT = {
   ocak:     { row: 'base', t: 'Ocak altı (çekmeceli)', drawers: [0.2, 0.4, 0.4], hob: true },
   firinalti: { row: 'base', t: 'Ocak + ankastre fırın', oven: true, hob: true },
   bulasik:  { row: 'base', t: 'Bulaşık makinesi (ankastre)', appliance: 'BM' },
+  dondurucu: { row: 'base', t: 'Tezgah altı ankastre derin dondurucu', appliance: 'DF' },
   camasir:  { row: 'base', t: 'Çamaşır makinesi yeri', appliance: 'ÇM', washer: true },
   kose:     { row: 'base', t: 'Köşe (kör) dolap', doors: 1, corner: true, shelves: 1 },
   dolgu:    { row: 'base', t: 'Dolgu paneli', filler: true },
@@ -592,6 +593,7 @@ export function partsList(cab) {
         if (ty.hob) H('Ankastre ocak', 1);
         if (ty.oven) H('Ankastre fırın', 1);
         if (ty.appliance === 'BM') H('Ankastre bulaşık makinesi', 1);
+        if (ty.appliance === 'DF') H('Tezgah altı ankastre derin dondurucu', 1);
         H('Ayar ayağı', 4);
         sum.base += m.w / 100;
       }
