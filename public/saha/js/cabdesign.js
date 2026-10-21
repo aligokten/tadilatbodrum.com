@@ -34,6 +34,7 @@ export function openCabinetDesigner(item, ctx) {
           <button class="btn btn-ghost btn-sm" data-a="pdf" title="Çizim + kesim listesi PDF">${icon('print')}<span>PDF</span></button>
           <button class="btn btn-ghost btn-sm" data-a="dxf" title="Ön görünüş DXF (AutoCAD)">${icon('download')}<span>DXF</span></button>
           <button class="btn btn-ghost btn-sm" data-a="csv" title="Kesim listesi CSV (Excel)">${icon('download')}<span>CSV</span></button>
+          <button class="btn btn-ghost btn-sm" data-a="cnc" title="CNC kesim şablonu: parçalar levhalara yerleşik DXF">${icon('layers')}<span>CNC</span></button>
           <button class="btn btn-ghost btn-sm" data-a="quote" title="Teklife kalem olarak ekle">${icon('file')}<span>Teklife ekle</span></button>
           <button class="btn btn-primary btn-sm" data-a="apply">${icon('check')}<span>Uygula</span></button>
         </div>
@@ -204,6 +205,7 @@ export function openCabinetDesigner(item, ctx) {
       }
       if (a === 'apply') { finish(cab); return; }
       if (a === 'dxf') { downloadBlob(new Blob([elevationDxf(elevation(cab, { obstacles: ctx.obstacles || [], wallH: ctx.wallH }))], { type: 'application/dxf' }), `${label}-on-gorunus.dxf`); return; }
+      if (a === 'cnc') { const { cncDialog } = await import('./cnc.js'); return cncDialog([{ cab, label }], { title: label, fname: label, settings: ctx.settings, saveSettings: ctx.saveSettings }); }
       if (a === 'csv') { downloadBlob(new Blob([partsCsv(partsList(cab), label)], { type: 'text/csv;charset=utf-8' }), `${label}-kesim-listesi.csv`); return; }
       if (a === 'quote') {
         const items = quoteItems(cab, label, ctx.priceOf);
