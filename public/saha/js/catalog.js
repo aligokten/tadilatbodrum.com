@@ -26,6 +26,14 @@ export const CATEGORIES = [
   { k: 'yalitim',  t: 'Yalıtım / Çatı', ic: 'roof' },
   { k: 'dis',      t: 'Dış Cephe / Teras / Havuz', ic: 'sun' },
   { k: 'yikim',    t: 'Yıkım / Moloz',  ic: 'hammer' },
+  { k: 'vitrifiye', t: 'Vitrifiye / Armatür', ic: 'bath' },
+  { k: 'sabitmob', t: 'Sabit mobilya (dolap, vestiyer)', ic: 'box' },
+  { k: 'mobilya',  t: 'Hareketli mobilya', ic: 'sofa' },
+  { k: 'beyazesya', t: 'Beyaz eşya / Ankastre', ic: 'kitchen' },
+  { k: 'aydinlatma', t: 'Aydınlatma', ic: 'flash' },
+  { k: 'perde',    t: 'Perde / Stor', ic: 'window' },
+  { k: 'peyzaj',   t: 'Peyzaj / Bahçe', ic: 'sun2' },
+  { k: 'temizlik', t: 'Temizlik / Nakliye', ic: 'sparkle' },
   { k: 'diger',    t: 'Diğer',          ic: 'tools' },
 ];
 export const catOf = k => CATEGORIES.find(c => c.k === k) || CATEGORIES[CATEGORIES.length - 1];
@@ -175,8 +183,8 @@ export const DEFAULT_CATALOG = [
   { id: 'mf-boy', cat: 'mutfak', desc: 'Mutfak boy dolabı / cihaz kolonu', unit: 'adet', price: 16000 },
   { id: 'mf-tez', cat: 'mutfak', desc: 'Mutfak tezgahı', unit: 'm', price: 6500 },
   { id: 'mf-gola', cat: 'mutfak', desc: 'Gola profil + aksesuar', unit: 'm', price: 900 },
-  { id: 'gd-dolap', cat: 'diger', desc: 'Giysi dolabı (gövde + kapak, ön yüz alanı)', unit: 'm²', price: 7500 },
-  { id: 'gd-surgu', cat: 'diger', desc: 'Sürgülü kapak sistemi farkı', unit: 'm²', price: 1500 },
+  { id: 'gd-dolap', cat: 'sabitmob', desc: 'Giysi dolabı (gövde + kapak, ön yüz alanı)', unit: 'm²', price: 7500 },
+  { id: 'gd-surgu', cat: 'sabitmob', desc: 'Sürgülü kapak sistemi farkı', unit: 'm²', price: 1500 },
   { id: 'c1',  cat: 'yikim',    desc: 'Mevcut seramik/fayans söküm ve moloz atımı', unit: 'm²', price: 180, qty: 'wall' },
   { id: 'c2',  cat: 'yikim',    desc: 'Mevcut zemin kaplaması söküm', unit: 'm²', price: 120, qty: 'floor' },
   { id: 'c3',  cat: 'boya',     desc: 'Duvar alçı + saten alçı + 2 kat iç cephe boyası', unit: 'm²', price: 260, qty: 'wall' },
@@ -204,8 +212,8 @@ export const DEFAULT_CATALOG = [
   { id: 'c24', cat: 'kapi',     desc: 'PVC pencere (ısıcamlı)', unit: 'm²', price: 6500 },
   { id: 'c25', cat: 'iklim',    desc: 'Split klima montajı + bakır boru hattı', unit: 'adet', price: 4500 },
   { id: 'c26', cat: 'dis',      desc: 'Teras / balkon traverten kaplama', unit: 'm²', price: 1800 },
-  { id: 'c27', cat: 'diger',    desc: 'İnşaat sonrası ince temizlik', unit: 'm²', price: 60, qty: 'floor' },
-  { id: 'c28', cat: 'diger',    desc: 'Nakliye / malzeme taşıma', unit: 'götürü', price: 5000 },
+  { id: 'c27', cat: 'temizlik',   desc: 'İnşaat sonrası ince temizlik', unit: 'm²', price: 60, qty: 'floor' },
+  { id: 'c28', cat: 'temizlik',   desc: 'Nakliye / malzeme taşıma', unit: 'götürü', price: 5000 },
 ];
 
 export const DEFAULT_SETTINGS = {

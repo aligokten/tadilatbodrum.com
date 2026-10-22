@@ -655,7 +655,7 @@ export const PRICE_DEF = {
 };
 export function quoteItems(cab, label, priceOf = (k, d) => d) {
   const pl = partsList(cab), mt = `${pick(FRONTS, cab.mat.front).t} kapak, ${pick(BODIES, cab.mat.body).t} gövde`;
-  const it = (k, qty, extra = '') => { const d = PRICE_DEF[k]; return { cat: cab.kind === 'wardrobe' ? 'diger' : 'mutfak', desc: `${label ? label + ' — ' : ''}${d.desc}${extra ? ' · ' + extra : ''}`, unit: d.unit, qty: +qty.toFixed(2), price: priceOf(k, d.price) }; };
+  const it = (k, qty, extra = '') => { const d = PRICE_DEF[k]; return { cat: cab.kind === 'wardrobe' ? 'sabitmob' : 'mutfak', desc: `${label ? label + ' — ' : ''}${d.desc}${extra ? ' · ' + extra : ''}`, unit: d.unit, qty: +qty.toFixed(2), price: priceOf(k, d.price) }; };
   const out = [];
   if (cab.kind === 'wardrobe') {
     out.push(it('gd-dolap', pl.sum.frontM2, `${mt}, ${fmt(rowLen(cab.ward))} × ${cab.s.H} cm`));
