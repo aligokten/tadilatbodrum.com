@@ -30,9 +30,17 @@ const TASK_DEF = {
   mutfak:   ['Mutfak dolapları ve tezgah montajı', 2],
   kapi:     ['Kapı / pencere montajı', 1],
   dis:      ['Dış cephe / teras işleri', 3],
+  vitrifiye: ['Vitrifiye ve armatür montajı', 1],
+  sabitmob: ['Sabit mobilya montajı (dolap, vestiyer)', 2],
+  mobilya:  ['Hareketli mobilya teslimi ve yerleşimi', 1],
+  beyazesya: ['Beyaz eşya / ankastre cihaz montajı', 1],
+  aydinlatma: ['Aydınlatma armatürleri montajı', 1],
+  perde:    ['Perde / stor montajı', 1],
+  peyzaj:   ['Peyzaj / bahçe düzenlemesi', 2],
+  temizlik: ['Temizlik ve nakliye', 1],
   diger:    ['Diğer işler', 1],
 };
-const ORDER = ['yikim', 'tesisat', 'elektrik', 'yalitim', 'iklim', 'alcipan', 'seramik', 'banyo', 'boya', 'zemin', 'mutfak', 'kapi', 'dis', 'diger'];
+const ORDER = ['yikim', 'tesisat', 'elektrik', 'yalitim', 'iklim', 'alcipan', 'seramik', 'banyo', 'vitrifiye', 'boya', 'zemin', 'aydinlatma', 'mutfak', 'sabitmob', 'beyazesya', 'kapi', 'perde', 'dis', 'peyzaj', 'mobilya', 'temizlik', 'diger'];
 
 /* kontrol föyü maddeleri (kategori bazlı) */
 const CHECK_DEF = {
@@ -49,6 +57,14 @@ const CHECK_DEF = {
   mutfak:   ['Kapak ayarları ve aralıklar eşit', 'Tezgah birleşimleri ve silikon düzgün', 'Ankastre cihazlar çalışıyor', 'Evye ve gider sızdırmaz'],
   kapi:     ['Açılıp kapanma ve kilit sorunsuz', 'Kasa terazide, pervaz derzleri düzgün', 'Pencere conta ve mekanizmaları çalışıyor'],
   dis:      ['Yüzey ve renk kontrolü yapıldı', 'Su akışı ve damlalıklar kontrol edildi'],
+  vitrifiye: ['Klozet, lavabo ve batarya sabit, sızdırmaz', 'Sıcak / soğuk yönleri doğru', 'Silikon derzleri temiz'],
+  sabitmob: ['Kapak ve çekmece ayarları eşit', 'Dolap terazide, duvara sabitlendi', 'Menteşe / ray frenleri çalışıyor', 'Kenar bandı ve yüzeyler hasarsız'],
+  mobilya:  ['Ürünler sipariş ve renkle uyumlu', 'Taşımada hasar yok', 'Montaj ve yerleşim müşteriyle onaylandı'],
+  beyazesya: ['Cihazlar çalışma testinden geçti', 'Su / gider / elektrik bağlantıları kontrol edildi', 'Garanti belgeleri müşteriye teslim edildi'],
+  aydinlatma: ['Tüm armatürler yanıyor', 'Anahtar / dimmer eşleşmeleri doğru', 'Armatürler hizalı ve sabit'],
+  perde:    ['Raylar terazide ve sağlam', 'Perde / stor boyları doğru', 'Mekanizmalar sorunsuz çalışıyor'],
+  peyzaj:   ['Bitkiler dikildi, can suyu verildi', 'Sulama sistemi test edildi', 'Alan temizlendi'],
+  temizlik: ['İnşaat sonrası temizlik tamamlandı', 'Cam ve doğramalar temizlendi', 'Moloz ve ambalajlar kaldırıldı'],
   genel:    ['İnce temizlik yapıldı', 'Müşteriye kullanım / bakım bilgisi verildi', 'Artan malzemeler teslim edildi / kaldırıldı', 'Eksik ve kusur listesi kapandı', 'Teslim fotoğrafları çekildi'],
 };
 export const TASK_ST = [
