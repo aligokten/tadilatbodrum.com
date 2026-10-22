@@ -10,7 +10,7 @@
  * }
  * Ekip rehberi (ustalar / taşeronlar) ayarlarda tutulur: settings.crew [{ id, name, trade, phone }]
  */
-import { icon, esc, $, $$, modal, toast, confirmDlg, fmtMoney, fmtNum, fmtDate, waLink } from './ui.js';
+import { icon, gicon, esc, $, $$, modal, toast, confirmDlg, fmtMoney, fmtNum, fmtDate, waLink } from './ui.js';
 import { CATEGORIES, catOf } from './catalog.js';
 import { uid } from './store.js';
 import { quoteTotals } from './quote.js';
@@ -150,7 +150,7 @@ export function renderExec(root, job, ctx) {
         <div class="card kpi"><small>Tahsilat</small><b>${fmtMoney(paid).replace(',00', '')}</b><span class="muted">Kalan ${fmtMoney(Math.max(0, T + ext - paid)).replace(',00', '')}</span></div>
       </div>
       <div class="card">
-        <div class="row-between"><h3>${icon('calendar')}Zaman çizelgesi</h3><span class="muted small">${fmtDate(t0)} → ${fmtDate(t1)} · sorumlu: ${esc(x.manager || '—')}</span></div>
+        <div class="row-between"><h3>${gicon('calendar')}Zaman çizelgesi</h3><span class="muted small">${fmtDate(t0)} → ${fmtDate(t1)} · sorumlu: ${esc(x.manager || '—')}</span></div>
         <div class="gantt">${x.tasks.map(t => { const s = st(TASK_ST, t.status), late = t.status !== 'tamam' && t.end && t.end < today(); return `
           <div class="g-row"><span class="g-t">${esc(t.title)}</span><div class="g-track"><i class="g-bar ${late ? 'late' : ''}" style="left:${pos(t.start)}%;width:${Math.max(2, pos(addWork(t.end, 0)) - pos(t.start) + 100 / span)}%;--c:${s.c}"></i>${today() >= t0 && today() <= t1 ? `<i class="g-now" style="left:${pos(today())}%"></i>` : ''}</div></div>`; }).join('')}</div>
       </div>
@@ -376,7 +376,7 @@ export function renderExec(root, job, ctx) {
     const T = job.quote ? quoteTotals(job.quote).total : 0, ext = x.pays.filter(p => p.kind === 'ek').reduce((s, p) => s + (+p.amount || 0), 0);
     const paid = x.pays.reduce((s, p) => s + (+p.amount || 0), 0), due = T + ext;
     el.innerHTML = `<div class="ex-kpis"><div class="card kpi"><small>Teklif bedeli</small><b>${fmtMoney(T)}</b></div>${ext ? `<div class="card kpi"><small>Ek işler</small><b>${fmtMoney(ext)}</b></div>` : ''}<div class="card kpi"><small>Tahsil edilen</small><b>${fmtMoney(paid)}</b><span class="muted">%${due ? Math.round(100 * paid / due) : 0}</span></div><div class="card kpi"><small>Kalan</small><b class="${due - paid > 0 ? 'bad' : ''}">${fmtMoney(Math.max(0, due - paid))}</b></div></div>
-      <div class="card"><div class="row-between"><h3>${icon('file')}Tahsilatlar</h3><button class="btn btn-primary btn-sm" data-add>${icon('plus')}Tahsilat</button></div>
+      <div class="card"><div class="row-between"><h3>${gicon('file')}Tahsilatlar</h3><button class="btn btn-primary btn-sm" data-add>${icon('plus')}Tahsilat</button></div>
       ${x.pays.length ? `<table class="tbl"><thead><tr><th>Tarih</th><th>Tür</th><th>Açıklama</th><th class="r">Tutar</th><th></th></tr></thead><tbody>${x.pays.map(p => `<tr data-id="${p.id}"><td><input class="inp sm" type="date" data-k="date" value="${p.date || ''}"></td><td><select class="inp sm" data-k="kind">${PAY_KIND.map(([k, t]) => `<option value="${k}" ${p.kind === k ? 'selected' : ''}>${t}</option>`).join('')}</select></td><td><input class="inp sm" data-k="note" value="${esc(p.note || '')}"></td><td class="r"><input class="inp sm num" type="number" step="any" data-k="amount" value="${p.amount ?? ''}"></td><td><button class="icon-btn sm danger" data-del>${icon('trash')}</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Henüz tahsilat yok.</p>'}
       <p class="muted small">"Ek iş" türündeki kayıtlar teklif dışı işlerin bedelidir; toplam alacağa eklenir.</p></div>`;
     el.onchange = e => { const row = e.target.closest('[data-id]'), p = row && x.pays.find(q => q.id === row.dataset.id), k = e.target.dataset.k; if (!p || !k) return; p[k] = k === 'amount' ? +e.target.value || 0 : e.target.value; save(); if (k === 'amount' || k === 'kind') drawPays(el); };

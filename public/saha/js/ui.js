@@ -87,6 +87,8 @@ const P = {
 };
 
 export const icon = (k, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[k] || P.tools}</svg>`;
+/* cam / amber kutu ikon (Glass Amber ikon paketi tarzı; assets/gi/*.webp): menü, sekme, başlık ve özet kartlarında */
+export const gicon = (k, cls = '') => `<img class="gi ${cls}" src="assets/gi/${P[k] ? k : 'tools'}.webp" alt="" aria-hidden="true" decoding="async">`;
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const $ = (sel, root = document) => root.querySelector(sel);
