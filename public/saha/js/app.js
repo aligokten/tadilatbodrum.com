@@ -3,7 +3,7 @@
  */
 import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } from './store.js';
 import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
-import { icon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
+import { icon, gicon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
@@ -17,7 +17,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.22-1';
+export const APP_VERSION = '2026.10.22-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -140,23 +140,23 @@ function shell() {
     <aside class="side">
       <a href="#/" class="side-logo"><img src="assets/logo.png" alt="TadilatBodrum.com"></a>
       <nav>
-        <a href="#/" data-nav="home">${icon('home')}<span>İşler</span></a>
-        <button data-new>${icon('plus')}<span>Yeni iş</span></button>
-        <a href="#/ayarlar" data-nav="ayarlar">${icon('settings')}<span>Ayarlar</span></a>
+        <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
+        <button data-new>${gicon('plus')}<span>Yeni iş</span></button>
+        <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
       </nav>
       <div class="side-foot">
         <div class="mode">${icon(S.be.kind === 'cloud' ? 'cloud' : 'device')}<span>${esc(S.be.label)}</span></div>
         <span class="save-state" id="saveState"></span>
         <span class="app-ver">Sürüm ${APP_VERSION}</span>
-        <button data-logout>${icon('logout')}<span>${S.be.kind === 'cloud' ? 'Çıkış' : S.be.demo ? 'Demodan çık' : 'Mod değiştir'}</span></button>
+        <button data-logout>${gicon('logout')}<span>${S.be.kind === 'cloud' ? 'Çıkış' : S.be.demo ? 'Demodan çık' : 'Mod değiştir'}</span></button>
       </div>
     </aside>
     ${S.be.demo ? `<div class="demo-bar">${icon('play')}<b>DEMO</b><span>Örnek verilerle deneme hesabı · kayıtlar yalnızca bu cihazda</span></div>` : ''}
     <main id="view"></main>
     <nav class="bottom-nav">
-      <a href="#/" data-nav="home">${icon('home')}<span>İşler</span></a>
+      <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
       <button data-new class="fab">${icon('plus')}</button>
-      <a href="#/ayarlar" data-nav="ayarlar">${icon('settings')}<span>Ayarlar</span></a>
+      <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
     </nav>
   </div>`;
   $$('[data-new]', app).forEach(b => b.onclick = newJobDialog);
@@ -304,12 +304,12 @@ function dashboard() {
     </header>
     <section class="stats">
       ${[['talep', 'Yeni talep', 'chat'], ['kesif', 'Keşifte', 'scan'], ['teklif', 'Teklif aşaması', 'file'], ['uygulama', 'Uygulamada', 'roller']].map(([k, t, ic]) => `
-        <button class="stat" data-f="${k}"><span class="ic-badge" style="--c:${statusOf(k).c}">${icon(ic)}</span><b>${cnt(k)}</b><small>${t}</small></button>`).join('')}
-      <div class="stat wide"><span class="ic-badge">${icon('file')}</span><b>${fmtMoney(pipeline).replace(',00', '')}</b><small>Bekleyen teklif hacmi</small></div>
+        <button class="stat" data-f="${k}"><span class="gi-wrap">${gicon(ic, 'lg')}</span><b>${cnt(k)}</b><small>${t}</small></button>`).join('')}
+      <div class="stat wide"><span class="gi-wrap">${gicon('file', 'lg')}</span><b>${fmtMoney(pipeline).replace(',00', '')}</b><small>Bekleyen teklif hacmi</small></div>
       ${(() => { const d = S.jobs.filter(j => j.feedback?.status === 'done'); if (!d.length) return ''; const avg = d.reduce((s, j) => s + fbScore(j.feedback.answers), 0) / d.length;
-        return `<button class="stat wide" data-reviews><span class="ic-badge" style="--c:#F7A21B">${icon('star')}</span><b>${fmtNum(avg, 1)} ★</b><small>Müşteri memnuniyeti · ${d.length} değerlendirme</small></button>`; })()}
+        return `<button class="stat wide" data-reviews><span class="gi-wrap">${gicon('star', 'lg')}</span><b>${fmtNum(avg, 1)} ★</b><small>Müşteri memnuniyeti · ${d.length} değerlendirme</small></button>`; })()}
     </section>
-    ${upcoming.length ? `<section class="card upcoming"><h3>${icon('calendar')}Yaklaşan keşifler</h3>${upcoming.map(j => `
+    ${upcoming.length ? `<section class="card upcoming"><h3>${gicon('calendar')}Yaklaşan keşifler</h3>${upcoming.map(j => `
       <a href="#/is/${j.id}" class="up-row"><span class="up-date"><b>${new Date(j.kesifDate).getDate()}</b>${new Date(j.kesifDate).toLocaleDateString('tr-TR', { month: 'short' })}</span>
       <span><b>${esc(j.customer.name || 'İsimsiz')}</b><small>${esc(j.customer.district || '')} · ${j.kesifDate.length > 10 ? new Date(j.kesifDate).toLocaleTimeString('tr-TR', { timeStyle: 'short' }) : ''}</small></span>${icon('chevR')}</a>`).join('')}</section>` : ''}
     <section class="list-head">
@@ -411,7 +411,7 @@ function jobView(tab) {
         <span class="pill lg" style="--c:${s.c}">${s.t}</span>
       </div>
     </header>
-    <nav class="tabs" role="tablist">${TABS.map(t => `<a href="#/is/${j.id}/${t.k}" class="${t.k === tab ? 'on' : ''}" role="tab">${icon(t.ic)}<span>${t.t}</span>${badge(t.k)}</a>`).join('')}</nav>
+    <nav class="tabs" role="tablist">${TABS.map(t => `<a href="#/is/${j.id}/${t.k}" class="${t.k === tab ? 'on' : ''}" role="tab">${gicon(t.ic)}<span>${t.t}</span>${badge(t.k)}</a>`).join('')}</nav>
     <section class="tab-body" id="tb"></section>`;
   $('.tabs .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const tb = $('#tb');
@@ -440,7 +440,7 @@ function tabGenel(tb) {
     </div>
     <div class="grid-2">
       <div class="card">
-        <h3>${icon('user')}Müşteri</h3>
+        <h3>${gicon('user')}Müşteri</h3>
         <div class="grid2">
           <label>Ad soyad<input class="inp" data-f="customer.name"></label>
           <label>Telefon<input class="inp" type="tel" inputmode="tel" data-f="customer.phone"></label>
@@ -461,7 +461,7 @@ function tabGenel(tb) {
         <datalist id="dl-src">${['Instagram', 'Google', 'Web sitesi', 'Tavsiye', 'Tabela', 'Eski müşteri'].map(d => `<option value="${d}">`).join('')}</datalist>
       </div>
       <div class="card">
-        <h3>${icon('calendar')}Keşif ve sorumlu</h3>
+        <h3>${gicon('calendar')}Keşif ve sorumlu</h3>
         <div class="grid2">
           <label>Keşif tarihi / saati<input class="inp" type="datetime-local" data-f="kesifDate"></label>
           <label>Sorumlu / proje yöneticisi<input class="inp" data-f="assigned"></label>
@@ -478,11 +478,11 @@ function tabGenel(tb) {
       </div>
     </div>
     ${j.exec || ['onay', 'uygulama'].includes(j.status) ? `<a class="card ex-mini" href="#/is/${j.id}/uygulama">
-      <div class="row-between"><h3>${icon('roller')}Uygulama</h3>${j.exec ? `<b>%${execProgress(j.exec)}</b>` : '<span class="btn btn-primary btn-sm">Başlat</span>'}</div>
+      <div class="row-between"><h3>${gicon('roller')}Uygulama</h3>${j.exec ? `<b>%${execProgress(j.exec)}</b>` : '<span class="btn btn-primary btn-sm">Başlat</span>'}</div>
       ${j.exec ? `<div class="bar ex"><i style="width:${execProgress(j.exec)}%"></i></div><p class="muted small">${(() => { const A = execAlerts(j.exec); return [A.late && `${A.late} adım gecikmede`, A.mats && `${A.mats} malzeme termini yaklaşıyor`, A.nok && `${A.nok} kontrol uygunsuz`].filter(Boolean).join(' · ') || 'Her şey planlandığı gibi'; })()}</p>` : '<p class="muted small">Teklif onaylandı — iş programı, ekip yönlendirme, malzeme ve kontrol föyü için uygulamayı başlatın.</p>'}</a>` : ''}
     <div class="card fb-card" id="fbCard"></div>
     <div class="card">
-      <div class="row-between"><h3>${icon('note')}Notlar ve iş geçmişi</h3><button class="btn btn-ghost btn-sm" data-note>${icon('plus')}Not ekle</button></div>
+      <div class="row-between"><h3>${gicon('note')}Notlar ve iş geçmişi</h3><button class="btn btn-ghost btn-sm" data-note>${icon('plus')}Not ekle</button></div>
       <ul class="timeline">${j.log.slice(0, 30).map(l => `<li><time>${fmtDate(l.t, true)}</time><p>${esc(l.text)}</p></li>`).join('')}</ul>
     </div>
     <div class="row wrap">
@@ -596,17 +596,17 @@ function tabKesif(tb) {
   const draw = async () => {
     tb.innerHTML = `
       <div class="card">
-        <div class="row-between"><h3>${icon('scan')}Mahal bazlı keşif</h3>
+        <div class="row-between"><h3>${gicon('scan')}Mahal bazlı keşif</h3>
           <div class="row"><button class="btn btn-ghost btn-sm" data-imp ${j.plan?.rooms?.length ? '' : 'disabled title="Önce rölöve planında oda çizin"'}>${icon('ruler')}Plandan aktar</button>
           <button class="btn btn-primary btn-sm" data-add>${icon('plus')}Mahal ekle</button></div></div>
         <p class="muted small">Her mahal için ölçüleri girin, kontrol listesini sistematik olarak işaretleyin, fotoğrafları mahale bağlayın.</p>
       </div>
       <div id="rooms">${rooms.map(roomCard).join('') || `<div class="empty card"><div class="empty-ic">${icon('home')}</div><h3>Mahal eklenmedi</h3><p class="muted">Salon, banyo, mutfak… her alanı ayrı ayrı kaydedin.</p></div>`}</div>
       <div class="card">
-        <div class="row-between"><h3>${icon('alert')}Tespitler</h3><button class="btn btn-primary btn-sm" data-fadd>${icon('plus')}Tespit ekle</button></div>
+        <div class="row-between"><h3>${gicon('alert')}Tespitler</h3><button class="btn btn-primary btn-sm" data-fadd>${icon('plus')}Tespit ekle</button></div>
         <div class="findings">${j.findings.length ? j.findings.map(findingCard).join('') : '<p class="muted small">Hasar, kaçak, nem, statik risk, mevzuat… keşifte gördüğünüz her durumu not edin.</p>'}</div>
       </div>
-      <div class="card"><h3>${icon('note')}Genel keşif notları</h3><textarea class="inp" rows="4" data-f="kesifNotes" placeholder="Bina genel durumu, ortak alanlar, erişim, komşular, otopark…"></textarea></div>`;
+      <div class="card"><h3>${gicon('note')}Genel keşif notları</h3><textarea class="inp" rows="4" data-f="kesifNotes" placeholder="Bina genel durumu, ortak alanlar, erişim, komşular, otopark…"></textarea></div>`;
     bindFields(tb, j, () => save());
     await hydratePhotos(tb);
   };
@@ -793,13 +793,13 @@ function tabRolove(tb) {
   };
   tb.innerHTML = `
     <div class="card plan-card">
-      <div class="row-between"><h3>${icon('ruler')}Çizimler <small class="muted">${list.length}</small></h3>
+      <div class="row-between"><h3>${gicon('ruler')}Çizimler <small class="muted">${list.length}</small></h3>
         <button class="btn btn-primary btn-sm" data-newdw>${icon('plus')}Yeni çizim</button></div>
       <p class="muted small">Rölöve mevcut durumu gösterir (metraj ve teklif buradan alınır). Müşterinin isteklerine göre hazırlanan tasarım için "Proje" çizimi ekleyin; birden fazla seçenek de hazırlayabilirsiniz.</p>
       <div class="dw-list">${list.map(card).join('')}</div>
     </div>
     <div class="card">
-      <div class="row-between"><h3>${icon('image')}Kroki, rölöve fotoğrafları ve renderlar</h3>
+      <div class="row-between"><h3>${gicon('image')}Kroki, rölöve fotoğrafları ve renderlar</h3>
         <label class="btn btn-ghost btn-sm">${icon('upload')}Kroki ekle<input type="file" accept="image/*" multiple hidden data-up></label></div>
       <div class="gallery">${rl.map(p => `<button class="gimg" data-ph="${p.id}"><img data-src="${p.id}" alt=""><span>${esc(p.caption || PHOTO_TAGS.find(t => t.k === p.tag)?.t)}</span></button>`).join('') || '<p class="muted small">Elle çizilmiş krokilerin fotoğrafını ekleyin; çizim editöründe "Altlık" olarak kullanıp üzerinden ölçekli çizebilirsiniz.</p>'}</div>
     </div>`;
@@ -1193,7 +1193,7 @@ function renderFeedback(j, el) {
   const f = j.feedback, cloud = !!S.be.createFeedback;
   if (f?.status === 'done') {
     const a = f.answers || {}, sc = fbScore(a);
-    el.innerHTML = `<div class="row-between"><h3>${icon('star')}Müşteri değerlendirmesi</h3><span class="fb-big">${fmtNum(sc, 1)} <i>★</i></span></div>
+    el.innerHTML = `<div class="row-between"><h3>${gicon('star')}Müşteri değerlendirmesi</h3><span class="fb-big">${fmtNum(sc, 1)} <i>★</i></span></div>
       <div class="fb-grid">${STAR_Q.map(q => `<div><span>${esc(q.t)}</span><b class="fb-st">${a[q.id] ? starsTxt(a[q.id]) : '—'}</b></div>`).join('')}
         ${a.nps !== undefined ? `<div><span>Tavsiye (0–10)</span><b>${a.nps}</b></div>` : ''}</div>
       ${a.yorum ? `<blockquote class="fb-quote">“${esc(a.yorum)}”</blockquote>` : ''}
@@ -1201,13 +1201,13 @@ function renderFeedback(j, el) {
     return;
   }
   if (f?.status === 'pending') {
-    el.innerHTML = `<div class="row-between"><h3>${icon('star')}Müşteri değerlendirmesi</h3><span class="pill" style="--c:#F2A33A">Yanıt bekleniyor</span></div>
+    el.innerHTML = `<div class="row-between"><h3>${gicon('star')}Müşteri değerlendirmesi</h3><span class="pill" style="--c:#F2A33A">Yanıt bekleniyor</span></div>
       <p class="muted small">Bağlantı ${fmtDate(f.t, true)} tarihinde oluşturuldu: <a href="${esc(fbUrl(f.id))}" target="_blank" rel="noopener">${esc(fbUrl(f.id).replace(/^https?:\/\//, ''))}</a></p>
       <div class="row wrap"><a class="btn btn-primary btn-sm" href="${esc(waLink(j.customer.phone, fbMsg(j)))}" target="_blank" rel="noopener">${icon('chat')}WhatsApp'ta tekrar gönder</a>
         <button class="btn btn-ghost btn-sm" data-fb="check">${icon('rotate')}Yanıtı kontrol et</button>
         <button class="btn btn-ghost btn-sm danger-t" data-fb="cancel">${icon('trash')}İptal</button></div>`;
   } else {
-    el.innerHTML = `<h3>${icon('star')}Müşteri değerlendirmesi</h3>
+    el.innerHTML = `<h3>${gicon('star')}Müşteri değerlendirmesi</h3>
       <p class="muted small">İş bitince müşteriye bir dakikalık memnuniyet anketi gönderin: genel memnuniyet, işçilik, takvime uyum, temizlik, iletişim, fiyat/performans, tavsiye puanı ve yorum. Yanıtlar bu işe kaydedilir.</p>
       ${cloud ? `<div class="row"><button class="btn ${j.status === 'teslim' ? 'btn-primary' : 'btn-ghost'} btn-sm" data-fb="new">${icon('star')}Değerlendirme linki gönder</button></div>` : '<p class="warn small">Değerlendirme anketi bulut modunda çalışır.</p>'}`;
   }
@@ -1450,7 +1450,7 @@ function settingsView() {
     <header class="page-head"><h1>Ayarlar</h1></header>
     <div class="grid-2">
       <div class="card">
-        <h3>${icon('home')}Firma bilgileri <small class="muted">(teklif ve raporlarda)</small></h3>
+        <h3>${gicon('home')}Firma bilgileri <small class="muted">(teklif ve raporlarda)</small></h3>
         <div class="grid2">
           <label>Firma adı<input class="inp" data-f="company.name"></label>
           <label>Telefon<input class="inp" data-f="company.phone"></label>
@@ -1463,37 +1463,37 @@ function settingsView() {
         <label>Adres<textarea class="inp" rows="2" data-f="company.address"></textarea></label>
       </div>
       <div class="card">
-        <h3>${icon('file')}Teklif varsayılanları</h3>
+        <h3>${gicon('file')}Teklif varsayılanları</h3>
         <div class="grid2"><label>KDV %<input class="inp" type="number" data-f="vat"></label><label>Geçerlilik (gün)<input class="inp" type="number" data-f="validDays"></label><label>Yüklenici kârı %<input class="inp" type="number" step="0.5" data-f="profit"></label></div>
         <label>Şartlar ve koşullar (her satır bir madde)<textarea class="inp" rows="7" data-f="terms"></textarea></label>
       </div>
       <div class="card">
-        <h3>${icon('film')}Video rapor</h3>
+        <h3>${gicon('film')}Video rapor</h3>
         <label>Kapanış mesajları — "Süreç bizde, keyfi sizde" sahnesi (her satır bir madde, en çok 5)<textarea class="inp" rows="5" data-f="videoLines"></textarea></label>
         <p class="muted small">Müşterinin çekincelerine (bütçe aşımı, gecikme, dağınıklık, muhatap bulamama…) açıkça yanıt veren kısa cümleler yazın. Yalnızca gerçekten sunduğunuz güvenceleri yazın; garanti süresi gibi taahhütler yazılı teklifle de uyumlu olmalı.</p>
       </div>
     </div>
     <div class="card">
-      <div class="row-between"><h3>${icon('list')}Fiyat kütüphanesi</h3><div class="row"><button class="btn btn-ghost btn-sm" data-cadd>${icon('plus')}Kalem ekle</button><button class="btn btn-ghost btn-sm" data-creset>Varsayılana dön</button></div></div>
+      <div class="row-between"><h3>${gicon('list')}Fiyat kütüphanesi</h3><div class="row"><button class="btn btn-ghost btn-sm" data-cadd>${icon('plus')}Kalem ekle</button><button class="btn btn-ghost btn-sm" data-creset>Varsayılana dön</button></div></div>
       <p class="muted small">Birim fiyatlar örnektir; kendi fiyatlarınızla güncelleyin. "Metraj" sütunu, teklife eklenirken miktarın plandan otomatik alınacağı ölçüyü belirler.</p>
       <div class="cat-table" id="ct"></div>
     </div>
     <div class="grid-2">
       <div class="card">
-        <h3>${icon(S.be.kind === 'cloud' ? 'cloud' : 'device')}Çalışma modu: ${esc(S.be.label)}</h3>
+        <h3>${gicon(S.be.kind === 'cloud' ? 'cloud' : 'device')}Çalışma modu: ${esc(S.be.label)}</h3>
         <p class="muted small">${S.be.demo ? 'Demo hesabındasınız: bulut ve gerçek müşteri kayıtları kullanılmaz. Örnek işler ve yaptığınız değişiklikler yalnızca bu cihazda, ayrı bir demo veritabanında saklanır.' : S.be.kind === 'cloud' ? 'Veriler Firebase\'de saklanır, tüm ekip aynı kayıtları görür. İnternet kesildiğinde değişiklikler cihazda bekletilir ve bağlantı gelince eşitlenir.' : 'Veriler yalnızca bu cihazda (tarayıcı veritabanı) saklanır. Düzenli yedek alın veya buluta geçin.'}</p>
         <div class="row wrap">
           ${S.be.demo ? `<button class="btn btn-ghost btn-sm" data-demoreset>${icon('rotate')}Demo verilerini sıfırla</button>` : S.be.kind === 'local' ? `<button class="btn btn-primary btn-sm" data-tocloud>${icon('cloud')}Buluta giriş yap ve aktar</button>` : `<button class="btn btn-ghost btn-sm" data-fromlocal>${icon('upload')}Bu cihazdaki yerel işleri buluta aktar</button>`}
         </div>
       </div>
       <div class="card">
-        <h3>${icon('download')}Yedekleme</h3>
+        <h3>${gicon('download')}Yedekleme</h3>
         <p class="muted small">Tüm iş kayıtlarını JSON olarak indirin (fotoğraf dosyaları hariç) ya da yedekten geri yükleyin.</p>
         <div class="row wrap"><button class="btn btn-ghost btn-sm" data-exp>${icon('download')}Yedek indir</button><label class="btn btn-ghost btn-sm">${icon('upload')}Yedekten yükle<input type="file" accept="application/json" hidden data-imp></label></div>
       </div>
     </div>
     <div class="card about">
-      <h3>${icon('shield')}Hakkında</h3>
+      <h3>${gicon('shield')}Hakkında</h3>
       <dl class="about-dl">
         <dt>Program</dt><dd>TadilatBodrum Saha · Sürüm ${APP_VERSION}${window.tbDesktop ? ` · Windows uygulaması ${esc(window.tbDesktop.version)}` : ''}</dd>
         <dt>Lisans sahibi</dt><dd>${esc(LICENSE.owner)}</dd>
