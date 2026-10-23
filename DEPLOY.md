@@ -164,14 +164,20 @@ koda veya Firestore'a asla yazılmaz.
 **a) Telefonunuza ntfy uygulamasını kurun**
 - [Android (Play Store)](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
 - [iOS (App Store)](https://apps.apple.com/us/app/ntfy/id1625396347)
-- Uygulamayı açın → **"+" (Subscribe to topic)** → aşağıdaki gibi **uzun ve tahmin edilemez**
-  bir konu adı girin (herkes bu adı bilirse bildirimlerinizi görebilir/sahte bildirim
-  gönderebilir, bu yüzden gizli tutun):
+- Önce **uzun ve tahmin edilemez** bir konu adı üretin. ntfy.sh'de konular herkese açıktır:
+  adı bilen herkes bildirimlerinizi (müşteri adı, telefonu) okuyabilir veya sahte bildirim
+  gönderebilir. Bu yüzden konu adını **bu repoya, koda ya da Firestore'a asla yazmayın**.
+  PowerShell'de:
+  ```powershell
+  "tbodrum-kesif-" + -join ((48..57) + (97..122) | Get-Random -Count 20 | % {[char]$_})
   ```
-  tbodrum-kesif-zsszz0ksq2zcl0
-  ```
-  (İsterseniz kendi konu adınızı da seçebilirsiniz — önemli olan aşağıdaki adımda
-  **aynı** metni kullanmak.)
+  (macOS/Linux: `echo tbodrum-kesif-$(openssl rand -hex 10)`)
+- ntfy uygulamasını açın → **"+" (Subscribe to topic)** → ürettiğiniz konu adını girin.
+  Bildirimin sessize düşmemesi için konunun ayarlarından bildirim önceliğine izin verin.
+
+> ⚠️ Bu dosyanın eski bir sürümünde örnek olarak `tbodrum-kesif-zsszz0ksq2zcl0` konu adı
+> yazılıydı. Bu ad git geçmişinde herkese açıktır — onu kullandıysanız **yeni bir ad üretip**
+> (b) ve (c) adımlarını tekrarlayın, ntfy uygulamasında eski konudan çıkın.
 
 **b) Konu adını Firebase'e sır (secret) olarak kaydedin** — Windows terminalinde, repo
 klasöründe:
@@ -189,13 +195,25 @@ firebase deploy --only functions
 ```
 
 **d) Test edin:** Sitedeki "Ücretsiz Keşif Al" formunu kendiniz doldurup gönderin —
-birkaç saniye içinde telefonunuza push bildirimi gelmeli. Gelmezse:
+birkaç saniye içinde telefonunuza push bildirimi gelmeli. Bildirimde ad, telefon, bölge,
+tarih ve not yazar; **Ara**, **WhatsApp** ve **Panel** düğmeleri vardır (bildirime dokunmak
+admin panelini açar). Gelmezse:
 - Firebase Console → **Functions** → `tbNotifyNewAppointment` → **Logs** sekmesinden
   hata mesajına bakın (genelde "secret tanımlı değil" veya ntfy'ye ulaşamama olur).
 - ntfy uygulamasında doğru konuya abone olduğunuzdan emin olun.
 
 Konu adını daha sonra değiştirmek isterseniz, (a) ve (b) adımlarını yeni bir adla
 tekrarlayıp `firebase deploy --only functions` ile yeniden dağıtmanız yeterli.
+
+> GitHub Actions yayını (`deploy.yml`) yalnızca Hosting'i günceller; `functions/` klasöründe
+> değişiklik olduğunda (c) adımını elle çalıştırın.
+
+**Self-host (`server.py`) kullanıyorsanız** Firebase gerekmez — konu adını ortam
+değişkeniyle verin; sunucu açılışta "Keşif bildirimi → açık" yazar:
+```bash
+NTFY_TOPIC=tbodrum-kesif-... python3 server.py
+```
+(İsteğe bağlı: `NTFY_SERVER` kendi ntfy sunucunuz, `NTFY_ADMIN_URL` "Panel" düğmesinin adresi.)
 
 ---
 
