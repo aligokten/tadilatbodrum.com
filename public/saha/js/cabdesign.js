@@ -5,7 +5,7 @@
 import { icon, esc, h, $, $$, toast, confirmDlg, downloadBlob, fmtNum } from './ui.js';
 import {
   MT, typesFor, mod, doorCount, autoFill, layoutRow, rowLen, runLength, itemDims, elevation, elevationSvg, elevationDxf,
-  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod,
+  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod, modWarn, modD,
 } from './cabinet.js';
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -120,6 +120,8 @@ export function openCabinetDesigner(item, ctx) {
         modHtml = `<div class="cd-modh"><b>${no}</b><span>${esc(t.t)}</span><small>${fmt(p.x0)} – ${fmt(p.x1)} cm</small></div>
           <label>Tür<select class="inp sm" data-m="type">${typesFor(kind, f.r).map(o => `<option value="${o.k}" ${o.k === f.m.type ? 'selected' : ''}>${o.t}</option>`).join('')}</select></label>
           <label>Genişlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="w" value="${f.m.w}"><span>cm</span></div></label>
+          ${isW && (t.appl || t.boiler) ? `<label>Derinlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="D" value="${modD(f.m, cab.s)}"><span>cm</span></div></label>` : ''}
+          ${isW ? modWarn(f.m, cab.s).map(w => `<p class="cd-warn">${icon('alert')}${esc(w)}</p>`).join('') : ''}
           ${doorable ? `<div class="grid2"><label>Kapak<select class="inp sm" data-m="doors"><option value="">Otomatik (${dc})</option>${[1, 2, 3].map(n => `<option value="${n}" ${f.m.doors === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
             ${dc === 1 ? `<label>Menteşe<select class="inp sm" data-m="hinge"><option value="L" ${(f.m.hinge || 'L') === 'L' ? 'selected' : ''}>Sol</option><option value="R" ${f.m.hinge === 'R' ? 'selected' : ''}>Sağ</option></select></label>` : ''}</div>` : ''}
           <div class="cd-btns">
@@ -136,7 +138,11 @@ export function openCabinetDesigner(item, ctx) {
         <section class="cd-box"><h4>Seçili modül</h4>${modHtml}</section>
         <details class="cd-box" open><summary><h4>Otomatik diz</h4></summary>
           <label>Dizi uzunluğu<div class="inp-unit sm"><input type="number" step="0.5" data-auto="L" value="${wantL}"><span>cm</span></div></label>
-          ${isW ? '' : `<div class="cd-chk">
+          ${isW ? `<div class="cd-chk">
+            <label><input type="checkbox" data-o="washer" ${o.washer ? 'checked' : ''}> Çamaşır makinesi yeri</label>
+            <label><input type="checkbox" data-o="dryer" ${o.dryer ? 'checked' : ''}> Kurutma makinesi (üst üste)</label>
+            <label><input type="checkbox" data-o="boiler" ${o.boiler ? 'checked' : ''}> Termosifon</label></div>
+            <p class="muted small">Cihaz modülleri dizinin sonuna eklenir; makine zemine oturur (baza yok), derinlik cihaza göre artar, kapaklarda havalandırma menfezi olur.</p>` : `<div class="cd-chk">
             <label><input type="checkbox" data-o="fridge" ${o.fridge ? 'checked' : ''}> Ankastre buzdolabı</label>
             <label><input type="checkbox" data-o="dish" ${o.dish ? 'checked' : ''}> Bulaşık makinesi</label>
             <label><input type="checkbox" data-o="hood" ${o.hood ? 'checked' : ''}> Davlumbaz</label></div>
@@ -168,6 +174,7 @@ export function openCabinetDesigner(item, ctx) {
         else if (k === 'w') f.m.w = Math.max(1, Math.round(parseFloat(String(t.value).replace(',', '.')) * 2) / 2 || f.m.w);
         else if (k === 'doors') { if (t.value) f.m.doors = +t.value; else delete f.m.doors; }
         else if (k === 'hinge') f.m.hinge = t.value;
+        else if (k === 'D') { const v = parseFloat(String(t.value).replace(',', '.')); if (v > 0) f.m.D = Math.max(v, MT[f.m.type]?.minD || 0); }
         return changed();
       }
       if (t.dataset.s) { cab.s[t.dataset.s] = t.dataset.s === 'doors' ? t.value : (parseFloat(String(t.value).replace(',', '.')) || cab.s[t.dataset.s]); return changed(); }
