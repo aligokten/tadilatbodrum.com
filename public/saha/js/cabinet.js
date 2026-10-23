@@ -32,6 +32,24 @@ export function applLayout(m, s) {
   if (t.boiler) out.push({ k: 'boiler', t: 'Termosifon', ab: 'T', w: BOILER.w, h: BOILER.h, y: s.H - s.t - 6 - BOILER.h });
   return out;
 }
+/* modülün iç tabanı (yerden) ve iç yüksekliği, cm */
+export function modInner(m, s, kind) {
+  const t = MT[m.type] || {};
+  if (kind === 'wardrobe') { const y0 = modY0(m, s); return { y: y0 + s.t, h: s.H - y0 - 2 * s.t }; }
+  if (t.row === 'upper') return { y: s.upZ + s.t, h: s.upH - 2 * s.t };
+  if (t.tall) return { y: s.plinth + s.t, h: s.tallH - s.plinth - 2 * s.t };
+  return { y: s.plinth + s.t, h: s.carcH - 2 * s.t };
+}
+/* elle raf eklenebilen modül mü */
+export const shelfable = (m, kind) => { const t = MT[m.type] || {}; return !(t.empty || t.filler || t.hood || t.mirror || t.appliance || (t.drawers && kind !== 'wardrobe') || (t.oven && !t.tall)); };
+/* raf konumları (iç tabandan cm, sıralı): elle girildiyse m.shelves, yoksa modül tipinin varsayılanı */
+export function shelfPos(m, s, kind) {
+  const t = MT[m.type] || {}, { h } = modInner(m, s, kind);
+  if (Array.isArray(m.shelves)) return m.shelves.filter(v => v > 0 && v < h).sort((a, b) => a - b);
+  if (Array.isArray(t.shelves)) return t.shelves.map(f => +(h * f).toFixed(1));
+  const n = kind === 'wardrobe' ? 0 : t.tall ? (t.fridge ? 1 : t.oven ? 2 : (t.shelves || 4)) : (t.shelves || 0);
+  return Array.from({ length: n }, (_, i) => +(h * (i + 1) / (n + 1)).toFixed(1));
+}
 /* modül uyarıları: genişlik / yükseklik cihaza yetmiyor */
 export function modWarn(m, s) {
   const t = MT[m.type] || {}, w = [];
@@ -366,7 +384,7 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
         if (t.bench) { R(p.x0 + s.t, y0 + t.bench - s.plinth - 4, w - 2 * s.t, 4, { s: '#24272B', f: body, sw: 0.6, layer: 'OTURAK' }); R(p.x0 + s.t + 1, y0 + t.bench - s.plinth, w - 2 * s.t - 2, 5, { s: '#7A6A5C', f: '#C7B39E', sw: 0.4, layer: 'OTURAK' }); }
         (t.shoeOpen || []).forEach(f => Ln(p.x0 + s.t, iy + ih * f, p.x1 - s.t, iy + ih * f + 6, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
         (t.hooks || []).forEach(f => { const hy = iy + ih * f, n = hookCount(w - 2 * s.t); for (let k = 0; k < n; k++) { const hx = p.x0 + s.t + (w - 2 * s.t) * (k + 0.5) / n; Ln(hx, hy, hx, hy - 6, { s: '#3A3F45', sw: 1.1, layer: 'KANCA' }); Ln(hx, hy - 6, hx + 2.5, hy - 4, { s: '#3A3F45', sw: 1.1, layer: 'KANCA' }); } });
-        (t.shelves || []).forEach(f => Ln(p.x0 + s.t, iy + ih * f, p.x1 - s.t, iy + ih * f, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
+        shelfPos(p.m, s, kind).forEach(v => Ln(p.x0 + s.t, iy + v, p.x1 - s.t, iy + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
         (t.rails || []).forEach(f => { const ry = iy + ih * f - 5; Ln(p.x0 + 4, ry, p.x1 - 4, ry, { s: '#8A9096', sw: 1.6, layer: 'ASKI' }); for (let x = p.x0 + 10; x < p.x1 - 8; x += 7) Ln(x, ry, x + 2, ry - (f > 0.6 ? ih * 0.35 : ih * 0.3), { s: '#C9CDD2', sw: 0.4, layer: 'ASKI' }); });
         (t.drawers || []).reduce((y, f) => { const dh = ih * f; R(p.x0 + s.t + 1, y, w - 2 * s.t - 2, dh - 1, { s: '#24272B', f: front, sw: 0.5, layer: 'CEKMECE' }); return y + dh; }, iy);
         (t.shoe || []).forEach(f => Ln(p.x0 + s.t, iy + ih * f, p.x1 - s.t, iy + ih * f + 8, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
@@ -400,7 +418,8 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
       }
       R(p.x0, 0, w, s.plinth, { s: '#24272B', f: '#55595F', sw: 0.5, layer: 'BAZA' });
       R(p.x0, s.plinth, w, H - s.plinth, { s: '#24272B', f: t.filler ? front : body, sw: 0.8, layer: 'GOVDE' });
-      frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
+      if (interior && shelfable(p.m, 'kitchen')) { const inn = modInner(p.m, s, 'kitchen'); R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
+      else frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
       if (t.sink) { R(p.x0 + w / 2 - 22, cY + s.topT, 44, 1.5, { s: '#8A9096', f: '#C9CDD2', sw: 0.4, layer: 'CIHAZ' }); Ln(p.x0 + w / 2 + 14, cY + s.topT, p.x0 + w / 2 + 14, cY + s.topT + 30, { s: '#8A9096', sw: 1.2, layer: 'CIHAZ' }); Ln(p.x0 + w / 2 + 14, cY + s.topT + 30, p.x0 + w / 2 + 4, cY + s.topT + 26, { s: '#8A9096', sw: 1.2, layer: 'CIHAZ' }); }
       if (t.hob) R(p.x0 + 4, cY + s.topT, w - 8, 1.2, { s: '#16171A', f: '#16171A', sw: 0.4, layer: 'CIHAZ' });
       T(p.x0 + w / 2, (t.tall ? H : cY) + (t.tall ? 6 : s.topT + 6), String(i + 1), { size: 6, c: '#00AFB0', bold: true });
@@ -421,8 +440,10 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
         return;
       }
       R(p.x0, s.upZ, w, s.upH, { s: '#24272B', f: t.filler ? front : body, sw: 0.8, layer: 'GOVDE' });
-      if (t.open) for (let k = 1; k <= (t.shelves || 1); k++) Ln(p.x0 + s.t, s.upZ + s.upH * k / ((t.shelves || 1) + 1), p.x1 - s.t, s.upZ + s.upH * k / ((t.shelves || 1) + 1), { s: '#6E747B', sw: 0.8, layer: 'RAF' });
-      frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
+      const inn = modInner(p.m, s, 'kitchen');
+      const showIn = interior && shelfable(p.m, 'kitchen');
+      if ((t.open || showIn) && !t.filler) { if (showIn) R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
+      if (!showIn) frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
       T(p.x0 + w / 2, s.upZ + s.upH + 6, 'Ü' + (i + 1), { size: 6, c: '#EB591F', bold: true });
     });
     dimChain(P, base, -14, s);
@@ -572,7 +593,7 @@ export function build3D(THREE, g, it, mat) {
     box(x0, y0, 0, tt, H - y0, d, body); box(x0 + w - tt, y0, 0, tt, H - y0, d, body);
     box(x0 + tt, y0, 0, w - 2 * tt, tt, d, body); box(x0 + tt, H - tt, 0, w - 2 * tt, tt, d, body);
     box(x0 + tt, y0 + tt, 0, w - 2 * tt, ih, 0.8, body);   // arkalık
-    (t.shelves || []).forEach(f => box(x0 + tt, iy + ih * f, 0, w - 2 * tt, tt, d - 1, body));
+    shelfPos(p.m, s, 'wardrobe').forEach(v => box(x0 + tt, iy + v, 0, w - 2 * tt, tt, d - 1, body));
     (t.rails || []).forEach(f => box(x0 + tt, iy + ih * f - 5, d / 2, w - 2 * tt, 2.2, 2.2, metal));
     (t.drawers || []).reduce((y, f) => { const dh = ih * f; box(x0 + tt + 0.3, y + 0.3, d - s.frontT, w - 2 * tt - 0.6, dh - 0.6, s.frontT, front); return y + dh; }, iy);
     if (t.panel === 'lamel') for (let x = x0 + tt + 3; x < x0 + w - tt - 2; x += 6) box(x, iy + ih * 0.42, 0.8, 3.4, ih * 0.44, 2, wood);
@@ -639,7 +660,7 @@ export function build3D(THREE, g, it, mat) {
     const t = MT[p.m.type], w = p.x1 - p.x0; if (t.empty) continue;
     if (t.hood) { box(p.x0, s.upZ + 4, 0, w, 6, 50, steel); box(p.x0 + w / 2 - 15, s.upZ + 10, 0, 30, s.upH - 10, 25, steel); continue; }
     box(p.x0, s.upZ, 0, w, s.upH, s.upD, t.filler ? front : body);
-    if (t.open) for (let k = 1; k <= (t.shelves || 1); k++) box(p.x0 + s.t, s.upZ + s.upH * k / ((t.shelves || 1) + 1), 0, w - 2 * s.t, s.t, s.upD, body);
+    if (t.open) { const inn = modInner(p.m, s, 'kitchen'); shelfPos(p.m, s, 'kitchen').forEach(v => box(p.x0 + s.t, inn.y + v, 0, w - 2 * s.t, s.t, s.upD, body)); }
     frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, s.upD, 'kitchen'));
   }
 }
@@ -673,7 +694,7 @@ export function partsList(cab) {
     const h = s.H - s.plinth;
     layoutRow(cab.ward).forEach((p, i) => {
       const m = p.m, ty = MT[m.type], no = `G${i + 1}`; if (ty.empty) return;
-      const dm = modD(m, s), hm = s.H - modY0(m, s), nSh = (ty.shelves || []).length + (ty.shoe || []).length + (ty.shoeOpen || []).length;
+      const dm = modD(m, s), hm = s.H - modY0(m, s), nSh = shelfPos(m, s, 'wardrobe').length + (ty.shoe || []).length + (ty.shoeOpen || []).length;
       if (ty.floor) {   // makine dolabı: yanlar zemine iner, alt tabla ve arkalık yok (makine zeminde, tesisat erişimi)
         add(no, 'Yan dikme', bodyName, hm, dm, 2, '1 uzun kenar', nSh ? { pins: true } : null);
         add(no, 'Üst tabla', bodyName, m.w - 2 * t, dm, 1, '1 uzun kenar');
@@ -705,13 +726,14 @@ export function partsList(cab) {
       const m = p.m, ty = MT[m.type], no = `A${i + 1}`;
       if (ty.empty) return;
       if (ty.filler) { add(no, 'Dolgu paneli', frontName, ty.tall ? s.tallH - s.plinth : s.carcH, m.w, 1, '2 uzun kenar'); sum.base += m.w / 100; return; }
-      if (ty.tall) { carcass(no, m.w, s.tallH - s.plinth, s.baseD, ty.fridge ? 1 : ty.oven ? 2 : (ty.shelves || 4)); sum.tall += 1; H('Ayar ayağı', 4); }
+      const nSh = shelfPos(m, s, 'kitchen').length;
+      if (ty.tall) { carcass(no, m.w, s.tallH - s.plinth, s.baseD, nSh); sum.tall += 1; H('Ayar ayağı', 4); }
       else {
-        add(no, 'Yan dikme', bodyName, s.carcH, s.baseD, 2, '1 uzun kenar', ty.shelves ? { pins: true } : null);
+        add(no, 'Yan dikme', bodyName, s.carcH, s.baseD, 2, '1 uzun kenar', nSh ? { pins: true } : null);
         add(no, 'Alt tabla', bodyName, m.w - 2 * t, s.baseD, 1, '1 uzun kenar');
         add(no, 'Üst kuşak', bodyName, m.w - 2 * t, 10, 2);
         if (!ty.appliance) add(no, 'Arkalık', 'Arkalık · 8 mm', m.w - 0.4, s.carcH - 0.4, 1);
-        if (ty.shelves) { add(no, 'Raf', bodyName, m.w - 2 * t - 0.2, s.baseD - 2, ty.shelves, '1 uzun kenar'); H('Raf pimi', ty.shelves * 4); }
+        if (nSh) { add(no, 'Raf', bodyName, m.w - 2 * t - 0.2, s.baseD - 2, nSh, '1 uzun kenar'); H('Raf pimi', nSh * 4); }
         if (ty.sink) H('Evye + batarya + sifon', 1);
         if (ty.hob) H('Ankastre ocak', 1);
         if (ty.oven) H('Ankastre fırın', 1);
@@ -730,7 +752,7 @@ export function partsList(cab) {
       if (ty.empty) return;
       if (ty.hood) { H('Davlumbaz', 1); return; }
       if (ty.filler) { add(no, 'Dolgu paneli', frontName, s.upH, m.w, 1, '2 uzun kenar'); sum.upper += m.w / 100; return; }
-      carcass(no, m.w, s.upH, s.upD, ty.shelves || 1);
+      carcass(no, m.w, s.upH, s.upD, shelfPos(m, s, 'kitchen').length);
       H('Üst dolap askı aparatı', 2);
       if (ty.glass) H('Kapak camı (m²)', +(m.w * s.upH / 1e4).toFixed(2));
       fronts(no, frontsOf(m, 'kitchen', s, p.x0), 'kitchen');

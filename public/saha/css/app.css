@@ -979,3 +979,12 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .lb-sum{margin:10px 0 6px;font-size:14px}
 .lb-prev{display:flex;flex-wrap:wrap;gap:12px}
 .lb-prev img{width:min(100%,380px);height:auto;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+
+/* dolap: elle raf */
+.cd-shelves{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.cd-shelves b{font-size:13px}
+.cd-shrow{display:flex;align-items:center;gap:6px}
+.cd-shrow>span{width:18px;font-size:12px;color:var(--muted);font-weight:700}
+.cd-shrow .inp-unit{flex:1}
+.cd-shn{flex-direction:row;align-items:center;gap:6px;font-size:12.5px}
+.cd-shn input{width:64px}
