@@ -17,7 +17,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.23-2';
+export const APP_VERSION = '2026.10.23-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1013,7 +1013,7 @@ function planScreen() {
       },
       printSheet: (title, body) => printDoc(`<div class="pdoc">${docHeader(S.settings, title, `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `${title} ${j.code}`),
       priceOf: (k, def) => S.settings.catalog?.find(c => c.id === k)?.price ?? def,
-      settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}),
+      settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}), job: j,
     },
   });
   const setMode = async m => {
@@ -1043,6 +1043,7 @@ function planScreen() {
     const opts = [
       ['dxf2', '2D çizim', 'DXF', 'AutoCAD / ArchiCAD / NanoCAD — duvar, kapı, pencere, oda, mobilya, ölçü katmanlarıyla (mm)'],
       ['png', '2D çizim', 'PNG', 'Plan görseli — fotoğraflara da kaydedilir'],
+      ['etiket', 'Etiket', 'Parça etiketleri (10 × 6 cm PDF)', 'Dolap parçaları ve kapı / pencereler için QR kodlu, barkodlu etiketler — her sayfa bir etiket'],
       ['cnc', 'Mutfak / dolap', 'CNC kesim şablonu (DXF)', 'Çizimdeki tüm mutfak ve dolapların parçaları levhalara yerleşik; menteşe ve raf pimi delikleri, kenar bandı işaretli'],
       ['dograma', 'Liste', 'Doğrama listesi (PDF)', 'Kapı ve pencereler: poz numaraları, ölçülü görünüşler, imalat ölçüleri, adet ve m²'],
       ['dae', '3D model', 'SketchUp (.dae)', 'SketchUp: Dosya → İçe aktar → Collada; malzeme renkleriyle'],
@@ -1058,6 +1059,12 @@ function planScreen() {
     try {
       if (k === 'png') return savePng();
       if (k === 'dograma') return printJoinery(j, dw, S.editor.plan);
+      if (k === 'etiket') {
+        const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
+        const off = new Set(j.jnOff?.[dw.id] || []), jnOnly = off.size ? new Set(S.editor.plan.openings.map(o => o.id).filter(id => !off.has(id))) : null;
+        const { labelsDialog } = await import('./labels.js');
+        return labelsDialog({ cabs, plan: S.editor.plan, job: j, settings: S.settings, fname: fname('x').replace(/\.x$/, ''), jnOnly });
+      }
       if (k === 'cnc') {
         const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
         const { cncDialog } = await import('./cnc.js');
