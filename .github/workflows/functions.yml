@@ -109,7 +109,7 @@ jobs:
       - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
         uses: actions/setup-node@v4
         with:
-          # functions/package.json "engines" ile aynı olmalı (Cloud Functions Node.js 20 desteği 2026-10-31'de bitti)
+          # functions/package.json "engines" ile aynı olmalı (Cloud Functions Node.js 20 desteği 2026-10-31'de bitiyor)
           node-version: 22
 
       - name: Bağımlılıkları kur
