@@ -8,6 +8,11 @@
  * Bildirimde "Ara", "WhatsApp" ve "Panel" düğmeleri bulunur; bildirime
  * dokunmak admin panelini açar.
  *
+ * ntfy.sh anonim gönderimleri IP'ye göre sınırlar; Cloud Functions'ın çıkış
+ * IP'leri paylaşımlı olduğundan kota başkalarınca dolabilir (HTTP 429). Bu
+ * yüzden ntfy.sh hesabının erişim anahtarı (NTFY_TOKEN sırrı) ile gönderilir;
+ * anahtar "none" ise anonim gönderilir. 429'da kısa aralıklarla yeniden denenir.
+ *
  * Kurulum (tarayıcıdan): DEPLOY.md → 6). Yayın GitHub Actions ile yapılır
  * (.github/workflows/functions.yml); elle yayında yalnızca bu fonksiyonu seçin:
  *   firebase deploy --only functions:tbNotifyNewAppointment
@@ -20,6 +25,7 @@ const https = require("https");
 setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
 const NTFY_TOPIC = defineSecret("NTFY_TOPIC");
+const NTFY_TOKEN = defineSecret("NTFY_TOKEN");
 
 const ADMIN_URL = "https://tadilatbodrum.com/admin";
 
@@ -36,7 +42,7 @@ function normalizePhone(phone) {
  * parametresiyle gönderilir: başlıklar yalnızca ASCII taşıyabildiği için
  * Türkçe karakterler bozulurdu.
  */
-function sendNtfy(topic, { title, body, tags, click, actions }) {
+function sendNtfy(topic, token, { title, body, tags, click, actions }) {
   return new Promise((resolve, reject) => {
     const params = new URLSearchParams({ title, priority: "high", tags });
     if (click) params.set("click", click);
@@ -47,7 +53,10 @@ function sendNtfy(topic, { title, body, tags, click, actions }) {
         hostname: "ntfy.sh",
         path,
         method: "POST",
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
         timeout: 10000,
       },
       (res) => {
@@ -55,7 +64,7 @@ function sendNtfy(topic, { title, body, tags, click, actions }) {
         res.on("end", () =>
           res.statusCode >= 200 && res.statusCode < 300
             ? resolve(res.statusCode)
-            : reject(new Error("ntfy yanıtı: HTTP " + res.statusCode)));
+            : reject(Object.assign(new Error("ntfy yanıtı: HTTP " + res.statusCode), { status: res.statusCode })));
       }
     );
     req.on("error", reject);
@@ -65,10 +74,29 @@ function sendNtfy(topic, { title, body, tags, click, actions }) {
   });
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 429 (kota) ve ağ hatalarında 2 sn, 6 sn, 15 sn arayla yeniden dener. */
+async function sendNtfyWithRetry(topic, token, msg) {
+  const delays = [2000, 6000, 15000];
+  for (let i = 0; ; i++) {
+    try {
+      return await sendNtfy(topic, token, msg);
+    } catch (err) {
+      const retryable = !err.status || err.status === 429 || err.status >= 500;
+      if (!retryable || i >= delays.length) throw err;
+      console.warn(`ntfy denemesi ${i + 1} başarısız (${err.message}), yeniden denenecek`);
+      await sleep(delays[i]);
+    }
+  }
+}
+
 exports.tbNotifyNewAppointment = onDocumentCreated(
-  { document: "sites/tadilatbodrum/appointments/{id}", secrets: [NTFY_TOPIC] },
+  { document: "sites/tadilatbodrum/appointments/{id}", secrets: [NTFY_TOPIC, NTFY_TOKEN] },
   async (event) => {
     const topic = NTFY_TOPIC.value();
+    const rawToken = (NTFY_TOKEN.value() || "").trim();
+    const token = rawToken && rawToken !== "none" ? rawToken : "";
     if (!topic) {
       console.error("NTFY_TOPIC sırrı tanımlı değil, bildirim gönderilemedi.");
       return;
@@ -92,7 +120,7 @@ exports.tbNotifyNewAppointment = onDocumentCreated(
     actions.push(`view, Panel, ${ADMIN_URL}`);
 
     try {
-      await sendNtfy(topic, {
+      await sendNtfyWithRetry(topic, token, {
         title: "Yeni Keşif Randevusu — TadilatBodrum.com",
         body: lines,
         tags: "house,bell",

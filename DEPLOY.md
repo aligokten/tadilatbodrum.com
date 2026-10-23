@@ -196,6 +196,18 @@ echo tbodrum-kesif-$(openssl rand -hex 12)
 
 GitHub sırları kimse tarafından görüntülenemez ve iş akışı kayıtlarında `***` olarak gizlenir.
 
+**e2) ntfy.sh erişim anahtarı (önerilir, kota hatasını önler)** — ntfy.sh anonim gönderimleri
+IP adresine göre sınırlar; Google Cloud'un çıkış IP'leri binlerce kullanıcıyla paylaşıldığı için
+kota başkalarınca dolabilir ve bildirim **HTTP 429** ile reddedilir. Ücretsiz hesapla sınır
+sizin hesabınıza uygulanır:
+1. https://ntfy.sh/signup → kullanıcı adı ve şifreyle ücretsiz hesap açın.
+2. https://ntfy.sh/account → **Access tokens → Create access token** (süresiz) → `tk_` ile
+   başlayan anahtarı kopyalayın.
+3. GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+   *Name:* `NTFY_TOKEN`, *Secret:* anahtar → **Add secret**.
+
+Telefondaki uygulamada hesaba giriş yapmanız gerekmez; abonelik aynı kalır.
+
 **f) Yayınlayın** — GitHub → **Actions → Keşif bildirimi fonksiyonu → Run workflow** (iki
 kutu da işaretli kalsın) → **Run workflow**.
 1. Birkaç saniye içinde telefona **"TadilatBodrum test bildirimi"** gelir → abonelik doğru.
@@ -210,8 +222,11 @@ Yalnızca bildirimi denemek için *Run workflow*'da "Fonksiyonu yayınla" kutusu
 - Test bildirimi gelmiyor → telefondaki konu adı GitHub sırrıyla birebir aynı mı? (boşluk olmasın)
 - İş akışı "Yayın başarısız" ile kırmızı → (a) Blaze ve (b) yetki kurulumunu kontrol edin;
   hata satırını Claude'a gönderin (konu adı kayıtlarda zaten gizlidir).
-- Form bildirimi gelmiyor → Firebase Console → **Functions** → `tbNotifyNewAppointment` →
-  **Logs** sekmesindeki hata mesajına bakın.
+- Form bildirimi gelmiyor → Cloud Shell'de kayıtlara bakın:
+  ```bash
+  gcloud logging read 'resource.labels.service_name="tbnotifynewappointment"' --project=saggplus --freshness=2h --limit=20 --format='value(timestamp,severity,textPayload,httpRequest.status)'
+  ```
+  `HTTP 429` görünüyorsa (e2) adımını yapın; `HTTP 401/403` ise `NTFY_TOKEN` hatalıdır.
 
 > Firestore/Functions saggplus ile paylaşımlıdır: iş akışı **yalnızca** `tbNotifyNewAppointment`
 > fonksiyonunu yayınlar, saggplus'ın fonksiyonlarına dokunmaz. Elle yayın yaparsanız da
@@ -223,7 +238,8 @@ değişkeniyle verin; sunucu açılışta "Keşif bildirimi → açık" yazar:
 ```bash
 NTFY_TOPIC=tbodrum-kesif-... python3 server.py
 ```
-(İsteğe bağlı: `NTFY_SERVER` kendi ntfy sunucunuz, `NTFY_ADMIN_URL` "Panel" düğmesinin adresi.)
+(İsteğe bağlı: `NTFY_TOKEN` ntfy.sh erişim anahtarı, `NTFY_SERVER` kendi ntfy sunucunuz,
+`NTFY_ADMIN_URL` "Panel" düğmesinin adresi.)
 
 ---
 
