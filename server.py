@@ -28,8 +28,11 @@ DATA_FILE = os.path.join(ROOT, "data", "db.json")
 DEFAULT_USER = "admin"
 DEFAULT_PASSWORD = "exalmc11"
 
-# Keşif randevusu push bildirimi (ntfy.sh). Konu adı gizlidir; ortam
-# değişkeninden okunur:  NTFY_TOPIC=gizli-konu-adi python3 server.py
+# Keşif randevusu bildirimi: Telegram botu ve/veya ntfy.sh. Anahtarlar gizlidir;
+# ortam değişkeninden okunur:
+#   TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=… NTFY_TOPIC=gizli-konu-adi python3 server.py
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 NTFY_TOKEN = os.environ.get("NTFY_TOKEN", "").strip()  # isteğe bağlı ntfy.sh erişim anahtarı (tk_…)
@@ -118,35 +121,45 @@ def _normalize_phone(phone):
     return d
 
 
+def _post(url, data, headers, label):
+    try:
+        with urlopen(Request(url, data=data, method="POST", headers=headers), timeout=10) as r:
+            r.read()
+    except Exception as e:
+        print(f"{label} bildirimi gönderilemedi:", e, file=sys.stderr)
+
+
 def notify_appointment(rec, admin_url=NTFY_ADMIN_URL):
-    """Yeni keşif randevusunu ntfy'ye arka planda gönderir (NTFY_TOPIC yoksa hiçbir şey yapmaz)."""
-    if not NTFY_TOPIC:
-        return
-    labels = (("name", "Ad Soyad"), ("phone", "Telefon"), ("district", "Bölge"),
-              ("date", "Tercih edilen tarih"), ("note", "Not"))
-    body = "\n".join(f"{t}: {rec[k]}" for k, t in labels if rec.get(k)) or "Detay bilgisi girilmemiş."
-    actions = []
+    """Yeni keşif randevusunu Telegram'a ve/veya ntfy'ye arka planda gönderir (kanal tanımlı değilse atlar)."""
+    labels = (("name", "Ad Soyad", "👤"), ("phone", "Telefon", "📞"), ("district", "Bölge", "📍"),
+              ("date", "Tercih edilen tarih", "📅"), ("note", "Not", "📝"))
     tel = _normalize_phone(rec.get("phone"))
-    if tel:
-        actions += [f"view, Ara, tel:+{tel}", f"view, WhatsApp, https://wa.me/{tel}"]
-    actions.append(f"view, Panel, {admin_url}")
-    # başlık/aksiyonlar sorgu parametresinde: HTTP başlıkları Türkçe karakter taşıyamaz
-    params = urlencode({"title": "Yeni Keşif Randevusu — TadilatBodrum.com", "priority": "high",
-                        "tags": "house,bell", "click": admin_url, "actions": "; ".join(actions)})
-    url = f"{NTFY_SERVER}/{quote(NTFY_TOPIC, safe='')}?{params}"
 
-    def send():
-        try:
-            headers = {"Content-Type": "text/plain; charset=utf-8"}
-            if NTFY_TOKEN:
-                headers["Authorization"] = "Bearer " + NTFY_TOKEN
-            req = Request(url, data=body.encode("utf-8"), method="POST", headers=headers)
-            with urlopen(req, timeout=10) as r:
-                r.read()
-        except Exception as e:
-            print("ntfy bildirimi gönderilemedi:", e, file=sys.stderr)
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        esc = lambda t: str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        rows = [f"{i} <b>{t}:</b> {esc('+' + tel if k == 'phone' and tel else rec[k])}"
+                for k, t, i in labels if rec.get(k)]
+        buttons = ([{"text": "💬 WhatsApp", "url": f"https://wa.me/{tel}"}] if tel else []) + \
+                  [{"text": "🗂 Panel", "url": admin_url}]
+        payload = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "parse_mode": "HTML", "disable_web_page_preview": True,
+                              "text": "\n".join(["🏠 <b>Yeni Keşif Randevusu</b>", ""] + (rows or ["Detay bilgisi girilmemiş."])),
+                              "reply_markup": {"inline_keyboard": [buttons]}}).encode("utf-8")
+        threading.Thread(target=_post, daemon=True, args=(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", payload,
+            {"Content-Type": "application/json"}, "Telegram")).start()
 
-    threading.Thread(target=send, daemon=True).start()
+    if NTFY_TOPIC:
+        body = "\n".join(f"{t}: {rec[k]}" for k, t, _ in labels if rec.get(k)) or "Detay bilgisi girilmemiş."
+        actions = [f"view, Ara, tel:+{tel}", f"view, WhatsApp, https://wa.me/{tel}"] if tel else []
+        actions.append(f"view, Panel, {admin_url}")
+        # başlık/aksiyonlar sorgu parametresinde: HTTP başlıkları Türkçe karakter taşıyamaz
+        params = urlencode({"title": "Yeni Keşif Randevusu — TadilatBodrum.com", "priority": "high",
+                            "tags": "house,bell", "click": admin_url, "actions": "; ".join(actions)})
+        headers = {"Content-Type": "text/plain; charset=utf-8"}
+        if NTFY_TOKEN:
+            headers["Authorization"] = "Bearer " + NTFY_TOKEN
+        threading.Thread(target=_post, daemon=True, args=(
+            f"{NTFY_SERVER}/{quote(NTFY_TOPIC, safe='')}?{params}", body.encode("utf-8"), headers, "ntfy")).start()
 
 
 EXT_BY_MIME = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
@@ -437,7 +450,8 @@ def main():
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"TadilatBodrum sitesi çalışıyor →  http://localhost:{port}")
     print(f"Admin paneli               →  http://localhost:{port}/admin  (kullanıcı: {DEFAULT_USER}  şifre: {DEFAULT_PASSWORD})")
-    print("Keşif bildirimi (ntfy)      →  " + ("açık" if NTFY_TOPIC else "kapalı (NTFY_TOPIC ortam değişkeni tanımlı değil)"))
+    kanallar = [n for n, on in (("Telegram", TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID), ("ntfy", NTFY_TOPIC)) if on]
+    print("Keşif bildirimi            →  " + (", ".join(kanallar) or "kapalı (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ya da NTFY_TOPIC tanımlı değil)"))
     srv.serve_forever()
 
 

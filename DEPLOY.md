@@ -153,9 +153,12 @@ girilirse 4 ve üzeri puan veren müşteriye teşekkür ekranında "Google'da da
 ## 6) Keşif randevusu bildirimi (telefona anlık push)
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function
-otomatik tetiklenip **ntfy.sh** üzerinden telefonunuza anlık push bildirimi gönderir.
-Bildirimde ad, telefon, bölge, tarih ve not yazar; **Ara**, **WhatsApp** ve **Panel**
-düğmeleri vardır (bildirime dokunmak admin panelini açar).
+otomatik tetiklenip telefonunuza anlık bildirim gönderir. Mesajda ad, telefon, bölge, tarih ve not
+yazar; **WhatsApp** ve **Panel** düğmeleri vardır.
+
+- **Telegram botu — ana kanal (önerilen):** telefon numarasına dokununca arama açılır.
+- **ntfy.sh — isteğe bağlı yedek:** ntfy.sh, Cloud Functions'ın paylaşımlı Google IP'lerini erişim
+  anahtarına rağmen sınırlayabildiği (HTTP 429) için güvenilir değildir; yalnızca Telegram'a ek olarak kullanın.
 
 Kurulumun tamamı **tarayıcıdan** yapılır (bilgisayar terminali gerekmez, telefondan da olur).
 Ön koşul: [0) Otomatik yayın](#0-otomatik-yayın-github-actions--önerilen) kurulmuş olmalı.
@@ -172,7 +175,21 @@ curl -sL https://raw.githubusercontent.com/aligokten/tadilatbodrum.com/main/scri
 ```
 Sonda "Kurulum tamam" yazmalı.
 
-**c) Gizli konu adı üretin** — aynı Cloud Shell penceresinde:
+**c) Telegram botu oluşturun**
+1. Telegram'da **@BotFather**'ı açın → `/newbot` yazın → bota bir ad (örn. *TadilatBodrum Bildirim*)
+   ve `bot` ile biten bir kullanıcı adı verin (örn. `tadilatbodrum_kesif_bot`).
+2. BotFather'ın verdiği `123456789:AA…` biçimindeki **bot anahtarını** kopyalayın — şifre gibidir,
+   kimseyle paylaşmayın.
+3. BotFather'ın verdiği `t.me/…` bağlantısıyla botunuzu açın ve **Start** (`/start`) deyin.
+4. GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+   *Name:* `TELEGRAM_BOT_TOKEN`, *Secret:* bot anahtarı → **Add secret**.
+5. GitHub → **Actions → Keşif bildirimi fonksiyonu → Run workflow**. Bot size Telegram'dan
+   **sohbet kimliğinizi** (bir sayı) gönderir. Bu sayıyı da aynı yerden
+   `TELEGRAM_CHAT_ID` adıyla kaydedin ve iş akışını **tekrar** çalıştırın → "✅ test mesajı" gelir.
+
+Telegram kurulduysa (d)–(f) ntfy adımları isteğe bağlıdır; doğrudan (g)'ye geçebilirsiniz.
+
+**d) (Yedek, isteğe bağlı) Gizli ntfy konu adı üretin** — Cloud Shell penceresinde:
 ```bash
 echo tbodrum-kesif-$(openssl rand -hex 12)
 ```
@@ -184,19 +201,19 @@ echo tbodrum-kesif-$(openssl rand -hex 12)
 > yazılıydı. Bu ad git geçmişinde herkese açıktır — onu kullandıysanız yeni bir ad üretin,
 > ntfy uygulamasında eski konudan çıkın.
 
-**d) Telefona ntfy uygulamasını kurun ve abone olun**
+**e) Telefona ntfy uygulamasını kurun ve abone olun**
 - [Android (Play Store)](https://play.google.com/store/apps/details?id=io.heckel.ntfy) ·
   [iOS (App Store)](https://apps.apple.com/us/app/ntfy/id1625396347)
-- Uygulama → **"+" (Subscribe to topic)** → (c)'deki konu adını yapıştırın → *Subscribe*.
+- Uygulama → **"+" (Subscribe to topic)** → (d)'deki konu adını yapıştırın → *Subscribe*.
 
-**e) Konu adını GitHub'a gizli bilgi olarak kaydedin** — GitHub'da repo →
+**f) Konu adını GitHub'a gizli bilgi olarak kaydedin** — GitHub'da repo →
 **Settings → Secrets and variables → Actions → New repository secret**:
 - *Name:* `NTFY_TOPIC`
-- *Secret:* (c)'deki konu adı → **Add secret**
+- *Secret:* (d)'deki konu adı → **Add secret**
 
 GitHub sırları kimse tarafından görüntülenemez ve iş akışı kayıtlarında `***` olarak gizlenir.
 
-**e2) ntfy.sh erişim anahtarı (önerilir, kota hatasını önler)** — ntfy.sh anonim gönderimleri
+**f2) ntfy.sh erişim anahtarı (kota hatasını azaltır)** — ntfy.sh anonim gönderimleri
 IP adresine göre sınırlar; Google Cloud'un çıkış IP'leri binlerce kullanıcıyla paylaşıldığı için
 kota başkalarınca dolabilir ve bildirim **HTTP 429** ile reddedilir. Ücretsiz hesapla sınır
 sizin hesabınıza uygulanır:
@@ -208,35 +225,39 @@ sizin hesabınıza uygulanır:
 
 Telefondaki uygulamada hesaba giriş yapmanız gerekmez; abonelik aynı kalır.
 
-**f) Yayınlayın** — GitHub → **Actions → Keşif bildirimi fonksiyonu → Run workflow** (iki
+**g) Yayınlayın** — GitHub → **Actions → Keşif bildirimi fonksiyonu → Run workflow** (iki
 kutu da işaretli kalsın) → **Run workflow**.
-1. Birkaç saniye içinde telefona **"TadilatBodrum test bildirimi"** gelir → abonelik doğru.
+1. Birkaç saniye içinde Telegram'a **"TadilatBodrum test mesajı"** (ntfy açıksa ntfy'ye de test
+   bildirimi) gelir → ayarlar doğru.
 2. 2–4 dakika sonra iş akışı yeşil biter → fonksiyon yayında.
 3. Sitedeki **"Ücretsiz Keşif Al"** formunu kendiniz doldurup gönderin → gerçek bildirim gelir.
 
 Sonrası: `functions/` klasöründe bir değişiklik main'e birleşince fonksiyon otomatik yeniden
-yayınlanır. Konu adını değiştirmek için (c)–(e)'yi yeni adla tekrarlayıp (f)'yi çalıştırın.
+yayınlanır. ntfy konu adını değiştirmek için (d)–(f)'yi yeni adla tekrarlayıp (g)'yi çalıştırın.
 Yalnızca bildirimi denemek için *Run workflow*'da "Fonksiyonu yayınla" kutusunu kaldırın.
 
 **Sorun giderme**
-- Test bildirimi gelmiyor → telefondaki konu adı GitHub sırrıyla birebir aynı mı? (boşluk olmasın)
+- Telegram test mesajı adımı kırmızı → hata satırındaki açıklamaya bakın: *Unauthorized* ise
+  `TELEGRAM_BOT_TOKEN` hatalı, *chat not found* ise `TELEGRAM_CHAT_ID` hatalı ya da bota `/start` yazılmamış.
+- ntfy test bildirimi gelmiyor → telefondaki konu adı GitHub sırrıyla birebir aynı mı? (boşluk olmasın)
 - İş akışı "Yayın başarısız" ile kırmızı → (a) Blaze ve (b) yetki kurulumunu kontrol edin;
   hata satırını Claude'a gönderin (konu adı kayıtlarda zaten gizlidir).
 - Form bildirimi gelmiyor → Cloud Shell'de kayıtlara bakın:
   ```bash
   gcloud logging read 'resource.labels.service_name="tbnotifynewappointment"' --project=saggplus --freshness=2h --limit=20 --format='value(timestamp,severity,textPayload,httpRequest.status)'
   ```
-  `HTTP 429` görünüyorsa (e2) adımını yapın; `HTTP 401/403` ise `NTFY_TOKEN` hatalıdır.
+  Her kanal ayrı satır yazar: `Bildirim gönderildi (Telegram)` / `Bildirim gönderilemedi (ntfy): … HTTP 429`.
+  ntfy'de `HTTP 429` Google IP sınırıdır — Telegram kullanın; `HTTP 401/403` ise `NTFY_TOKEN` hatalıdır.
 
 > Firestore/Functions saggplus ile paylaşımlıdır: iş akışı **yalnızca** `tbNotifyNewAppointment`
 > fonksiyonunu yayınlar, saggplus'ın fonksiyonlarına dokunmaz. Elle yayın yaparsanız da
 > `firebase deploy --only functions:tbNotifyNewAppointment` kullanın — çıplak
 > `--only functions` saggplus'ın fonksiyonlarını silmeyi önerebilir.
 
-**Self-host (`server.py`) kullanıyorsanız** Firebase gerekmez — konu adını ortam
-değişkeniyle verin; sunucu açılışta "Keşif bildirimi → açık" yazar:
+**Self-host (`server.py`) kullanıyorsanız** Firebase gerekmez — anahtarları ortam
+değişkeniyle verin; sunucu açılışta açık kanalları yazar ("Keşif bildirimi → Telegram, ntfy"):
 ```bash
-NTFY_TOPIC=tbodrum-kesif-... python3 server.py
+TELEGRAM_BOT_TOKEN=123456789:AA... TELEGRAM_CHAT_ID=123456789 NTFY_TOPIC=tbodrum-kesif-... python3 server.py
 ```
 (İsteğe bağlı: `NTFY_TOKEN` ntfy.sh erişim anahtarı, `NTFY_SERVER` kendi ntfy sunucunuz,
 `NTFY_ADMIN_URL` "Panel" düğmesinin adresi.)
