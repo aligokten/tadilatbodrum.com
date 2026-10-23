@@ -1,7 +1,7 @@
 # Keşif randevusu bildirim fonksiyonunu (functions/) Firebase'e yayınlar — Windows terminali gerekmez.
 # functions/ main'e birleşince otomatik çalışır; Actions sekmesinden elle de çalıştırılabilir.
-# ntfy konu adı GitHub sırrı NTFY_TOPIC'ten okunur ve Firebase'e (Secret Manager) aktarılır;
-# GitHub sırları kayıtlarda (log) otomatik gizlenir. Kurulum: DEPLOY.md → 6).
+# Telegram bot anahtarı / sohbet kimliği ve ntfy konu adı GitHub sırlarından okunur ve Firebase'e
+# (Secret Manager) aktarılır; GitHub sırları kayıtlarda (log) otomatik gizlenir. Kurulum: DEPLOY.md → 6).
 name: Keşif bildirimi fonksiyonu
 
 on:
@@ -40,30 +40,62 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      # Telegram (ana kanal): @BotFather'dan alınan bot anahtarı ve sohbet kimliği
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      # ntfy.sh (yedek kanal): konu adı ve hesap erişim anahtarı (tk_…)
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-      # ntfy.sh hesabının erişim anahtarı (tk_…). Paylaşımlı Google IP'lerindeki 429 kota hatasını önler.
       NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
     steps:
-      - name: NTFY_TOPIC sırrı tanımlı mı?
+      - name: Bildirim kanalları tanımlı mı?
         id: check
         run: |
-          if [ -z "$NTFY_TOPIC" ]; then
-            echo "::warning::GitHub sırrı NTFY_TOPIC tanımlı değil — atlandı. Settings → Secrets and variables → Actions → New repository secret (DEPLOY.md → 6)."
+          tg=false; [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && tg=true
+          echo "tg=$tg" >> "$GITHUB_OUTPUT"
+          echo "ntfy=$([ -n "$NTFY_TOPIC" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -z "$TELEGRAM_CHAT_ID" ]; then echo "need_chat=true" >> "$GITHUB_OUTPUT"; fi
+          if [ "$tg" = false ] && [ -z "$NTFY_TOPIC" ] && [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "::warning::Hiçbir bildirim kanalı tanımlı değil (TELEGRAM_BOT_TOKEN / NTFY_TOPIC) — atlandı. DEPLOY.md → 6."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
-          if [ -z "$NTFY_TOKEN" ]; then
-            echo "::warning::GitHub sırrı NTFY_TOKEN tanımlı değil — bildirimler anonim gider ve ntfy.sh kotasına (HTTP 429) takılabilir (DEPLOY.md → 6)."
-          fi
 
-      - name: Test bildirimi
-        if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.test)
+      - name: Telegram sohbet kimliğini bul
+        if: steps.check.outputs.need_chat == 'true'
+        run: |
+          # Kimlik herkese açık kayıtlara yazılmaz; bot onu doğrudan size Telegram'dan gönderir.
+          set -o pipefail
+          chat=$(curl -fsS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getUpdates" \
+            | jq -r '[.result[] | (.message // .edited_message // .my_chat_member) | .chat // empty | select(.type == "private")] | last | .id // empty') \
+            || { echo "::error::Telegram bot anahtarı geçersiz (TELEGRAM_BOT_TOKEN)."; exit 1; }
+          if [ -z "$chat" ]; then
+            echo "::warning::Bot henüz mesaj almamış. Telegram'da botunuzu açıp /start yazın, sonra bu iş akışını tekrar çalıştırın."
+            exit 0
+          fi
+          echo "::add-mask::$chat"
+          curl -fsS -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            --data-urlencode "chat_id=$chat" --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=✅ Bot bağlandı. Sohbet kimliğiniz: <code>$chat</code>
+          GitHub → Settings → Secrets and variables → Actions → New repository secret: ad TELEGRAM_CHAT_ID, değer bu sayı. Sonra iş akışını tekrar çalıştırın."
+          echo "::notice::Sohbet kimliği Telegram'dan size gönderildi. TELEGRAM_CHAT_ID olarak kaydedip iş akışını tekrar çalıştırın."
+
+      - name: Telegram test mesajı
+        if: steps.check.outputs.tg == 'true' && (github.event_name == 'push' || inputs.test)
+        run: |
+          res=$(curl -sS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=✅ TadilatBodrum test mesajı — yeni keşif randevuları buraya gelecek. (GitHub ${GITHUB_SHA::7})")
+          if [ "$(echo "$res" | jq -r .ok)" = true ]; then echo "✓ Telegram test mesajı gönderildi."
+          else echo "::error::Telegram reddetti: $(echo "$res" | jq -r .description). Bot anahtarı ya da sohbet kimliği hatalı, ya da bota /start yazılmamış."; exit 1; fi
+
+      - name: ntfy test bildirimi (yedek kanal)
+        if: steps.check.outputs.ntfy == 'true' && (github.event_name == 'push' || inputs.test)
+        continue-on-error: true
         run: |
           auth=(); [ -n "$NTFY_TOKEN" ] && auth=(-H "Authorization: Bearer $NTFY_TOKEN")
           curl -fsS -o /dev/null -X POST "${auth[@]}" \
             -H "Title: TadilatBodrum test bildirimi" -H "Tags: white_check_mark" \
             -d "Bu bildirimi görüyorsanız telefonunuz doğru konuya abone. (GitHub ${GITHUB_SHA::7})" \
-            "https://ntfy.sh/$NTFY_TOPIC" && echo "✓ Test bildirimi gönderildi." \
-            || { echo "::error::ntfy test bildirimi reddedildi. HTTP 401/403 ise NTFY_TOKEN anahtarı hatalı."; exit 1; }
+            "https://ntfy.sh/$NTFY_TOPIC" && echo "✓ ntfy test bildirimi gönderildi."
 
       - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
         uses: actions/checkout@v4
@@ -83,12 +115,13 @@ jobs:
         if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
         run: npm install --prefix functions --no-audit --no-fund
 
-      - name: Konu adını ve anahtarı Firebase'e aktar (Secret Manager)
+      - name: Sırları Firebase'e aktar (Secret Manager)
         if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
         run: |
-          printf '%s' "$NTFY_TOPIC" | npx --yes firebase-tools@13.29.1 functions:secrets:set NTFY_TOPIC --data-file=- --project "$PROJECT_ID" --non-interactive
-          # anahtar yoksa "none": fonksiyon sırrın var olmasını bekler, "none" anonim gönderim demektir
-          printf '%s' "${NTFY_TOKEN:-none}" | npx --yes firebase-tools@13.29.1 functions:secrets:set NTFY_TOKEN --data-file=- --project "$PROJECT_ID" --non-interactive
+          # tanımsız kanal "none" yazılır: fonksiyon tüm sırların var olmasını bekler, "none" kanalı kapatır
+          for name in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID NTFY_TOPIC NTFY_TOKEN; do
+            printf '%s' "${!name:-none}" | npx --yes firebase-tools@13.29.1 functions:secrets:set "$name" --data-file=- --project "$PROJECT_ID" --non-interactive
+          done
 
       - name: Fonksiyonu yayınla
         if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
@@ -97,6 +130,7 @@ jobs:
             || { echo "::error::Yayın başarısız. Yetki hatasıysa Cloud Shell'de scripts/functions-deploy-setup.sh'i çalıştırın; Blaze planı gerekir (DEPLOY.md → 6)."; exit 1; }
           {
             echo "### Bildirim fonksiyonu yayında ✓"
+            echo "- Telegram: ${{ steps.check.outputs.tg == 'true' && 'açık' || 'kapalı (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)' }} · ntfy: ${{ steps.check.outputs.ntfy == 'true' && 'açık' || 'kapalı' }}"
             echo "- Sitedeki *Ücretsiz Keşif Al* formunu doldurup gönderin; telefona bildirim gelmeli."
             echo "- Kayıtlar: Firebase Console → Functions → \`$FUNCTION\` → Logs"
           } >> "$GITHUB_STEP_SUMMARY"

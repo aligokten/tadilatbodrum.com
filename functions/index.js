@@ -2,16 +2,14 @@
  * TadilatBodrum.com — bildirim fonksiyonları.
  *
  * sites/tadilatbodrum/appointments/{id} altına yeni bir keşif randevusu
- * kaydı yazıldığında, ntfy.sh üzerinden telefona anlık push bildirimi
- * gönderir. Bildirim konusu (topic) bir Secret Manager sırrıdır — repo
+ * kaydı yazıldığında telefona anlık bildirim gönderir:
+ *   • Telegram botu (ana kanal): mesajda telefon numarası (dokununca arar),
+ *     altında "WhatsApp" ve "Panel" düğmeleri.
+ *   • ntfy.sh (yedek): ntfy.sh, Cloud Run'ın paylaşımlı çıkış IP'lerini
+ *     erişim anahtarına rağmen sınırlayabildiği (HTTP 429) için ikincildir.
+ * Kanallar birbirinden bağımsızdır; değeri "none" olan kanal atlanır.
+ * Bot anahtarı, sohbet kimliği ve ntfy konusu Secret Manager sırrıdır — repo
  * herkese açık olduğu için asla kaynak koduna veya Firestore'a yazılmaz.
- * Bildirimde "Ara", "WhatsApp" ve "Panel" düğmeleri bulunur; bildirime
- * dokunmak admin panelini açar.
- *
- * ntfy.sh anonim gönderimleri IP'ye göre sınırlar; Cloud Functions'ın çıkış
- * IP'leri paylaşımlı olduğundan kota başkalarınca dolabilir (HTTP 429). Bu
- * yüzden ntfy.sh hesabının erişim anahtarı (NTFY_TOKEN sırrı) ile gönderilir;
- * anahtar "none" ise anonim gönderilir. 429'da kısa aralıklarla yeniden denenir.
  *
  * Kurulum (tarayıcıdan): DEPLOY.md → 6). Yayın GitHub Actions ile yapılır
  * (.github/workflows/functions.yml); elle yayında yalnızca bu fonksiyonu seçin:
@@ -26,6 +24,8 @@ setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
 const NTFY_TOPIC = defineSecret("NTFY_TOPIC");
 const NTFY_TOKEN = defineSecret("NTFY_TOKEN");
+const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
+const TELEGRAM_CHAT_ID = defineSecret("TELEGRAM_CHAT_ID");
 
 const ADMIN_URL = "https://tadilatbodrum.com/admin";
 
@@ -74,6 +74,50 @@ function sendNtfy(topic, token, { title, body, tags, click, actions }) {
   });
 }
 
+/** Sır değeri; boş ya da "none" ise "" (kanal kapalı). */
+function secretValue(secret) {
+  const v = (secret.value() || "").trim();
+  return v && v !== "none" ? v : "";
+}
+
+const escapeHtml = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Telegram Bot API sendMessage (HTML biçimli, satır içi URL düğmeleriyle). */
+function sendTelegram(botToken, chatId, html, buttons) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      chat_id: chatId,
+      text: html,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [buttons] },
+    });
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: "/bot" + botToken + "/sendMessage",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
+        timeout: 10000,
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.statusCode);
+          let desc = "";
+          try { desc = JSON.parse(data).description || ""; } catch (_) { /* yanıt JSON değil */ }
+          reject(new Error(`Telegram yanıtı: HTTP ${res.statusCode} ${desc}`.trim()));
+        });
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("Telegram isteği zaman aşımına uğradı")));
+    req.write(payload);
+    req.end();
+  });
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 429 (kota) ve ağ hatalarında 2 sn, 6 sn, 15 sn arayla yeniden dener. */
@@ -92,44 +136,64 @@ async function sendNtfyWithRetry(topic, token, msg) {
 }
 
 exports.tbNotifyNewAppointment = onDocumentCreated(
-  { document: "sites/tadilatbodrum/appointments/{id}", secrets: [NTFY_TOPIC, NTFY_TOKEN] },
+  {
+    document: "sites/tadilatbodrum/appointments/{id}",
+    secrets: [NTFY_TOPIC, NTFY_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
+  },
   async (event) => {
-    const topic = NTFY_TOPIC.value();
-    const rawToken = (NTFY_TOKEN.value() || "").trim();
-    const token = rawToken && rawToken !== "none" ? rawToken : "";
-    if (!topic) {
-      console.error("NTFY_TOPIC sırrı tanımlı değil, bildirim gönderilemedi.");
-      return;
-    }
-
+    const id = event.params.id;
     const d = event.data ? event.data.data() : {};
-    const lines = [
-      d.name ? `Ad Soyad: ${d.name}` : null,
-      d.phone ? `Telefon: ${d.phone}` : null,
-      d.district ? `Bölge: ${d.district}` : null,
-      d.date ? `Tercih edilen tarih: ${d.date}` : null,
-      d.note ? `Not: ${d.note}` : null,
-    ].filter(Boolean).join("\n") || "Detay bilgisi girilmemiş.";
-
     const tel = normalizePhone(d.phone);
-    const actions = [];
-    if (tel) {
-      actions.push(`view, Ara, tel:+${tel}`);
-      actions.push(`view, WhatsApp, https://wa.me/${tel}`);
-    }
-    actions.push(`view, Panel, ${ADMIN_URL}`);
+    const fields = [
+      ["Ad Soyad", d.name],
+      ["Telefon", d.phone],
+      ["Bölge", d.district],
+      ["Tercih edilen tarih", d.date],
+      ["Not", d.note],
+    ].filter(([, v]) => v);
 
-    try {
-      await sendNtfyWithRetry(topic, token, {
+    const jobs = [];
+
+    const botToken = secretValue(TELEGRAM_BOT_TOKEN);
+    const chatId = secretValue(TELEGRAM_CHAT_ID);
+    if (botToken && chatId) {
+      const icons = { "Ad Soyad": "👤", "Telefon": "📞", "Bölge": "📍", "Tercih edilen tarih": "📅", "Not": "📝" };
+      const rows = fields.map(([k, v]) =>
+        // Telegram "+90…" biçimindeki numarayı dokunulabilir (arama) bağlantıya çevirir
+        `${icons[k]} <b>${k}:</b> ${escapeHtml(k === "Telefon" && tel ? "+" + tel : v)}`);
+      const html = ["🏠 <b>Yeni Keşif Randevusu</b>", "", ...(rows.length ? rows : ["Detay bilgisi girilmemiş."])].join("\n");
+      const buttons = [];
+      if (tel) buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${tel}` });
+      buttons.push({ text: "🗂 Panel", url: ADMIN_URL });
+      jobs.push(["Telegram", sendTelegram(botToken, chatId, html, buttons)]);
+    }
+
+    const topic = secretValue(NTFY_TOPIC);
+    if (topic) {
+      const actions = [];
+      if (tel) {
+        actions.push(`view, Ara, tel:+${tel}`);
+        actions.push(`view, WhatsApp, https://wa.me/${tel}`);
+      }
+      actions.push(`view, Panel, ${ADMIN_URL}`);
+      jobs.push(["ntfy", sendNtfyWithRetry(topic, secretValue(NTFY_TOKEN), {
         title: "Yeni Keşif Randevusu — TadilatBodrum.com",
-        body: lines,
+        body: fields.map(([k, v]) => `${k}: ${v}`).join("\n") || "Detay bilgisi girilmemiş.",
         tags: "house,bell",
         click: ADMIN_URL,
         actions,
-      });
-      console.log("Bildirim gönderildi:", event.params.id);
-    } catch (err) {
-      console.error("Bildirim gönderilemedi:", err);
+      })]);
     }
+
+    if (!jobs.length) {
+      console.error("Hiçbir bildirim kanalı tanımlı değil (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ya da NTFY_TOPIC).");
+      return;
+    }
+    const results = await Promise.allSettled(jobs.map(([, p]) => p));
+    results.forEach((r, i) => {
+      const name = jobs[i][0];
+      if (r.status === "fulfilled") console.log(`Bildirim gönderildi (${name}):`, id);
+      else console.error(`Bildirim gönderilemedi (${name}):`, r.reason && r.reason.message);
+    });
   }
 );
