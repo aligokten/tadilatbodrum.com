@@ -882,10 +882,21 @@ export class PlanEditor {
     const r = await modal({ title: 'Bu duvara ne dizilsin?', body: '<p class="muted">Dolaplar duvarın oda tarafındaki iç yüzüne, kapı ve pencereler gözetilerek otomatik dizilir; ardından tasarlayıcı açılır.</p>',
       actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'vestiyer', t: 'Vestiyer' }, { k: 'wardrobe', t: 'Giysi dolabı' }, { k: 'kitchen', t: 'Mutfak', cls: 'btn-primary' }] });
     if (r?.k === 'kitchen' || r?.k === 'wardrobe') this.createCab(r.k, w);
-    if (r?.k === 'vestiyer') this.createCab('wardrobe', w, 'vestiyer');
+    if (r?.k === 'vestiyer') this.vestiyerDialog(w);
+  }
+  /* vestiyer: çamaşır makinesi / kurutma / termosifon dolaba alınacak mı */
+  async vestiyerDialog(w) {
+    const r = await modal({ title: 'Vestiyer', body: `<p class="muted">Antre / koridor dolabı. Askılık, oturak, ayakkabılık ve ayna modülleriyle dizilir; aşağıdaki cihazlar için uygun derinlikte, havalandırmalı kapaklı modül eklenir.</p>
+      <label class="check"><input type="checkbox" id="vW"> Çamaşır makinesi yeri <small>(60×85 cm, zemine oturur, su / gider bağlantısı)</small></label>
+      <label class="check"><input type="checkbox" id="vD"> Kurutma makinesi <small>(çamaşır makinesinin üstüne, kolon)</small></label>
+      <label class="check"><input type="checkbox" id="vB"> Termosifon <small>(Ø45 cm, dolabın üst bölümünde, duvara asılı)</small></label>`,
+      actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Diz ve tasarla', cls: 'btn-primary', icon: 'check' }],
+      onOpen: el => { const W = $('#vW', el), Dr = $('#vD', el); Dr.onchange = () => { if (Dr.checked) W.checked = true; }; W.onchange = () => { if (!W.checked) Dr.checked = false; }; } });
+    if (r?.k !== 'ok') return;
+    this.createCab('wardrobe', w, 'vestiyer', { washer: $('#vW', r.el).checked, dryer: $('#vD', r.el).checked, boiler: $('#vB', r.el).checked });
   }
   /* duvarın oda tarafındaki iç yüzüne dolap dizisi oluştur */
-  createCab(kind, w, style = '') {
+  createCab(kind, w, style = '', opts = null) {
     const P = this.plan, t = this.T(w) / 2, u = wallDir(w), n = wallNormal(w), mid = V.lerp(w.a, w.b, 0.5);
     const inRoom = sg => P.rooms.some(r => pointInPoly(V.add(mid, V.mul(n, sg * (t + 40))), r.pts));
     const side = !inRoom(1) && inRoom(-1) ? -1 : 1, nin = V.mul(n, side);
@@ -898,7 +909,8 @@ export class PlanEditor {
       const c = V.add(w.a, V.mul(u, o.pos)), x = V.dot(V.sub(c, A), dir);
       return { x0: x - o.w / 2, x1: x + o.w / 2, type: o.type, sill: o.sill, h: o.h };
     });
-    const cab = newCabinet(kind, L, style); autoFill(cab, L, obstacles); cab.avail = L;
+    const cab = newCabinet(kind, L, style); if (opts) Object.assign(cab.opts, opts);
+    autoFill(cab, L, obstacles); cab.avail = L;
     const d = itemDims(cab);
     const c = V.add(V.add(A, V.mul(dir, d.w / 2)), V.mul(nin, d.d / 2));
     const rot = ((Math.atan2(dir.y, dir.x) * 180 / Math.PI) % 360 + 360) % 360;
@@ -1455,7 +1467,7 @@ export class PlanEditor {
     } else if (s.kind === 'item' && o.type === 'cabinet' && o.cab) {
       const c = o.cab, isW = c.kind === 'wardrobe';
       const nb = isW ? c.ward.filter(m => !CAB_MT[m.type].empty).length : c.base.filter(m => !CAB_MT[m.type].empty).length, nu = isW ? 0 : c.upper.filter(m => !CAB_MT[m.type].empty).length;
-      body = `<h4>${isW ? 'Giysi dolabı' : 'Mutfak'}</h4>
+      body = `<h4>${isW ? (c.style === 'vestiyer' ? 'Vestiyer' : 'Giysi dolabı') : 'Mutfak'}</h4>
         <button class="btn btn-primary btn-sm cab-open" data-act="cabEdit">${icon('edit')}Tasarla</button>
         <label>Ad<input class="inp sm" data-k="label" value="${esc(o.label)}"></label>
         <div class="mtable"><div><span>Uzunluk</span><b>${fmtNum(runLength(c), 1)} cm</b></div><div><span>${isW ? 'Modül' : 'Alt / boy modül'}</span><b>${nb}</b></div>${isW ? '' : `<div><span>Üst modül</span><b>${nu}</b></div>`}<div><span>Kapak</span><b>${esc(cabPick(FRONTS, c.mat.front).t)}</b></div></div>
@@ -1556,7 +1568,7 @@ export class PlanEditor {
       if (a === 'del') return this.del();
       if (a === 'cabEdit') return this.openCab(x);
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
-      if (a === 'cabV') return this.createCab('wardrobe', x, 'vestiyer');
+      if (a === 'cabV') return this.vestiyerDialog(x);
       this.snap();
       if (a === 'flip') x.flip = !x.flip;
       if (a === 'side') x.side = -(x.side || 1);
