@@ -62,19 +62,20 @@ const colorName = c => ([...FRAME_COLORS, ...LEAF_COLORS].find(x => x[0].toLower
 const shortCode = code => String(code || 'TB').replace(/\s+/g, '');
 
 /* dolap / mutfak parçaları: her adet ayrı etiket. cabs: [{ cab, label }] */
-export function cabinetLabels(cabs, { job, tops = false } = {}) {
+/* url: montaj şeması bağlantısı (…/m/KİMLİK) — verilirse QR kod parçanın montaj şemasını açar; yoksa QR metin içerir */
+export function cabinetLabels(cabs, { job, tops = false, url = '' } = {}) {
   const out = [], jc = shortCode(job?.code);
   cabs.forEach(({ cab, label }, ci) => {
-    const rows = partsList(cab).rows.filter(r => tops || !/^Tezgah/.test(r.mat));
-    let seq = 0;
-    for (const r of rows) for (let i = 0; i < r.n; i++) {
+    let seq = 0;   // sıra tüm satırlar üzerinden (tezgah etiketlenmese de) — montaj şemasıyla aynı numaralama
+    for (const r of partsList(cab).rows) for (let i = 0; i < r.n; i++) {
       seq++;
-      const id = `${jc}-D${ci + 1}-${String(seq).padStart(3, '0')}`;
+      if (!tops && /^Tezgah/.test(r.mat)) continue;
+      const key = `D${ci + 1}-${String(seq).padStart(3, '0')}`, id = `${jc}-${key}`;
       out.push({
         kind: 'part', id, title: r.part, sub: `${label} · ${r.mod}${r.n > 1 ? ` · ${i + 1}/${r.n}` : ''}`,
         big: `${r.L} × ${r.W}`, unit: 'mm', lines: [r.mat, r.band ? `Kenar bandı: ${r.band}` : 'Kenar bandı yok'],
         band: r.band, L: r.L, W: r.W,
-        qr: [id, `${label} · ${r.mod} · ${r.part}`, `${r.L} x ${r.W} mm`, r.mat, r.band ? `Bant: ${r.band}` : '', job ? `İş: ${job.code} ${job.customer?.name || ''}` : '', 'TadilatBodrum.com'].filter(Boolean).join('\n'),
+        qr: url ? `${url}?p=${key}` : [id, `${label} · ${r.mod} · ${r.part}`, `${r.L} x ${r.W} mm`, r.mat, r.band ? `Bant: ${r.band}` : '', job ? `İş: ${job.code} ${job.customer?.name || ''}` : ''].filter(Boolean).join('\n'),
       });
     }
   });
@@ -82,7 +83,7 @@ export function cabinetLabels(cabs, { job, tops = false } = {}) {
 }
 
 /* doğramalar: her kapı / pencere / boşluk ayrı etiket; gap: montaj boşluğu (imalat ölçüsü) */
-export function joineryLabels(plan, { job, gap = 1, only = null } = {}) {
+export function joineryLabels(plan, { job, gap = 1, only = null, url = '' } = {}) {
   const out = [], jc = shortCode(job?.code);
   for (const T of joineryList(plan, only)) for (const x of T.items) {
     const o = x.o, kind = { door: 'Kapı', window: 'Pencere', opening: 'Boşluk' }[o.type];
@@ -97,7 +98,7 @@ export function joineryLabels(plan, { job, gap = 1, only = null } = {}) {
     out.push({
       kind: 'joinery', id, title: `${x.no} · ${kind}`, sub: o.type === 'opening' ? 'Kapısız boşluk' : `${useName(o)} · ${modelName(o)}`,
       big: `${o.w} × ${o.h}`, unit: 'cm (kaba)', lines, otype: o.type,
-      qr: [id, `${kind} ${x.no} · ${o.type === 'opening' ? 'Boşluk' : useName(o)}`, `Kaba: ${o.w} x ${o.h} cm`, ms ? `İmalat: ${ms[0]} x ${ms[1]} cm` : '', `Mahal: ${x.where}`, x.open && x.open !== '—' ? `Açılım: ${x.open}` : '', job ? `İş: ${job.code} ${job.customer?.name || ''}` : '', 'TadilatBodrum.com'].filter(Boolean).join('\n'),
+      qr: url ? `${url}?p=${x.no}` : [id, `${kind} ${x.no} · ${o.type === 'opening' ? 'Boşluk' : useName(o)}`, `Kaba: ${o.w} x ${o.h} cm`, ms ? `İmalat: ${ms[0]} x ${ms[1]} cm` : '', `Mahal: ${x.where}`, x.open && x.open !== '—' ? `Açılım: ${x.open}` : '', job ? `İş: ${job.code} ${job.customer?.name || ''}` : ''].filter(Boolean).join('\n'),
     });
   }
   return out;
@@ -169,17 +170,19 @@ export async function labelPreview(lb, opts = {}) {
 }
 
 /* seçenek penceresi: dolap parçaları ve / veya doğramalar → etiket PDF'i indir */
-export async function labelsDialog({ cabs = [], plan = null, job = null, settings = {}, fname = 'etiketler', jnOnly = null } = {}) {
+/* montaj: async (payload) => 'https://…/m/KİMLİK' | null — montaj şeması bağlantısını oluşturur / günceller (bulut) */
+export async function labelsDialog({ cabs = [], plan = null, job = null, settings = {}, fname = 'etiketler', jnOnly = null, montaj = null } = {}) {
   const { modal, toast, downloadBlob, esc } = await import('./ui.js');
   const hasJ = !!plan?.openings?.length;
   if (!cabs.length && !hasJ) return toast('Etiketlenecek dolap ya da kapı / pencere yok', 'err');
   const opt = { cab: !!cabs.length, tops: false, jn: hasJ && !cabs.length, gap: settings.jnGap ?? 1 };
-  const build = () => [...(opt.cab ? cabinetLabels(cabs, { job, tops: opt.tops }) : []), ...(opt.jn ? joineryLabels(plan, { job, gap: opt.gap, only: jnOnly }) : [])];
+  const build = (url = '') => [...(opt.cab ? cabinetLabels(cabs, { job, tops: opt.tops, url }) : []), ...(opt.jn ? joineryLabels(plan, { job, gap: opt.gap, only: jnOnly, url }) : [])];
   const r = await modal({ title: 'Parça etiketleri (10 × 6 cm)', wide: true, body: `
     <p class="muted small">Her parça için benzersiz kimlik, QR kod (parça bilgisi) ve Code128 barkod içeren etiketler. PDF'in her sayfası bir etikettir (100 × 60 mm, yatay) — etiket yazıcısında kağıt boyutunu 100 × 60 mm seçip "gerçek boyut / %100" ile yazdırın.</p>
     ${cabs.length ? `<label class="check"><input type="checkbox" data-o="cab" ${opt.cab ? 'checked' : ''}> Dolap / mutfak parçaları <small>(${cabs.map(c => esc(c.label)).join(', ')})</small></label>
     <label class="check"><input type="checkbox" data-o="tops"> Tezgahı da etiketle</label>` : ''}
     ${hasJ ? `<label class="check"><input type="checkbox" data-o="jn" ${opt.jn ? 'checked' : ''}> Kapı / pencere (doğrama) <small>(${jnOnly ? jnOnly.size : plan.openings.length} açıklık${jnOnly && jnOnly.size < plan.openings.length ? ' — doğrama listesindeki seçim' : ''})</small></label>` : ''}
+    <p class="muted small">${montaj ? 'QR kod okutulunca parçanın montaj şeması açılır: mobilya çizimi üzerinde parçanın yeri turuncu gösterilir (bağlantı buluta kaydedilir, iş için tek bağlantı; yeniden etiket alınca güncellenir).' : 'Yerel modda montaj şeması bağlantısı oluşturulamaz; QR kod parça bilgisini metin olarak içerir.'}</p>
     <p class="lb-sum"></p>
     <div class="lb-prev"></div>`,
     actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'PDF indir', cls: 'btn-primary', icon: 'download' }],
@@ -196,7 +199,13 @@ export async function labelsDialog({ cabs = [], plan = null, job = null, setting
       el.addEventListener('change', upd); upd();
     } });
   if (r?.k !== 'ok') return;
-  const L = build();
+  let url = '';
+  if (montaj && build().length) {
+    toast('Montaj şeması bağlantısı hazırlanıyor…');
+    try { url = await montaj({ v: 1, t: fname, job: job ? { code: job.code, name: job.customer?.name || '' } : null, cabs: opt.cab ? cabs.map(c => ({ label: c.label, cab: c.cab })) : [], p: opt.jn ? plan : null, only: jnOnly ? [...jnOnly] : null, gap: opt.gap }) || ''; }
+    catch (e) { console.warn(e); toast('Montaj bağlantısı oluşturulamadı; QR kodlar metin içerecek (' + e.message + ')', 'err'); }
+  }
+  const L = build(url);
   if (!L.length) return toast('Etiket seçilmedi', 'err');
   toast(`${L.length} etiket hazırlanıyor…`);
   try {

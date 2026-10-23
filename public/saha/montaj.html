@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<base href="/saha/">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Montaj şeması — TadilatBodrum.com</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" href="assets/icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --cyan:#13C4D8; --orange:#EB591F; --ink:#111214; --muted:#5B6067; --line:#E7E9EB; --bg:#F4F5F6; --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px); }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);-webkit-tap-highlight-color:transparent;min-height:100vh}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  header{position:sticky;top:0;z-index:5;background:#fff;padding:calc(10px + var(--safe-t)) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+  header img{height:30px;width:auto;flex:none}
+  .ttl{min-width:0;flex:1;text-align:right}
+  .ttl b{display:block;font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ttl small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  main{max-width:860px;margin:0 auto;padding:14px 14px calc(24px + var(--safe-b));display:flex;flex-direction:column;gap:12px}
+  .card{background:#fff;border-radius:18px;padding:14px 16px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  .part{display:flex;gap:12px;align-items:flex-start}
+  .badge{flex:none;background:var(--orange);color:#fff;font-weight:800;font-size:12px;border-radius:10px;padding:6px 9px;letter-spacing:.02em}
+  .part h1{font-size:20px;font-weight:800;line-height:1.2}
+  .part p{color:var(--muted);font-size:13.5px;margin-top:2px}
+  .dims{font-size:26px;font-weight:800;margin-top:8px;letter-spacing:-.01em}
+  .dims small{font-size:13px;color:var(--muted);font-weight:600}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:10px;font-size:13.5px}
+  .kv dt{color:var(--muted)}
+  .kv dd{font-weight:600}
+  .seg{display:inline-flex;background:var(--bg);border-radius:999px;padding:3px;margin-bottom:8px}
+  .seg button{padding:7px 14px;border-radius:999px;font-weight:700;font-size:13px;color:var(--muted)}
+  .seg button.on{background:var(--ink);color:#fff}
+  .fig{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .fig svg{display:block;width:100%;height:auto;max-height:70vh}
+  .hl{animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.45}}
+  .legend{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+  h2{font-size:15px;font-weight:800;margin-bottom:8px}
+  ol.steps{list-style:none;display:flex;flex-direction:column;gap:6px;counter-reset:s}
+  ol.steps li{counter-increment:s;display:flex;gap:10px;padding:8px 10px;border-radius:12px;font-size:13.5px;line-height:1.4}
+  ol.steps li::before{content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-weight:800;font-size:12px}
+  ol.steps li.on{background:#FDEDE5}
+  ol.steps li.on::before{background:var(--orange);color:#fff}
+  ol.steps b{display:block}
+  .plist{display:flex;flex-direction:column}
+  .plist a{display:flex;justify-content:space-between;gap:10px;padding:8px 2px;border-top:1px solid var(--line);font-size:13.5px;color:inherit;text-decoration:none}
+  .plist a.on{color:var(--orange);font-weight:700}
+  .plist small{color:var(--muted);white-space:nowrap}
+  .msg{display:grid;place-items:center;gap:12px;text-align:center;padding:60px 20px;color:var(--muted)}
+  .msg b{color:var(--ink);font-size:17px}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--orange);animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  footer{text-align:center;font-size:12px;color:var(--muted);padding:6px 0 14px}
+</style>
+</head>
+<body>
+<header><img src="assets/logo.png" alt="TadilatBodrum.com"><div class="ttl"><b id="t">Montaj şeması</b><small id="st"></small></div></header>
+<main id="app"><div class="msg"><div class="spin"></div><p>Montaj şeması yükleniyor…</p></div></main>
+<script type="module" src="js/montaj.js"></script>
+</body>
+</html>
