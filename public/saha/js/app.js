@@ -17,7 +17,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.23-4';
+export const APP_VERSION = '2026.10.23-5';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1013,7 +1013,7 @@ function planScreen() {
       },
       printSheet: (title, body) => printDoc(`<div class="pdoc">${docHeader(S.settings, title, `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `${title} ${j.code}`),
       priceOf: (k, def) => S.settings.catalog?.find(c => c.id === k)?.price ?? def,
-      settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}), job: j,
+      settings: S.settings, saveSettings: () => S.be.saveSettings(S.settings).catch(() => {}), job: j, montajFor: id => montajLink(j, 'cab:' + id),
     },
   });
   const setMode = async m => {
@@ -1063,7 +1063,7 @@ function planScreen() {
         const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
         const off = new Set(j.jnOff?.[dw.id] || []), jnOnly = off.size ? new Set(S.editor.plan.openings.map(o => o.id).filter(id => !off.has(id))) : null;
         const { labelsDialog } = await import('./labels.js');
-        return labelsDialog({ cabs, plan: S.editor.plan, job: j, settings: S.settings, fname: fname('x').replace(/\.x$/, ''), jnOnly });
+        return labelsDialog({ cabs, plan: S.editor.plan, job: j, settings: S.settings, fname: fname('x').replace(/\.x$/, ''), jnOnly, montaj: montajLink(j, 'dw:' + dw.id) });
       }
       if (k === 'cnc') {
         const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
@@ -1096,6 +1096,20 @@ function planScreen() {
 
 /* müşteriyle paylaşım: kısa bağlantı (bulutta sites/…/shares/{id}) ya da — yerel modda / kural eksikse —
  * çizimin bağlantının # kısmına gömüldüğü uzun bağlantı. Müşteri goster.html'de 3D kuşbakışı + 2D plan görür. */
+/* montaj şeması bağlantısı (etiket QR kodları için): anahtar başına tek kalıcı bağlantı, her etiket alımında güncellenir.
+ * Veri müşteri paylaşımlarıyla aynı 'shares' koleksiyonunda (kural değişmez); görüntüleyici: /m/KİMLİK → saha/montaj.html */
+function montajLink(j, key) {
+  if (!S.be.saveShare) return null;   // yerel / demo: bağlantı yok, QR metin içerir
+  return async payload => {
+    const { encodeShare, slimPlan, newShareId } = await import('./share.js');
+    if (payload.p) payload.p = slimPlan(payload.p);
+    const map = (j.montaj ||= {}), id = map[key] || newShareId();
+    await S.be.saveShare(id, { d: await encodeShare(payload), k: 'montaj', t: Date.now() });
+    if (map[key] !== id) { map[key] = id; save(); }
+    return `${location.origin}/m/${id}`;
+  };
+}
+
 async function shareDialog(j, dw, plan) {
   if (!hasContent(plan)) return toast('Çizim boş', 'err');
   const { encodeShare, slimPlan, viewerBase, newShareId, shortUrl } = await import('./share.js');

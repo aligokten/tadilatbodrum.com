@@ -234,7 +234,7 @@ export function openCabinetDesigner(item, ctx) {
       }
       if (a === 'apply') { finish(cab); return; }
       if (a === 'dxf') { downloadBlob(new Blob([elevationDxf(elevation(cab, { obstacles: ctx.obstacles || [], wallH: ctx.wallH }))], { type: 'application/dxf' }), `${label}-on-gorunus.dxf`); return; }
-      if (a === 'lbl') { const { labelsDialog } = await import('./labels.js'); return labelsDialog({ cabs: [{ cab, label }], job: ctx.job, settings: ctx.settings || {}, fname: label }); }
+      if (a === 'lbl') { const { labelsDialog } = await import('./labels.js'); return labelsDialog({ cabs: [{ cab, label }], job: ctx.job, settings: ctx.settings || {}, fname: label, montaj: ctx.montajFor?.(item.id) }); }
       if (a === 'cnc') { const { cncDialog } = await import('./cnc.js'); return cncDialog([{ cab, label }], { title: label, fname: label, settings: ctx.settings, saveSettings: ctx.saveSettings }); }
       if (a === 'csv') { downloadBlob(new Blob([partsCsv(partsList(cab), label)], { type: 'text/csv;charset=utf-8' }), `${label}-kesim-listesi.csv`); return; }
       if (a === 'quote') {

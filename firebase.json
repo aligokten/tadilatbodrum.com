@@ -19,6 +19,10 @@
           "destination": "/saha/degerlendir.html"
         },
         {
+          "source": "/m/**",
+          "destination": "/saha/montaj.html"
+        },
+        {
           "source": "/admin",
           "destination": "/admin/index.html"
         },
