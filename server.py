@@ -32,6 +32,7 @@ DEFAULT_PASSWORD = "exalmc11"
 # değişkeninden okunur:  NTFY_TOPIC=gizli-konu-adi python3 server.py
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+NTFY_TOKEN = os.environ.get("NTFY_TOKEN", "").strip()  # isteğe bağlı ntfy.sh erişim anahtarı (tk_…)
 # bildirimdeki "Panel" düğmesi (istekteki Host başlığına güvenilmez — sahte bağlantı olmasın)
 NTFY_ADMIN_URL = os.environ.get("NTFY_ADMIN_URL", "https://tadilatbodrum.com/admin")
 
@@ -136,8 +137,10 @@ def notify_appointment(rec, admin_url=NTFY_ADMIN_URL):
 
     def send():
         try:
-            req = Request(url, data=body.encode("utf-8"), method="POST",
-                          headers={"Content-Type": "text/plain; charset=utf-8"})
+            headers = {"Content-Type": "text/plain; charset=utf-8"}
+            if NTFY_TOKEN:
+                headers["Authorization"] = "Bearer " + NTFY_TOKEN
+            req = Request(url, data=body.encode("utf-8"), method="POST", headers=headers)
             with urlopen(req, timeout=10) as r:
                 r.read()
         except Exception as e:
