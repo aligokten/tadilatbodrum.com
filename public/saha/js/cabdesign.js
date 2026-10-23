@@ -5,7 +5,7 @@
 import { icon, esc, h, $, $$, toast, confirmDlg, downloadBlob, fmtNum } from './ui.js';
 import {
   MT, typesFor, mod, doorCount, autoFill, layoutRow, rowLen, runLength, itemDims, elevation, elevationSvg, elevationDxf,
-  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod, modWarn, modD,
+  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod, modWarn, modD, shelfPos, shelfable, modInner,
 } from './cabinet.js';
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -26,7 +26,7 @@ export function openCabinetDesigner(item, ctx) {
         <div class="cd-title"><small>${isW ? (cab.style === 'vestiyer' ? 'Vestiyer tasarlayıcı' : 'Giysi dolabı tasarlayıcı') : 'Mutfak tasarlayıcı'}</small><input class="cd-name" value="${esc(label)}" aria-label="Ad"></div>
         <nav class="cd-tabs">
           <button data-v="front" class="on">${icon('ruler')}<span>Ön görünüş</span></button>
-          ${isW ? `<button data-v="inside">${icon('layers')}<span>İç düzen</span></button>` : ''}
+          <button data-v="inside">${icon('layers')}<span>İç düzen</span></button>
           <button data-v="3d">${icon('cube')}<span>3D</span></button>
           <button data-v="list">${icon('list')}<span>Kesim listesi</span></button>
         </nav>
@@ -68,7 +68,7 @@ export function openCabinetDesigner(item, ctx) {
       if (view !== '3d' && p3) { p3.dispose(); p3 = null; }
       if (view === 'front' || view === 'inside') {
         const E = elevation(cab, { obstacles: ctx.obstacles || [], interior: view === 'inside', wallH: ctx.wallH || 280 });
-        V.innerHTML = `<div class="cd-svg">${elevationSvg(E, { sel })}</div><p class="muted small cd-hint">Bir modüle dokunarak seçin. ${isW ? '"İç düzen" sekmesi kapakları kaldırıp raf / askı / çekmece yerleşimini gösterir.' : 'Kesik V çizgisi kapağın menteşe tarafını gösterir. Turuncu Ü numaraları üst dolaplardır.'}</p>`;
+        V.innerHTML = `<div class="cd-svg">${elevationSvg(E, { sel })}</div><p class="muted small cd-hint">Bir modüle dokunarak seçin. ${isW ? '"İç düzen" sekmesi kapakları kaldırıp raf / askı / çekmece yerleşimini gösterir.' : 'Kesik V çizgisi kapağın menteşe tarafını gösterir. Turuncu Ü numaraları üst dolaplardır. "İç düzen" kapakları kaldırıp rafları gösterir.'}</p>`;
       } else if (view === 'list') V.innerHTML = listHtml();
       else if (view === '3d') draw3d();
       fitInfo(); drawSide();
@@ -123,6 +123,12 @@ export function openCabinetDesigner(item, ctx) {
           <label>Genişlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="w" value="${f.m.w}"><span>cm</span></div></label>
           ${isW && (t.appl || t.boiler) ? `<label>Derinlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="D" value="${modD(f.m, cab.s)}"><span>cm</span></div></label>` : ''}
           ${isW ? modWarn(f.m, cab.s).map(w => `<p class="cd-warn">${icon('alert')}${esc(w)}</p>`).join('') : ''}
+          ${shelfable(f.m, kind) ? (() => { const sp = shelfPos(f.m, cab.s, kind), ih = modInner(f.m, cab.s, kind).h; return `<div class="cd-shelves">
+            <div class="row-between"><b>Raflar <small class="muted">${f.m.shelves ? 'elle' : 'varsayılan'} · iç yükseklik ${fmt(ih)} cm</small></b>${f.m.shelves ? `<button class="btn btn-xs btn-ghost" data-op="shreset" title="Modül tipinin varsayılan raflarına dön">Varsayılan</button>` : ''}</div>
+            ${sp.length ? sp.map((v, k) => `<div class="cd-shrow"><span>${k + 1}.</span><div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-shelf="${k}" value="${v}"><span>cm</span></div><button class="icon-btn sm danger" data-op="shdel" data-k="${k}" title="Rafı kaldır">${icon('trash')}</button></div>`).join('') : '<p class="muted small">Raf yok.</p>'}
+            <div class="row wrap"><button class="btn btn-xs btn-primary" data-op="shadd">${icon('plus')}Raf ekle</button>
+              <label class="cd-shn">Eşit dağıt<input class="inp sm" type="number" min="0" max="12" step="1" data-shn value="${sp.length}"></label></div>
+            <p class="muted small">Yükseklik modülün iç tabanından ölçülür. "Raf ekle" en geniş boşluğun ortasına raf koyar; "İç düzen" görünümünde rafları görebilirsiniz.</p></div>`; })() : ''}
           ${doorable ? `<div class="grid2"><label>Kapak<select class="inp sm" data-m="doors"><option value="">Otomatik (${dc})</option>${[1, 2, 3].map(n => `<option value="${n}" ${f.m.doors === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
             ${dc === 1 ? `<label>Menteşe<select class="inp sm" data-m="hinge"><option value="L" ${(f.m.hinge || 'L') === 'L' ? 'selected' : ''}>Sol</option><option value="R" ${f.m.hinge === 'R' ? 'selected' : ''}>Sağ</option></select></label>` : ''}</div>` : ''}
           <div class="cd-btns">
@@ -169,6 +175,13 @@ export function openCabinetDesigner(item, ctx) {
     /* ── olaylar ── */
     side.addEventListener('change', e => {
       const t = e.target, f = sel && find(sel);
+      if ((t.dataset.shelf !== undefined || t.dataset.shn !== undefined) && f) {   // raf yüksekliği / eşit dağıtım
+        const ih = modInner(f.m, cab.s, kind).h, cur = shelfPos(f.m, cab.s, kind);
+        if (t.dataset.shn !== undefined) { const n = Math.max(0, Math.min(12, Math.round(+t.value || 0))); f.m.shelves = Array.from({ length: n }, (_, i) => Math.round(ih * (i + 1) / (n + 1) * 2) / 2); }
+        else { const v = parseFloat(String(t.value).replace(',', '.')); if (!(v > 0)) return; cur[+t.dataset.shelf] = Math.min(ih - 1, Math.round(v * 2) / 2); f.m.shelves = cur.sort((x, y) => x - y); }
+        if (view === 'front') view = 'inside';
+        return changed();
+      }
       if (t.dataset.m && f) {
         const k = t.dataset.m;
         if (k === 'type') f.m.type = t.value;
@@ -195,6 +208,13 @@ export function openCabinetDesigner(item, ctx) {
         if (op === 'ins') { const c = mod(f.r === 'upper' ? 'ust' : f.r === 'ward' ? 'aski' : 'kapak', 60); arr.splice(f.i + 1, 0, c); sel = c.id; }
         if (op === 'split') { const w1 = Math.round(f.m.w / 2 * 2) / 2; const c = { ...clone(f.m), id: mod('x', 1).id, w: f.m.w - w1 }; f.m.w = w1; delete f.m.doors; delete c.doors; arr.splice(f.i + 1, 0, c); }
         if (op === 'del') { arr.splice(f.i, 1); sel = null; }
+        if (op === 'shadd' || op === 'shdel' || op === 'shreset') {   // elle raf
+          const ih = modInner(f.m, cab.s, kind).h, cur = shelfPos(f.m, cab.s, kind);
+          if (op === 'shreset') delete f.m.shelves;
+          else if (op === 'shdel') { cur.splice(+b.dataset.k, 1); f.m.shelves = cur; }
+          else { const pts = [0, ...cur, ih]; let bi = 0; for (let k = 1; k < pts.length - 1; k++) if (pts[k + 1] - pts[k] > pts[bi + 1] - pts[bi]) bi = k; f.m.shelves = [...cur, Math.round((pts[bi] + pts[bi + 1]) / 2 * 2) / 2].sort((x, y) => x - y); }
+          if (view === 'front') view = 'inside';
+        }
         return changed();
       }
       if (b.dataset.a === 'auto') {
