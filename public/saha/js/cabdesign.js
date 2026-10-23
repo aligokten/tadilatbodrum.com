@@ -5,7 +5,7 @@
 import { icon, esc, h, $, $$, toast, confirmDlg, downloadBlob, fmtNum } from './ui.js';
 import {
   MT, typesFor, mod, doorCount, autoFill, layoutRow, rowLen, runLength, itemDims, elevation, elevationSvg, elevationDxf,
-  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt,
+  partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod,
 } from './cabinet.js';
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -23,7 +23,7 @@ export function openCabinetDesigner(item, ctx) {
     const el = h(`<div class="cd" role="dialog" aria-modal="true">
       <header class="cd-bar">
         <button class="icon-btn" data-x aria-label="Kapat">${icon('x')}</button>
-        <div class="cd-title"><small>${isW ? 'Giysi dolabı tasarlayıcı' : 'Mutfak tasarlayıcı'}</small><input class="cd-name" value="${esc(label)}" aria-label="Ad"></div>
+        <div class="cd-title"><small>${isW ? (cab.style === 'vestiyer' ? 'Vestiyer tasarlayıcı' : 'Giysi dolabı tasarlayıcı') : 'Mutfak tasarlayıcı'}</small><input class="cd-name" value="${esc(label)}" aria-label="Ad"></div>
         <nav class="cd-tabs">
           <button data-v="front" class="on">${icon('ruler')}<span>Ön görünüş</span></button>
           ${isW ? `<button data-v="inside">${icon('layers')}<span>İç düzen</span></button>` : ''}
@@ -115,7 +115,7 @@ export function openCabinetDesigner(item, ctx) {
       if (f) {
         const t = MT[f.m.type], lay = layoutRow(cab[f.r]), p = lay[f.i];
         const no = (f.r === 'upper' ? 'Ü' : f.r === 'ward' ? 'G' : 'A') + (f.i + 1);
-        const doorable = !t.empty && !t.filler && !t.hood && !t.open && !t.drawers && !t.appliance && !t.oven && !t.lift && !t.fridge && !(isW && cab.s.doors === 'surgulu');
+        const doorable = !t.empty && !t.filler && !t.hood && !t.open && !t.drawers && !t.appliance && !t.oven && !t.lift && !t.fridge && !(isW && (cab.s.doors === 'surgulu' || isOpenMod(f.m, cab.s)));
         const dc = doorable ? doorCount(f.m, kind, cab.s) : 0;
         modHtml = `<div class="cd-modh"><b>${no}</b><span>${esc(t.t)}</span><small>${fmt(p.x0)} – ${fmt(p.x1)} cm</small></div>
           <label>Tür<select class="inp sm" data-m="type">${typesFor(kind, f.r).map(o => `<option value="${o.k}" ${o.k === f.m.type ? 'selected' : ''}>${o.t}</option>`).join('')}</select></label>
@@ -149,7 +149,8 @@ export function openCabinetDesigner(item, ctx) {
           <label>Gövde${sel1(BODIES, 'body')}</label>
           ${isW ? '' : `<label>Tezgah${sel1(TOPS, 'top')}</label>`}
           <div class="grid2"><label>Kulp${sel1(HANDLES, 'handle')}</label><label>Kulp rengi${sel1(HANDLE_COLORS, 'hcolor')}</label></div>
-          ${isW ? `<label>Kapak tipi<select class="inp sm" data-s="doors"><option value="menteseli" ${S.doors !== 'surgulu' ? 'selected' : ''}>Menteşeli</option><option value="surgulu" ${S.doors === 'surgulu' ? 'selected' : ''}>Sürgülü</option></select></label>` : ''}
+          ${isW ? `<label>Kapak tipi<select class="inp sm" data-s="doors">${WARD_DOORS.map(d => `<option value="${d.k}" ${(S.doors || 'menteseli') === d.k ? 'selected' : ''}>${d.t}</option>`).join('')}</select></label>
+            <p class="muted small">Vestiyer askılık, oturak ve ayna modülleri her zaman kapaksızdır; "Kapaksız (açık)" seçilirse tüm dizi açık raf / askı olarak tasarlanır.</p>` : ''}
         </details>
         <details class="cd-box"><summary><h4>Ölçüler</h4></summary>
           ${isW ? `<div class="grid2">${n('H', 'Toplam yükseklik')}${n('D', 'Gövde derinliği')}${n('plinth', 'Baza')}${n('t', 'Gövde kalınlığı', 0.1)}</div>`
@@ -221,9 +222,10 @@ export function openCabinetDesigner(item, ctx) {
     document.addEventListener('keydown', onKey);
 
     function sheetHtml() {
-      const img = interior => { const E = elevation(cab, { obstacles: ctx.obstacles || [], interior, wallH: ctx.wallH }); return `<img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(elevationSvg(E, { standalone: true }))}" alt="">`; };
+      const img = interior => { const E = elevation(cab, { obstacles: ctx.obstacles || [], interior, wallH: ctx.wallH }); const ratio = (E.L + 70) / (E.H + 80);   // elevationSvg görünüm kutusu oranı; yükseklik ~600 px'i geçmesin
+        return `<img class="cd-pimg" style="width:${Math.round(600 * ratio)}px" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(elevationSvg(E, { standalone: true, maxW: 1400 }))}" alt="">`; };
       const pl = partsList(cab), S = cab.s;
-      const spec = isW ? [['Ölçü', `${fmt(rowLen(cab.ward))} × ${S.H} × ${S.D + S.frontT} cm`], ['Kapak', S.doors === 'surgulu' ? 'Sürgülü' : 'Menteşeli'], ['Kapak rengi', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t]]
+      const spec = isW ? [['Ölçü', `${fmt(rowLen(cab.ward))} × ${S.H} × ${S.D + S.frontT} cm`], ['Kapak', (WARD_DOORS.find(d => d.k === S.doors) || WARD_DOORS[0]).t], ['Kapak rengi', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t]]
         : [['Dizi uzunluğu', fmt(runLength(cab)) + ' cm'], ['Tezgah yüksekliği', fmt(S.plinth + S.carcH + S.topT) + ' cm'], ['Kapak', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Tezgah', pick(TOPS, cab.mat.top).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t]];
       const mods = rows.map(r => layoutRow(cab[r]).map((p, i) => `<tr><td>${(r === 'upper' ? 'Ü' : r === 'ward' ? 'G' : 'A') + (i + 1)}</td><td>${esc(MT[p.m.type].t)}</td><td class="r">${fmt(p.x1 - p.x0)}</td></tr>`).join('')).join('');
       return `<section class="p-cust">${spec.slice(0, 3).map(([a, b]) => `<div><small>${a}</small><b>${esc(b)}</b></div>`).join('')}</section>
