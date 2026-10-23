@@ -154,48 +154,76 @@ girilirse 4 ve üzeri puan veren müşteriye teşekkür ekranında "Google'da da
 
 Yeni bir keşif randevusu formu gönderildiğinde, `functions/` klasöründeki Cloud Function
 otomatik tetiklenip **ntfy.sh** üzerinden telefonunuza anlık push bildirimi gönderir.
-Bildirim konusu (topic) bir Secret Manager sırrıdır — repo herkese açık olduğu için
-koda veya Firestore'a asla yazılmaz.
+Bildirimde ad, telefon, bölge, tarih ve not yazar; **Ara**, **WhatsApp** ve **Panel**
+düğmeleri vardır (bildirime dokunmak admin panelini açar).
 
-> **Gereksinim:** saggplus projesi **Blaze (kullandıkça öde)** planında olmalı — Cloud
-> Functions'ın dışarıya (ntfy.sh'e) istek atabilmesi için şart. Günlük birkaç bildirim
-> için maliyet pratikte $0'dır.
+Kurulumun tamamı **tarayıcıdan** yapılır (bilgisayar terminali gerekmez, telefondan da olur).
+Ön koşul: [0) Otomatik yayın](#0-otomatik-yayın-github-actions--önerilen) kurulmuş olmalı.
 
-**a) Telefonunuza ntfy uygulamasını kurun**
-- [Android (Play Store)](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
-- [iOS (App Store)](https://apps.apple.com/us/app/ntfy/id1625396347)
-- Uygulamayı açın → **"+" (Subscribe to topic)** → aşağıdaki gibi **uzun ve tahmin edilemez**
-  bir konu adı girin (herkes bu adı bilirse bildirimlerinizi görebilir/sahte bildirim
-  gönderebilir, bu yüzden gizli tutun):
-  ```
-  tbodrum-kesif-zsszz0ksq2zcl0
-  ```
-  (İsterseniz kendi konu adınızı da seçebilirsiniz — önemli olan aşağıdaki adımda
-  **aynı** metni kullanmak.)
+**a) Blaze planı** — [Firebase Console](https://console.firebase.google.com/project/saggplus/usage/details)
+→ saggplus → *Kullanım ve faturalandırma* → **Blaze (kullandıkça öde)**. Cloud Functions'ın
+ntfy.sh'e istek atabilmesi için şart; günlük birkaç bildirim için maliyet pratikte $0'dır.
+(Zaten Blaze ise geçin.)
 
-**b) Konu adını Firebase'e sır (secret) olarak kaydedin** — Windows terminalinde, repo
-klasöründe:
-```powershell
-firebase functions:secrets:set NTFY_TOPIC
+**b) Yayın yetkileri (bir kez)** — https://shell.cloud.google.com adresini proje sahibi
+Google hesabıyla açın ve yapıştırın:
+```bash
+curl -sL https://raw.githubusercontent.com/aligokten/tadilatbodrum.com/main/scripts/functions-deploy-setup.sh | bash
 ```
-İstendiğinde (a) adımındaki konu adını yapıştırıp Enter'a basın.
+Sonda "Kurulum tamam" yazmalı.
 
-**c) Fonksiyonu dağıtın:**
-```powershell
-cd functions
-npm install
-cd ..
-firebase deploy --only functions
+**c) Gizli konu adı üretin** — aynı Cloud Shell penceresinde:
+```bash
+echo tbodrum-kesif-$(openssl rand -hex 12)
 ```
+Çıkan satırı kopyalayın. ntfy.sh'de konular herkese açıktır: adı bilen herkes bildirimlerinizi
+(müşteri adı, telefonu) okuyabilir veya sahte bildirim gönderebilir. Bu yüzden konu adını
+**bu repoya, koda, issue/yoruma ya da Firestore'a asla yazmayın**.
 
-**d) Test edin:** Sitedeki "Ücretsiz Keşif Al" formunu kendiniz doldurup gönderin —
-birkaç saniye içinde telefonunuza push bildirimi gelmeli. Gelmezse:
-- Firebase Console → **Functions** → `tbNotifyNewAppointment` → **Logs** sekmesinden
-  hata mesajına bakın (genelde "secret tanımlı değil" veya ntfy'ye ulaşamama olur).
-- ntfy uygulamasında doğru konuya abone olduğunuzdan emin olun.
+> ⚠️ Bu dosyanın eski bir sürümünde örnek olarak `tbodrum-kesif-zsszz0ksq2zcl0` konu adı
+> yazılıydı. Bu ad git geçmişinde herkese açıktır — onu kullandıysanız yeni bir ad üretin,
+> ntfy uygulamasında eski konudan çıkın.
 
-Konu adını daha sonra değiştirmek isterseniz, (a) ve (b) adımlarını yeni bir adla
-tekrarlayıp `firebase deploy --only functions` ile yeniden dağıtmanız yeterli.
+**d) Telefona ntfy uygulamasını kurun ve abone olun**
+- [Android (Play Store)](https://play.google.com/store/apps/details?id=io.heckel.ntfy) ·
+  [iOS (App Store)](https://apps.apple.com/us/app/ntfy/id1625396347)
+- Uygulama → **"+" (Subscribe to topic)** → (c)'deki konu adını yapıştırın → *Subscribe*.
+
+**e) Konu adını GitHub'a gizli bilgi olarak kaydedin** — GitHub'da repo →
+**Settings → Secrets and variables → Actions → New repository secret**:
+- *Name:* `NTFY_TOPIC`
+- *Secret:* (c)'deki konu adı → **Add secret**
+
+GitHub sırları kimse tarafından görüntülenemez ve iş akışı kayıtlarında `***` olarak gizlenir.
+
+**f) Yayınlayın** — GitHub → **Actions → Keşif bildirimi fonksiyonu → Run workflow** (iki
+kutu da işaretli kalsın) → **Run workflow**.
+1. Birkaç saniye içinde telefona **"TadilatBodrum test bildirimi"** gelir → abonelik doğru.
+2. 2–4 dakika sonra iş akışı yeşil biter → fonksiyon yayında.
+3. Sitedeki **"Ücretsiz Keşif Al"** formunu kendiniz doldurup gönderin → gerçek bildirim gelir.
+
+Sonrası: `functions/` klasöründe bir değişiklik main'e birleşince fonksiyon otomatik yeniden
+yayınlanır. Konu adını değiştirmek için (c)–(e)'yi yeni adla tekrarlayıp (f)'yi çalıştırın.
+Yalnızca bildirimi denemek için *Run workflow*'da "Fonksiyonu yayınla" kutusunu kaldırın.
+
+**Sorun giderme**
+- Test bildirimi gelmiyor → telefondaki konu adı GitHub sırrıyla birebir aynı mı? (boşluk olmasın)
+- İş akışı "Yayın başarısız" ile kırmızı → (a) Blaze ve (b) yetki kurulumunu kontrol edin;
+  hata satırını Claude'a gönderin (konu adı kayıtlarda zaten gizlidir).
+- Form bildirimi gelmiyor → Firebase Console → **Functions** → `tbNotifyNewAppointment` →
+  **Logs** sekmesindeki hata mesajına bakın.
+
+> Firestore/Functions saggplus ile paylaşımlıdır: iş akışı **yalnızca** `tbNotifyNewAppointment`
+> fonksiyonunu yayınlar, saggplus'ın fonksiyonlarına dokunmaz. Elle yayın yaparsanız da
+> `firebase deploy --only functions:tbNotifyNewAppointment` kullanın — çıplak
+> `--only functions` saggplus'ın fonksiyonlarını silmeyi önerebilir.
+
+**Self-host (`server.py`) kullanıyorsanız** Firebase gerekmez — konu adını ortam
+değişkeniyle verin; sunucu açılışta "Keşif bildirimi → açık" yazar:
+```bash
+NTFY_TOPIC=tbodrum-kesif-... python3 server.py
+```
+(İsteğe bağlı: `NTFY_SERVER` kendi ntfy sunucunuz, `NTFY_ADMIN_URL` "Panel" düğmesinin adresi.)
 
 ---
 

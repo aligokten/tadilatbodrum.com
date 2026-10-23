@@ -43,6 +43,10 @@ python3 server.py 8080     # farklı port
 
 Okunmamış kayıtlar kenar çubuğunda rozetle gösterilir; kutular 60 sn'de bir otomatik yenilenir.
 
+**Keşif randevusu bildirimi:** yeni randevu talebi gelince telefona **ntfy.sh** push bildirimi
+gider (Ara / WhatsApp / Panel düğmeleriyle). Firebase'de `functions/` Cloud Function'ı,
+self-host'ta `NTFY_TOPIC=… python3 server.py` — kurulum: [DEPLOY.md](DEPLOY.md) §6.
+
 ### Saha koordinasyon uygulaması (`/saha`)
 
 Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ayrıntılar: **[public/saha/README.md](public/saha/README.md)**.

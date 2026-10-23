@@ -17,7 +17,8 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote, urlencode
+from urllib.request import Request, urlopen
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(ROOT, "public")
@@ -26,6 +27,13 @@ DATA_FILE = os.path.join(ROOT, "data", "db.json")
 
 DEFAULT_USER = "admin"
 DEFAULT_PASSWORD = "exalmc11"
+
+# Keşif randevusu push bildirimi (ntfy.sh). Konu adı gizlidir; ortam
+# değişkeninden okunur:  NTFY_TOPIC=gizli-konu-adi python3 server.py
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+# bildirimdeki "Panel" düğmesi (istekteki Host başlığına güvenilmez — sahte bağlantı olmasın)
+NTFY_ADMIN_URL = os.environ.get("NTFY_ADMIN_URL", "https://tadilatbodrum.com/admin")
 
 _lock = threading.Lock()
 _tokens = {}  # token -> expiry epoch
@@ -98,6 +106,45 @@ def new_id(prefix):
 
 
 # ---------------------------------------------------------------- yardımcılar
+
+def _normalize_phone(phone):
+    """"0541 348 88 33" / "+90 541..." / "541..." → "905413488833"."""
+    d = re.sub(r"\D", "", phone or "")
+    if len(d) == 10 and d[0] == "5":
+        return "90" + d
+    if len(d) == 11 and d[0] == "0":
+        return "9" + d
+    return d
+
+
+def notify_appointment(rec, admin_url=NTFY_ADMIN_URL):
+    """Yeni keşif randevusunu ntfy'ye arka planda gönderir (NTFY_TOPIC yoksa hiçbir şey yapmaz)."""
+    if not NTFY_TOPIC:
+        return
+    labels = (("name", "Ad Soyad"), ("phone", "Telefon"), ("district", "Bölge"),
+              ("date", "Tercih edilen tarih"), ("note", "Not"))
+    body = "\n".join(f"{t}: {rec[k]}" for k, t in labels if rec.get(k)) or "Detay bilgisi girilmemiş."
+    actions = []
+    tel = _normalize_phone(rec.get("phone"))
+    if tel:
+        actions += [f"view, Ara, tel:+{tel}", f"view, WhatsApp, https://wa.me/{tel}"]
+    actions.append(f"view, Panel, {admin_url}")
+    # başlık/aksiyonlar sorgu parametresinde: HTTP başlıkları Türkçe karakter taşıyamaz
+    params = urlencode({"title": "Yeni Keşif Randevusu — TadilatBodrum.com", "priority": "high",
+                        "tags": "house,bell", "click": admin_url, "actions": "; ".join(actions)})
+    url = f"{NTFY_SERVER}/{quote(NTFY_TOPIC, safe='')}?{params}"
+
+    def send():
+        try:
+            req = Request(url, data=body.encode("utf-8"), method="POST",
+                          headers={"Content-Type": "text/plain; charset=utf-8"})
+            with urlopen(req, timeout=10) as r:
+                r.read()
+        except Exception as e:
+            print("ntfy bildirimi gönderilemedi:", e, file=sys.stderr)
+
+    threading.Thread(target=send, daemon=True).start()
+
 
 EXT_BY_MIME = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                "image/gif": ".gif", "image/svg+xml": ".svg", "image/avif": ".avif"}
@@ -303,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
         db[key].insert(0, rec)
         db[key] = db[key][:500]
         save_db(db)
+        if key == "appointments":
+            notify_appointment(rec)
         return self._json({"ok": True})
 
     # ---- PUT (güncelleme)
@@ -385,6 +434,7 @@ def main():
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"TadilatBodrum sitesi çalışıyor →  http://localhost:{port}")
     print(f"Admin paneli               →  http://localhost:{port}/admin  (kullanıcı: {DEFAULT_USER}  şifre: {DEFAULT_PASSWORD})")
+    print("Keşif bildirimi (ntfy)      →  " + ("açık" if NTFY_TOPIC else "kapalı (NTFY_TOPIC ortam değişkeni tanımlı değil)"))
     srv.serve_forever()
 
 
