@@ -12,6 +12,14 @@ export const KITCHEN_DEF = {
   t: 1.8, back: 0.8, gap: 0.3,
 };
 export const WARDROBE_DEF = { H: 240, plinth: 8, D: 58, frontT: 2, t: 1.8, back: 0.8, gap: 0.3, doors: 'menteseli' };
+/* vestiyer: sığ gövde, daha alçak; askılık ve oturak modülleri kapaksız */
+export const VESTIYER_DEF = { H: 220, plinth: 8, D: 40, frontT: 2, t: 1.8, back: 0.8, gap: 0.3, doors: 'menteseli' };
+/* giysi dolabı / vestiyer kapak tipleri */
+export const WARD_DOORS = [{ k: 'menteseli', t: 'Menteşeli kapak' }, { k: 'surgulu', t: 'Sürgülü kapak' }, { k: 'acik', t: 'Kapaksız (açık)' }];
+/* modül kapaksız mı: kapaksız tip ya da dizinin kapak tipi açık */
+export const isOpenMod = (m, s) => !!MT[m.type]?.open || s.doors === 'acik';
+/* bir kanca sırasındaki kanca sayısı (yaklaşık 15 cm arayla) */
+export const hookCount = w => Math.max(2, Math.floor((w - 6) / 15));
 
 /* ── malzemeler ── */
 export const FRONTS = [
@@ -68,6 +76,14 @@ export const MT = {
   raf:      { row: 'ward', t: 'Raflı', shelves: [0.15, 0.3, 0.45, 0.6, 0.75, 0.88] },
   cekaski:  { row: 'ward', t: 'Çekmece + askı', drawers: [0.1, 0.1, 0.1], rails: [0.8], shelves: [0.88] },
   ayakkabi: { row: 'ward', t: 'Ayakkabılık', shoe: [0.08, 0.2, 0.32, 0.44, 0.56], shelves: [0.7, 0.85] },
+  acikraf:  { row: 'ward', t: 'Açık raflı (kapaksız)', open: true, shelves: [0.2, 0.4, 0.6, 0.8] },
+  // vestiyer askılık alternatifleri (kapaksız)
+  vkanca:   { row: 'ward', t: 'Vestiyer · kancalı askılık panosu', open: true, hooks: [0.68], shelves: [0.9], panel: 'duz' },
+  vlamel:   { row: 'ward', t: 'Vestiyer · lamel (çıta) pano + kanca', open: true, hooks: [0.68], shelves: [0.9], panel: 'lamel' },
+  vcift:    { row: 'ward', t: 'Vestiyer · çift sıra kanca (yetişkin + çocuk)', open: true, hooks: [0.74, 0.44], shelves: [0.92] },
+  vboru:    { row: 'ward', t: 'Vestiyer · açık askı borusu + şapkalık', open: true, rails: [0.8], shelves: [0.9] },
+  voturak:  { row: 'ward', t: 'Vestiyer · oturak + ayakkabı rafı + kanca', open: true, bench: 46, shoeOpen: [0.1], hooks: [0.7], shelves: [0.9] },
+  vayna:    { row: 'ward', t: 'Vestiyer · boy aynası paneli', open: true, mirror: true },
   wbos:     { row: 'ward', t: 'Boşluk / niş', empty: true },
 };
 export const typesFor = (kind, row) => Object.entries(MT).filter(([, v]) => kind === 'wardrobe' ? v.row === 'ward' : v.row === row).map(([k, v]) => ({ k, t: v.t }));
@@ -77,16 +93,16 @@ const round05 = v => Math.round(v * 2) / 2;
 export const doorCount = (m, kind, s) => {
   const t = MT[m.type];
   if (m.doors) return m.doors;
-  if (kind === 'wardrobe') return s.doors === 'surgulu' ? 0 : (m.w <= 55 ? 1 : 2);
+  if (kind === 'wardrobe') return s.doors === 'surgulu' || isOpenMod(m, s) ? 0 : (m.w <= 55 ? 1 : 2);
   if (t.doors === 1) return 1;
   return m.w <= 60 ? 1 : 2;
 };
 
 /* yeni dizi */
-export function newCabinet(kind, L) {
-  const s = { ...(kind === 'wardrobe' ? WARDROBE_DEF : KITCHEN_DEF) };
+export function newCabinet(kind, L, style = '') {
+  const s = { ...(kind === 'wardrobe' ? (style === 'vestiyer' ? VESTIYER_DEF : WARDROBE_DEF) : KITCHEN_DEF) };
   const mat = { front: kind === 'wardrobe' ? 'beyaz' : 'beyaz', body: 'beyaz', top: 'kuvars', handle: kind === 'wardrobe' ? 'cubuk' : 'gola', hcolor: 'inox' };
-  const cab = { kind, s, mat, base: [], upper: [], ward: [], opts: { fridge: true, oven: 'kolon', dish: true, hood: true } };
+  const cab = { kind, s, mat, base: [], upper: [], ward: [], opts: { fridge: true, oven: 'kolon', dish: true, hood: true }, ...(style ? { style } : {}) };
   autoFill(cab, L, []);
   return cab;
 }
@@ -152,12 +168,13 @@ export function autoFill(cab, L, obstacles = []) {
   if (cab.kind === 'wardrobe') {
     const blocked = obstacles.map(ob => [ob.x0, ob.x1]);
     const free = subtract([[0, L]], blocked);
-    const pattern = ['aski', 'cekaski', 'raf', 'ikiaski', 'uzunaski', 'ayakkabi'];
+    const vest = cab.style === 'vestiyer';
+    const pattern = vest ? ['vkanca', 'voturak', 'ayakkabi', 'vayna', 'vboru', 'acikraf'] : ['aski', 'cekaski', 'raf', 'ikiaski', 'uzunaski', 'ayakkabi'];
     const out = []; let x = 0, pi = 0;
     for (const [a, b] of free) {
       if (a - x >= 0.5) out.push(mod('wbos', a - x));
-      const len = b - a, k = Math.max(1, Math.round(len / 100)), w = Math.floor(len / k * 2) / 2;
-      for (let i = 0; i < k; i++) out.push(mod(k === 1 ? 'aski' : pattern[pi++ % pattern.length], i === k - 1 ? len - w * (k - 1) : w));
+      const len = b - a, k = Math.max(1, Math.round(len / (vest ? 70 : 100))), w = Math.floor(len / k * 2) / 2;
+      for (let i = 0; i < k; i++) out.push(mod(k === 1 ? pattern[0] : pattern[pi++ % pattern.length], i === k - 1 ? len - w * (k - 1) : w));
       x = b;
     }
     if (L - x >= 0.5) out.push(mod('wbos', L - x));
@@ -228,7 +245,7 @@ export function frontsOf(m, kind, s, x0) {
   const drawers = (y0, h, parts) => { let y = y0 + h; for (const p of parts) { const dh = h * p; y -= dh; F.push({ k: 'drawer', x: x0 + g, y: y + g / 2, w: W - 2 * g, h: dh - g }); } };
   if (kind === 'wardrobe') {
     const y0 = s.plinth, h = s.H - s.plinth;
-    if (s.doors === 'surgulu') return F;            // sürgülü kapaklar dizinin tamamına çizilir
+    if (s.doors === 'surgulu' || isOpenMod(m, s)) return F;   // sürgülü kapaklar dizinin tamamına çizilir; kapaksız modülde kapak yok
     doors(y0, h, doorCount(m, kind, s));
     return F;
   }
@@ -305,9 +322,17 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
       const t = MT[p.m.type], w = p.x1 - p.x0;
       hits.push({ id: p.m.id, row: 'ward', x: p.x0, y: y0, w, h });
       if (t.empty) { R(p.x0, y0, w, h, { s: '#9AA1A9', sw: 0.5, dash: true, layer: 'GOVDE' }); return; }
-      R(p.x0, y0, w, h, { s: '#24272B', f: interior ? body : front, sw: 0.8, layer: 'GOVDE' });
-      if (interior) {
+      const open = isOpenMod(p.m, s);
+      R(p.x0, y0, w, h, { s: '#24272B', f: interior || open ? body : front, sw: 0.8, layer: 'GOVDE' });
+      if (interior || open) {
         const ih = h - 2 * s.t, iy = y0 + s.t;
+        if (open) R(p.x0 + s.t, iy, w - 2 * s.t, ih, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' });   // açık modülde arkalık görünür
+        if (t.panel === 'lamel') for (let x = p.x0 + s.t + 3; x < p.x1 - s.t - 2; x += 6) R(x, iy + ih * 0.42, 3.4, ih * 0.44, { s: '#8A6A4F', f: '#B08463', sw: 0.3, layer: 'PANO' });
+        if (t.panel === 'duz') R(p.x0 + s.t + 2, iy + ih * 0.44, w - 2 * s.t - 4, ih * 0.4, { s: '#24272B', f: front, sw: 0.5, layer: 'PANO' });
+        if (t.mirror) { R(p.x0 + s.t + 3, iy + 8, w - 2 * s.t - 6, ih - 16, { s: '#8A9096', f: '#DCEFF2', sw: 0.6, layer: 'AYNA' }); Ln(p.x0 + s.t + 10, iy + ih - 30, p.x0 + s.t + 22, iy + ih - 18, { s: '#FFFFFF', sw: 1.2, layer: 'AYNA' }); }
+        if (t.bench) { R(p.x0 + s.t, y0 + t.bench - s.plinth - 4, w - 2 * s.t, 4, { s: '#24272B', f: body, sw: 0.6, layer: 'OTURAK' }); R(p.x0 + s.t + 1, y0 + t.bench - s.plinth, w - 2 * s.t - 2, 5, { s: '#7A6A5C', f: '#C7B39E', sw: 0.4, layer: 'OTURAK' }); }
+        (t.shoeOpen || []).forEach(f => Ln(p.x0 + s.t, iy + ih * f, p.x1 - s.t, iy + ih * f + 6, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
+        (t.hooks || []).forEach(f => { const hy = iy + ih * f, n = hookCount(w - 2 * s.t); for (let k = 0; k < n; k++) { const hx = p.x0 + s.t + (w - 2 * s.t) * (k + 0.5) / n; Ln(hx, hy, hx, hy - 6, { s: '#3A3F45', sw: 1.1, layer: 'KANCA' }); Ln(hx, hy - 6, hx + 2.5, hy - 4, { s: '#3A3F45', sw: 1.1, layer: 'KANCA' }); } });
         (t.shelves || []).forEach(f => Ln(p.x0 + s.t, iy + ih * f, p.x1 - s.t, iy + ih * f, { s: '#6E747B', sw: 0.8, layer: 'RAF' }));
         (t.rails || []).forEach(f => { const ry = iy + ih * f - 5; Ln(p.x0 + 4, ry, p.x1 - 4, ry, { s: '#8A9096', sw: 1.6, layer: 'ASKI' }); for (let x = p.x0 + 10; x < p.x1 - 8; x += 7) Ln(x, ry, x + 2, ry - (f > 0.6 ? ih * 0.35 : ih * 0.3), { s: '#C9CDD2', sw: 0.4, layer: 'ASKI' }); });
         (t.drawers || []).reduce((y, f) => { const dh = ih * f; R(p.x0 + s.t + 1, y, w - 2 * s.t - 2, dh - 1, { s: '#24272B', f: front, sw: 0.5, layer: 'CEKMECE' }); return y + dh; }, iy);
@@ -403,6 +428,8 @@ export function elevationSvg(E, { sel = null, pad = 50, standalone = false, maxW
   if (sel) for (const h of E.hits) if (h.id === sel) o += `<rect x="${h.x}" y="${Y(h.y + h.h)}" width="${h.w}" height="${h.h}" fill="rgba(235,89,31,.12)" stroke="#EB591F" stroke-width="1.6"/>`;
   const hit = standalone ? '' : E.hits.map(h => `<rect class="cd-hit" data-mid="${h.id}" x="${h.x}" y="${Y(h.y + h.h)}" width="${h.w}" height="${h.h}" fill="transparent"/>`).join('');
   const size = maxW ? `width="${maxW}" height="${Math.round(maxW * H / W)}"` : '';
+  // bağımsız (PDF / görsel) çıktıda görünüm kutusu 0,0'dan başlar: bazı çiziciler (html2canvas) negatif başlangıçlı viewBox'ı kırpıyor
+  if (standalone) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" ${size} preserveAspectRatio="xMidYMid meet"><rect width="${W}" height="${H}" fill="#fff"/><g transform="translate(${-x0} ${-y0})">${o}</g></svg>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${W} ${H}" ${size} preserveAspectRatio="xMidYMid meet"><rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#fff"/>${o}${hit}</svg>`;
 }
 
@@ -493,11 +520,30 @@ export function build3D(THREE, g, it, mat) {
     if (f.k === 'drawer' || f.k === 'lift') { const hw = Math.min(20, f.w * 0.5); box(f.x + f.w / 2 - hw / 2, f.k === 'lift' ? f.y + 3 : f.y + f.h - 6, z, hw, 1.2, 2.2, hcol); }
     else { const hl = kind === 'wardrobe' ? 40 : 14, hx = f.hinge === 'L' ? f.x + f.w - 5 : f.x + 3.8; const hy = kind === 'wardrobe' ? f.y + f.h * 0.48 - hl / 2 : upper ? f.y + 3 : f.y + f.h - 4 - hl; box(hx, hy, z, 1.2, hl, 2.2, hcol); }
   };
+  /* kapaksız (açık) giysi dolabı / vestiyer modülü: yanlar, alt / üst, arkalık ve iç donanım görünür */
+  const openWard = (p, t, w) => {
+    const d = s.D, H = s.H, y0 = s.plinth, ih = H - y0 - 2 * s.t, iy = y0 + s.t, x0 = p.x0, tt = s.t;
+    const metal = mat('#9DA3A8', 0.3, 0.9), dark = mat('#3A3F45', 0.4, 0.6), wood = mat('#B08463', 0.6), cush = mat('#C7B39E', 0.95), mirror = mat('#DCEFF2', 0.02, 0.6);
+    box(x0, y0, 0, tt, H - y0, d, body); box(x0 + w - tt, y0, 0, tt, H - y0, d, body);
+    box(x0 + tt, y0, 0, w - 2 * tt, tt, d, body); box(x0 + tt, H - tt, 0, w - 2 * tt, tt, d, body);
+    box(x0 + tt, y0 + tt, 0, w - 2 * tt, ih, 0.8, body);   // arkalık
+    (t.shelves || []).forEach(f => box(x0 + tt, iy + ih * f, 0, w - 2 * tt, tt, d - 1, body));
+    (t.rails || []).forEach(f => box(x0 + tt, iy + ih * f - 5, d / 2, w - 2 * tt, 2.2, 2.2, metal));
+    (t.drawers || []).reduce((y, f) => { const dh = ih * f; box(x0 + tt + 0.3, y + 0.3, d - s.frontT, w - 2 * tt - 0.6, dh - 0.6, s.frontT, front); return y + dh; }, iy);
+    if (t.panel === 'lamel') for (let x = x0 + tt + 3; x < x0 + w - tt - 2; x += 6) box(x, iy + ih * 0.42, 0.8, 3.4, ih * 0.44, 2, wood);
+    if (t.panel === 'duz') box(x0 + tt + 2, iy + ih * 0.44, 0.8, w - 2 * tt - 4, ih * 0.4, 1.8, front);
+    (t.hooks || []).forEach(f => { const n = hookCount(w - 2 * tt); for (let k = 0; k < n; k++) { const hx = x0 + tt + (w - 2 * tt) * (k + 0.5) / n; box(hx - 0.6, iy + ih * f - 6, 2.5, 1.2, 6, 1.2, dark); box(hx - 0.6, iy + ih * f - 6, 2.5, 1.2, 1.2, 6, dark); } });
+    if (t.bench) { box(x0 + tt, t.bench - 4, 0, w - 2 * tt, 4, d, body); box(x0 + tt + 1, t.bench, 2, w - 2 * tt - 2, 5, d - 4, cush); }
+    (t.shoeOpen || []).forEach(f => box(x0 + tt, iy + ih * f, 0, w - 2 * tt, tt, d - 2, body));
+    (t.shoe || []).forEach(f => box(x0 + tt, iy + ih * f, 0, w - 2 * tt, tt, d - 2, body));
+    if (t.mirror) box(x0 + tt + 3, iy + 8, 1, w - 2 * tt - 6, ih - 16, 0.6, mirror);
+  };
   if (cab.kind === 'wardrobe') {
     const d = s.D, H = s.H;
     box(0, 0, 3, W, s.plinth, d - 5, plinthM);
     for (const p of layoutRow(cab.ward)) {
       const t = MT[p.m.type], w = p.x1 - p.x0; if (t.empty) continue;
+      if (isOpenMod(p.m, s)) { openWard(p, t, w); continue; }
       box(p.x0, s.plinth, 0, w, H - s.plinth, d, body);
       if (s.doors !== 'surgulu') frontsOf(p.m, 'wardrobe', s, p.x0).forEach(f => drawFront(f, d, 'wardrobe'));
     }
@@ -565,8 +611,13 @@ export function partsList(cab) {
     const h = s.H - s.plinth;
     layoutRow(cab.ward).forEach((p, i) => {
       const m = p.m, ty = MT[m.type], no = `G${i + 1}`; if (ty.empty) return;
-      carcass(no, m.w, h, s.D, (ty.shelves || []).length + (ty.shoe || []).length);
+      carcass(no, m.w, h, s.D, (ty.shelves || []).length + (ty.shoe || []).length + (ty.shoeOpen || []).length);
       (ty.rails || []).forEach(() => { H('Askı borusu (m)', +((m.w - 2 * t) / 100).toFixed(2)); H('Askı borusu taşıyıcı', 2); });
+      (ty.hooks || []).forEach(() => H('Askı kancası (vestiyer)', hookCount(m.w - 2 * t)));
+      if (ty.panel === 'lamel') add(no, 'Lamel çıta', 'Masif / MDF çıta 34×20 mm', (h - 2 * t) * 0.44, 3.4, Math.floor((m.w - 2 * t - 2) / 6));
+      if (ty.panel === 'duz') add(no, 'Askılık panosu', frontName, (h - 2 * t) * 0.4, m.w - 2 * t - 4, 1, '4 kenar');
+      if (ty.bench) { add(no, 'Oturak tablası', bodyName, m.w - 2 * t, s.D, 1, '1 uzun kenar'); H('Oturak minderi (döşemeli)', 1); }
+      if (ty.mirror) H('Boy aynası (m²)', +((m.w - 2 * t - 6) * (h - 2 * t - 16) / 1e4).toFixed(2));
       (ty.drawers || []).forEach(dh => fronts(no, [{ k: 'drawer', w: m.w - 2 * t - 1, h: (h - 2 * t) * dh - 1 }], 'wardrobe'));
       H('Ayar ayağı', 4);
       if (s.doors !== 'surgulu') fronts(no, frontsOf(m, 'wardrobe', s, p.x0), 'wardrobe');

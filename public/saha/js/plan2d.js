@@ -880,11 +880,12 @@ export class PlanEditor {
     const w = this.sel?.kind === 'wall' ? this.obj(this.sel) : null;
     if (!w) { toast('Önce dolabın yerleşeceği duvarı seçin (Seç aracıyla duvara dokunun)', 'err'); if (this.tool !== 'select') this.setTool('select'); return; }
     const r = await modal({ title: 'Bu duvara ne dizilsin?', body: '<p class="muted">Dolaplar duvarın oda tarafındaki iç yüzüne, kapı ve pencereler gözetilerek otomatik dizilir; ardından tasarlayıcı açılır.</p>',
-      actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'wardrobe', t: 'Giysi dolabı' }, { k: 'kitchen', t: 'Mutfak', cls: 'btn-primary' }] });
+      actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'vestiyer', t: 'Vestiyer' }, { k: 'wardrobe', t: 'Giysi dolabı' }, { k: 'kitchen', t: 'Mutfak', cls: 'btn-primary' }] });
     if (r?.k === 'kitchen' || r?.k === 'wardrobe') this.createCab(r.k, w);
+    if (r?.k === 'vestiyer') this.createCab('wardrobe', w, 'vestiyer');
   }
   /* duvarın oda tarafındaki iç yüzüne dolap dizisi oluştur */
-  createCab(kind, w) {
+  createCab(kind, w, style = '') {
     const P = this.plan, t = this.T(w) / 2, u = wallDir(w), n = wallNormal(w), mid = V.lerp(w.a, w.b, 0.5);
     const inRoom = sg => P.rooms.some(r => pointInPoly(V.add(mid, V.mul(n, sg * (t + 40))), r.pts));
     const side = !inRoom(1) && inRoom(-1) ? -1 : 1, nin = V.mul(n, side);
@@ -897,11 +898,11 @@ export class PlanEditor {
       const c = V.add(w.a, V.mul(u, o.pos)), x = V.dot(V.sub(c, A), dir);
       return { x0: x - o.w / 2, x1: x + o.w / 2, type: o.type, sill: o.sill, h: o.h };
     });
-    const cab = newCabinet(kind, L); autoFill(cab, L, obstacles); cab.avail = L;
+    const cab = newCabinet(kind, L, style); autoFill(cab, L, obstacles); cab.avail = L;
     const d = itemDims(cab);
     const c = V.add(V.add(A, V.mul(dir, d.w / 2)), V.mul(nin, d.d / 2));
     const rot = ((Math.atan2(dir.y, dir.x) * 180 / Math.PI) % 360 + 360) % 360;
-    const it = { id: uid('i'), type: 'cabinet', label: kind === 'wardrobe' ? 'Giysi dolabı' : 'Mutfak', x: +c.x.toFixed(2), y: +c.y.toFixed(2), w: d.w, d: d.d, h: d.h, z: 0, rot: +rot.toFixed(2), color: cabPick(FRONTS, cab.mat.front).c, cab };
+    const it = { id: uid('i'), type: 'cabinet', label: style === 'vestiyer' ? 'Vestiyer' : kind === 'wardrobe' ? 'Giysi dolabı' : 'Mutfak', x: +c.x.toFixed(2), y: +c.y.toFixed(2), w: d.w, d: d.d, h: d.h, z: 0, rot: +rot.toFixed(2), color: cabPick(FRONTS, cab.mat.front).c, cab };
     this.snap(); P.items.push(it);
     if (this.tool !== 'select') this.setTool('select');
     this.sel = { kind: 'item', id: it.id }; this.msel = [];
@@ -1422,7 +1423,7 @@ export class PlanEditor {
         <label>Renk (3D)<div class="swatches" data-k="color">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.color || '') === c ? 'on' : ''}" title="${c ? c : 'Varsayılan'}"></button>`).join('')}</div></label>
         <p class="muted small">${ops.length} açıklık. Uç noktaları sürükleyerek uzatın; gövdeyi sürükleyince duvar paralel kayar.</p>
         <div class="row"><button class="btn btn-xs btn-ghost" data-act="split">Ortadan böl</button><button class="btn btn-xs btn-ghost" data-act="addDoor">+ Kapı</button><button class="btn btn-xs btn-ghost" data-act="addWin">+ Pencere</button></div>
-        <div class="row"><button class="btn btn-xs btn-primary" data-act="cabK">${icon('kitchen')}Bu duvara mutfak diz</button><button class="btn btn-xs btn-ghost" data-act="cabW">Giysi dolabı diz</button></div>`;
+        <div class="row"><button class="btn btn-xs btn-primary" data-act="cabK">${icon('kitchen')}Bu duvara mutfak diz</button><button class="btn btn-xs btn-ghost" data-act="cabW">Giysi dolabı diz</button><button class="btn btn-xs btn-ghost" data-act="cabV">Vestiyer diz</button></div>`;
     } else if (s.kind === 'opening') {
       const w = this.wall(o.wallId), L = wallLen(w);
       body = `<h4>${o.type === 'door' ? 'Kapı' : o.type === 'window' ? 'Pencere' : 'Boşluk'}</h4>
@@ -1555,6 +1556,7 @@ export class PlanEditor {
       if (a === 'del') return this.del();
       if (a === 'cabEdit') return this.openCab(x);
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
+      if (a === 'cabV') return this.createCab('wardrobe', x, 'vestiyer');
       this.snap();
       if (a === 'flip') x.flip = !x.flip;
       if (a === 'side') x.side = -(x.side || 1);

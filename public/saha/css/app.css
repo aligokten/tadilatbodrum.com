@@ -968,3 +968,6 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .bottom-nav a .gi{width:30px;height:30px;margin:-4px}
 .bottom-nav a:not(.on) .gi{filter:saturate(.6) brightness(.85)}
 .gi-wrap{display:grid;place-items:center;width:44px;height:44px;flex:none}
+
+/* dolap raporu çizimi: sayfaya sığsın */
+.p-plan img.cd-pimg{max-width:100%;height:auto;display:block;margin:0 auto}
