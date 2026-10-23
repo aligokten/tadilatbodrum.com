@@ -1,0 +1,92 @@
+# Keşif randevusu bildirim fonksiyonunu (functions/) Firebase'e yayınlar — Windows terminali gerekmez.
+# functions/ main'e birleşince otomatik çalışır; Actions sekmesinden elle de çalıştırılabilir.
+# ntfy konu adı GitHub sırrı NTFY_TOPIC'ten okunur ve Firebase'e (Secret Manager) aktarılır;
+# GitHub sırları kayıtlarda (log) otomatik gizlenir. Kurulum: DEPLOY.md → 6).
+name: Keşif bildirimi fonksiyonu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - '.github/workflows/functions.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Fonksiyonu yayınla (kapalıysa yalnızca test bildirimi gönderilir)'
+        type: boolean
+        default: true
+      test:
+        description: 'Telefona test bildirimi gönder'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-functions
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: saggplus
+  WIF_PROVIDER: projects/808666491811/locations/global/workloadIdentityPools/github/providers/github
+  SERVICE_ACCOUNT: github-deploy@saggplus.iam.gserviceaccount.com
+  # Firestore saggplus ile paylaşımlı: yalnızca bu fonksiyon yayınlanır, saggplus'ın fonksiyonlarına dokunulmaz.
+  FUNCTION: tbNotifyNewAppointment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+    steps:
+      - name: NTFY_TOPIC sırrı tanımlı mı?
+        id: check
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "::warning::GitHub sırrı NTFY_TOPIC tanımlı değil — atlandı. Settings → Secrets and variables → Actions → New repository secret (DEPLOY.md → 6)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Test bildirimi
+        if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.test)
+        run: |
+          curl -fsS -o /dev/null -X POST \
+            -H "Title: TadilatBodrum test bildirimi" -H "Tags: white_check_mark" \
+            -d "Bu bildirimi görüyorsanız telefonunuz doğru konuya abone. (GitHub ${GITHUB_SHA::7})" \
+            "https://ntfy.sh/$NTFY_TOPIC" && echo "✓ Test bildirimi gönderildi."
+
+      - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: true
+      - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bağımlılıkları kur
+        if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        run: npm install --prefix functions --no-audit --no-fund
+
+      - name: Konu adını Firebase'e aktar (Secret Manager)
+        if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        run: printf '%s' "$NTFY_TOPIC" | npx --yes firebase-tools@13.29.1 functions:secrets:set NTFY_TOPIC --data-file=- --project "$PROJECT_ID" --non-interactive
+
+      - name: Fonksiyonu yayınla
+        if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
+        run: |
+          npx --yes firebase-tools@13.29.1 deploy --only "functions:$FUNCTION" --project "$PROJECT_ID" --non-interactive --force ${{ runner.debug == '1' && '--debug' || '' }} \
+            || { echo "::error::Yayın başarısız. Yetki hatasıysa Cloud Shell'de scripts/functions-deploy-setup.sh'i çalıştırın; Blaze planı gerekir (DEPLOY.md → 6)."; exit 1; }
+          {
+            echo "### Bildirim fonksiyonu yayında ✓"
+            echo "- Sitedeki *Ücretsiz Keşif Al* formunu doldurup gönderin; telefona bildirim gelmeli."
+            echo "- Kayıtlar: Firebase Console → Functions → \`$FUNCTION\` → Logs"
+          } >> "$GITHUB_STEP_SUMMARY"

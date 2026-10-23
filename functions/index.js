@@ -8,9 +8,9 @@
  * Bildirimde "Ara", "WhatsApp" ve "Panel" düğmeleri bulunur; bildirime
  * dokunmak admin panelini açar.
  *
- * Kurulum:
- *   firebase functions:secrets:set NTFY_TOPIC
- *   firebase deploy --only functions
+ * Kurulum (tarayıcıdan): DEPLOY.md → 6). Yayın GitHub Actions ile yapılır
+ * (.github/workflows/functions.yml); elle yayında yalnızca bu fonksiyonu seçin:
+ *   firebase deploy --only functions:tbNotifyNewAppointment
  */
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
