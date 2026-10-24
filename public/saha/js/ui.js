@@ -101,7 +101,7 @@ export function h(html) {
   return t.content.firstElementChild;
 }
 
-export const fmtMoney = (n, cur = '₺') => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+export const fmtMoney = (n, cur = '₺') => (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0' + cur;   // bölünmez boşluk: para birimi tutarla aynı satırda
 export const fmtNum = (n, d = 2) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: d });
 export const fmtDate = (t, time = false) => t ? new Date(t).toLocaleString('tr-TR', time ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }) : '—';
 export const telLink = p => 'tel:' + String(p || '').replace(/[^\d+]/g, '');
