@@ -87,11 +87,11 @@ export const HANDLES = [
 ];
 /* menteşe markaları: kesim listesinde menteşe ve kapak kaldırma ürün adı */
 export const HINGE_BRANDS = [
-  { k: 'standart', t: 'Standart (marka belirtilmedi)', h: 'Menteşe (frenli, 110°)', lift: 'Kapak kaldırma mekanizması' },
-  { k: 'blum', t: 'Blum', h: 'Blum CLIP top BLUMOTION menteşe (frenli, 110°)', lift: 'Blum AVENTOS HK-S kapak kaldırma' },
-  { k: 'hafele', t: 'Häfele', h: 'Häfele Metalla 510 menteşe (frenli, 110°)', lift: 'Häfele Free Flap kapak kaldırma' },
-  { k: 'samet', t: 'Samet', h: 'Samet frenli menteşe (110°)', lift: 'Samet kapak kaldırma mekanizması' },
-  { k: 'grass', t: 'Grass', h: 'Grass Tiomos menteşe (frenli, 110°)', lift: 'Grass Kinvaro kapak kaldırma' },
+  { k: 'standart', t: 'Standart (marka belirtilmedi)', h: 'Menteşe (frenli, 110°)', lift: 'Kapak kaldırma mekanizması', fold: 'Katlanır (iki parçalı) kapak kaldırma mekanizması' },
+  { k: 'blum', t: 'Blum', h: 'Blum CLIP top BLUMOTION menteşe (frenli, 110°)', lift: 'Blum AVENTOS HK-S kapak kaldırma', fold: 'Blum AVENTOS HF katlanır kapak mekanizması' },
+  { k: 'hafele', t: 'Häfele', h: 'Häfele Metalla 510 menteşe (frenli, 110°)', lift: 'Häfele Free Flap kapak kaldırma', fold: 'Häfele Free Fold katlanır kapak mekanizması' },
+  { k: 'samet', t: 'Samet', h: 'Samet frenli menteşe (110°)', lift: 'Samet kapak kaldırma mekanizması', fold: 'Samet katlanır kapak mekanizması' },
+  { k: 'grass', t: 'Grass', h: 'Grass Tiomos menteşe (frenli, 110°)', lift: 'Grass Kinvaro kapak kaldırma', fold: 'Grass Kinvaro F-20 katlanır kapak mekanizması' },
 ];
 /* davlumbaz tipleri; ankastre ve gizli tipler gövdeli (dolap) modüldür */
 export const HOODS = [
@@ -145,6 +145,8 @@ export const MT = {
   ust:      { row: 'upper', t: 'Üst dolap', doors: 'auto', shelves: 1 },
   ustcam:   { row: 'upper', t: 'Üst dolap (camlı)', doors: 'auto', glass: true, shelves: 1 },
   ustkalk:  { row: 'upper', t: 'Üst dolap (yukarı açılır)', lift: true, shelves: 1 },
+  ustkatlan: { row: 'upper', t: 'Üst dolap (katlanır kalkar kapak, iki parçalı)', lift: 'fold', shelves: 1 },
+  ustikikalk: { row: 'upper', t: 'Üst dolap (iki kalkar kapak, üst üste — her rafa ayrı)', lift: 'two', shelves: 1 },
   acik:     { row: 'upper', t: 'Açık raf', open: true, shelves: 1 },
   davlumbaz: { row: 'upper', t: 'Davlumbaz', hood: true },
   udolgu:   { row: 'upper', t: 'Dolgu paneli', filler: true },
@@ -350,6 +352,12 @@ export function frontsOf(m, kind, s, x0) {
       return F;
     }
     if (t.open) return F;
+    if (t.lift === 'fold' || t.lift === 'two') {   // iki parçalı: katlanır (üst parça kulpsuz, alttaki ile birlikte katlanır) ya da iki ayrı kalkar kapak
+      const hb = Math.round(h / 2 * 2) / 2;
+      F.push({ k: 'lift', x: x0 + g, y: y0 + g / 2, w: W - 2 * g, h: hb - g, ...(t.lift === 'fold' ? { fold: 'bot' } : {}) });
+      F.push({ k: 'lift', x: x0 + g, y: y0 + hb + g / 2, w: W - 2 * g, h: h - hb - g, ...(t.lift === 'fold' ? { fold: 'top', noHandle: true } : {}) });
+      return F;
+    }
     if (t.lift) { F.push({ k: 'lift', x: x0 + g, y: y0 + g / 2, w: W - 2 * g, h: h - g }); return F; }
     doors(y0, h, doorCount(m, kind, s), { glass: !!t.glass });
     return F;
@@ -422,10 +430,14 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
       Ln(ox, f.y, hx, f.y + f.h / 2, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); Ln(hx, f.y + f.h / 2, ox, f.y + f.h, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' });
       if (!f.app) { const n = hingeN(f.h), cx = f.hinge === 'L' ? f.x + 2.25 : f.x + f.w - 2.25; for (let i = 0; i < n; i++) P.push({ t: 'circle', x: cx, y: n === 1 ? f.y + f.h / 2 : f.y + 10 + i * (f.h - 20) / (n - 1), r: 1.75, s: '#B4BAC0', sw: 0.3, layer: 'MENTESE' }); }
     }
-    if (f.k === 'lift') { Ln(f.x, f.y, f.x + f.w / 2, f.y + f.h, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); Ln(f.x + f.w / 2, f.y + f.h, f.x + f.w, f.y, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); }
+    if (f.k === 'lift') {
+      Ln(f.x, f.y, f.x + f.w / 2, f.y + f.h, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); Ln(f.x + f.w / 2, f.y + f.h, f.x + f.w, f.y, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' });
+      if (f.fold === 'top') T(f.x + f.w / 2, f.y + 4, 'katlanır', { size: 3.4, c: '#7A8594' });
+      if (f.fold === 'bot') for (const dx of [-3, 3]) Ln(f.x + f.w / 2, f.y + f.h - 2, f.x + f.w / 2 + dx, f.y + f.h - 5, { s: '#7A8594', sw: 0.4, layer: 'ACILIM' });   // menteşe birleşimi
+    }
     if (f.k === 'door' && MT[m?.type]?.vent) for (const yb of [f.y + 6, f.y + f.h - 16]) for (let k = 0; k < 5; k++) Ln(f.x + f.w * 0.2, yb + k * 2.2, f.x + f.w * 0.8, yb + k * 2.2, { s: '#6E747B', sw: 0.6, layer: 'MENFEZ' });   // havalandırma menfezi
     // kulp
-    if (handle === 'takac' || f.k === 'panel') return;
+    if (handle === 'takac' || f.k === 'panel' || f.noHandle) return;
     const upper = f.y > s.plinth + (s.carcH || 0) + 10 && kind !== 'wardrobe';
     if (handle === 'gola') { if (!upper && f.k !== 'lift' && f.y + f.h < 110) Ln(f.x, f.y + f.h - 1.5, f.x + f.w, f.y + f.h - 1.5, { s: hcol, sw: 1.4, layer: 'KULP' }); return; }
     const top = gripTop(f), ey = top ? f.y + f.h : f.y, sd = top ? -1 : 1;   // tutma kenarı ve kapağın içine doğru yön
@@ -733,7 +745,7 @@ export function build3D(THREE, g, it, mat) {
     const isApp = f.k === 'oven' || f.k === 'micro';
     box(f.x, f.y, zFront, f.w, f.h, s.frontT, isApp ? black : f.glass ? glass : front);
     if (isApp) { box(f.x + 4, f.y + f.h - 8, zFront + s.frontT, f.w - 8, 2, 1, steel); return; }
-    if (handle === 'takac' || f.k === 'panel' || f.k === 'fixed') return;
+    if (handle === 'takac' || f.k === 'panel' || f.k === 'fixed' || f.noHandle) return;
     const upper = kind === 'kitchen' && f.y > s.plinth + s.carcH + 10;
     if (handle === 'gola') { if (!upper && f.k !== 'lift' && f.y + f.h < 110) box(f.x, f.y + f.h - 2.5, zFront + s.frontT - 0.6, f.w, 2.5, 0.7, hcol); return; }
     const z = zFront + s.frontT, top = gripTop(f), vEdge = kind === 'wardrobe' && f.k === 'door', oe = f.hinge === 'L' ? f.x + f.w : f.x;
@@ -857,7 +869,8 @@ export function partsList(cab) {
       add(no, f.k === 'drawer' ? 'Çekmece önü' : f.k === 'panel' ? 'Cihaz kapağı' : f.glass ? 'Camlı kapak (çerçeve)' : 'Kapak', frontName, f.h, f.w, 1, '4 kenar', ops);
       if (hg) H(brand.h, hinges(f.h));
       if (f.app === 'fridge') H('Buzdolabı kapak bağlantı (kızak) kiti', 1);
-      if (f.k === 'lift') H(brand.lift, 1);
+      if (f.k === 'lift' && !f.fold) H(brand.lift, 1);
+      if (f.fold === 'bot') { H(brand.fold, 1); H('Ara menteşe (katlanır kapak parçaları arası)', f.w <= 70 ? 2 : 3); }
       if (f.k === 'drawer') { H('Çekmece rayı (tam açılır, takım)', 1); const bh = Math.max(8, Math.min(18, f.h - 6)), bw = f.w - 2 * t - 2.6, bd = (kindK === 'wardrobe' ? s.D : s.baseD) - 8; add(no, 'Çekmece yanı', bodyName, bd, bh, 2, '1 uzun kenar'); add(no, 'Çekmece ön/arka', bodyName, bw - 2 * t, bh, 2); add(no, 'Çekmece tabanı', 'Arkalık · 8 mm', bw, bd, 1); }
       if (f.k !== 'panel') {
         const vE = kindK === 'wardrobe' && f.k === 'door';
