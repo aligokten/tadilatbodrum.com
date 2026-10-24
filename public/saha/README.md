@@ -55,7 +55,7 @@ Rölövede bir duvar seçip **Mutfak / dolap** (ya da duvar panelindeki *Bu duva
 - **Otomatik diz:** evye pencere altına, bulaşık makinesi evye yanına, ocak evyeden ve pencereden uzağa (üstüne davlumbaz),
   buzdolabı / fırın kolonu köşeye; kalan boşluk standart 60-45-40-30 modüllerle, artık dolgu paneliyle tamamlanır.
 - **Modüller:** alt (kapaklı, çekmeceli, evye, ocak, ocak + fırın, bulaşık / çamaşır makinesi, köşe, dolgu, boşluk),
-  boy (kiler, fırın + mikrodalga kolonu, ankastre / solo buzdolabı), üst (kapaklı, camlı, yukarı açılır, açık raf, davlumbaz);
+  boy (kiler, fırın + mikrodalga kolonu, ankastre / solo buzdolabı), üst (kapaklı, camlı, yukarı açılır, katlanır kalkar (iki parçalı), üst üste iki kalkar kapak, açık raf, davlumbaz);
   giysi dolabında askılık, çift askı, uzun askı, raflı, çekmece + askı, ayakkabılık; menteşeli veya sürgülü kapak.
 - Her modülün türü, genişliği, kapak sayısı ve menteşe yönü değiştirilir; sola/sağa taşıma, çoğaltma, ikiye bölme.
 - **Ölçüler:** baza, gövde, tezgah kalınlığı/derinliği, üst dolap kotu ve yüksekliği, boy dolap yüksekliği, gövde kalınlığı.
