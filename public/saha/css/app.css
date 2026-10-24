@@ -994,3 +994,26 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .cd-shrow .inp-unit{flex:1}
 .cd-shn{flex-direction:row;align-items:center;gap:6px;font-size:12.5px}
 .cd-shn input{width:64px}
+
+/* teklif ekleri: seçim ızgarası ve tam sayfa ek */
+.q-att{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.q-att b .ic{width:16px;height:16px;vertical-align:-3px;margin-right:6px}
+.att-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}
+.att{position:relative;display:flex;flex-direction:column;gap:3px;padding:6px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;background:#fff}
+.att.on{border-color:var(--orange,#EB591F);box-shadow:0 0 0 3px rgba(235,89,31,.12)}
+.att input{position:absolute;top:10px;left:10px;width:18px;height:18px;z-index:1;accent-color:#EB591F}
+.att-img{position:relative;display:block;aspect-ratio:3/2;border-radius:10px;overflow:hidden;background:var(--line-2)}
+.att-img img{width:100%;height:100%;object-fit:cover;display:block}
+.att-img em{position:absolute;right:6px;bottom:6px;background:#EB591F;color:#fff;font-style:normal;font-weight:800;font-size:11px;padding:2px 7px;border-radius:999px}
+.att b{font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-annexlist ol{padding-left:18px}
+.p-annexlist li span{color:var(--muted)}
+.p-annex-note{font-size:8.5pt;color:var(--muted);margin-top:4px}
+.p-annex-h{display:flex;align-items:baseline;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:10px;break-after:avoid}
+.p-annex-h b{color:#EB591F;font-size:13pt;font-weight:800}
+.p-annex-h span{font-weight:700;font-size:12pt}
+.p-annex-h small{margin-left:auto;color:var(--muted);font-size:8.5pt}
+.p-annex-f{margin:0;height:930px;display:flex;align-items:center;justify-content:center;break-inside:avoid}
+.p-annex-f img{max-width:100%;max-height:930px;width:auto;height:auto;object-fit:contain;display:block}
+@media print{.p-annex-f{height:232mm}.p-annex-f img{max-height:232mm}}

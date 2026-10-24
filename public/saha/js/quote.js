@@ -1,6 +1,6 @@
 /* ═══ Teklif formu oluşturma aracı ═══ */
 import { uid } from './store.js';
-import { CATEGORIES, catOf, UNITS } from './catalog.js';
+import { CATEGORIES, catOf, UNITS, PHOTO_TAGS } from './catalog.js';
 import { icon, esc, h, $, $$, fmtMoney, fmtNum, fmtDate, modal, toast, waLink } from './ui.js';
 import { planMetrics } from './plan-geom.js';
 
@@ -9,7 +9,7 @@ export function newQuote(job, settings) {
   return {
     no: `${job.code}-T1`, date: d.toISOString().slice(0, 10), validDays: settings.validDays || 15,
     vatPct: settings.vat ?? 20, discountPct: 0, profitPct: settings.profit ?? 0, profitMode: 'line', items: [], intro: '', notes: '', terms: settings.terms || '',
-    showVat: true, includeRenders: true, rev: 1,
+    showVat: true, attach: [], rev: 1,
   };
 }
 
@@ -38,6 +38,23 @@ export function jobMetrics(job) {
   return { src: 'Keşif ölçüleri', rooms, floor: sum('area'), wall: sum('wallArea'), ceil: sum('ceil'), perim: sum('perim') };
 }
 
+/* teklif ekleri: işin çizimleri (plan) ve fotoğrafları; seçilenler q.attach'te 'plan:<id>' / 'photo:<id>' */
+const tagT = k => PHOTO_TAGS.find(t => t.k === k)?.t || 'Fotoğraf';
+const tagRank = k => ({ render: 0, rolove: 1, once: 2, kesif: 3 }[k] ?? 4);
+function attachCands(job, ctx) {
+  const plans = (ctx?.drawings?.() || []).map(d => ({ key: 'plan:' + d.id, kind: 'plan', id: d.id, title: d.name, sub: d.main ? 'Rölöve planı' : 'Proje / tasarım planı' }));
+  const photos = (job.photos || []).slice().sort((a, b) => tagRank(a.tag) - tagRank(b.tag) || (a.t || 0) - (b.t || 0))
+    .map(p => ({ key: 'photo:' + p.id, kind: 'photo', p, title: p.caption || (p.tag === 'render' ? 'Görselleştirme' : tagT(p.tag)), sub: [tagT(p.tag), p.room].filter(Boolean).join(' · ') }));
+  return [...plans, ...photos];
+}
+/* eski teklifler: "render / plan görsellerini ekle" açıksa ilk dört render / rölöve fotoğrafı */
+function ensureAttach(q, job) {
+  if (Array.isArray(q.attach)) return;
+  q.attach = q.includeRenders ? (job.photos || []).filter(p => p.tag === 'render' || p.tag === 'rolove').slice(0, 4).map(p => 'photo:' + p.id) : [];
+}
+/* seçili ekler, listedeki sırayla (Ek-1, Ek-2…) */
+const attachOrdered = (job, q, ctx) => attachCands(job, ctx).filter(c => q.attach.includes(c.key));
+
 export function renderQuote(root, job, settings, save, ctx) {
   if (!job.quote) {
     root.innerHTML = `<div class="empty card">
@@ -52,6 +69,21 @@ export function renderQuote(root, job, settings, save, ctx) {
     return;
   }
   const q = job.quote, met = jobMetrics(job);
+  ensureAttach(q, job);
+  const attHtml = () => {
+    const cands = attachCands(job, ctx), order = attachOrdered(job, q, ctx).map(c => c.key);
+    return `<div class="q-att">
+      <div class="row-between"><b>${icon('image')}Teklif ekleri</b><span class="muted small">${order.length ? `${order.length} ek seçili` : 'Ek seçilmedi'}</span></div>
+      <p class="muted small">Seçilen plan ve görseller teklifin sonuna her biri tam sayfa olarak "Ek-1, Ek-2…" adıyla eklenir; teklifte ekler listesi yer alır.</p>
+      ${cands.length ? `<div class="att-grid">${cands.map(c => { const n = order.indexOf(c.key); return `<label class="att${n >= 0 ? ' on' : ''}">
+        <input type="checkbox" data-att="${c.key}" ${n >= 0 ? 'checked' : ''}>
+        <span class="att-img">${c.kind === 'plan' ? `<img src="${ctx.planImg(c.id, 240, 160)}" alt="">` : `<img data-ph="${c.p.id}" alt="">`}${n >= 0 ? `<em>Ek-${n + 1}</em>` : ''}</span>
+        <b>${esc(c.title)}</b><small>${esc(c.sub)}</small></label>`; }).join('')}</div>
+        <div class="row wrap"><button class="btn btn-ghost btn-xs" data-act="attpr">${icon('check')}Plan ve renderları seç</button><button class="btn btn-ghost btn-xs" data-act="attnone">Seçimi temizle</button></div>`
+        : '<p class="muted small">Eklenecek çizim ya da fotoğraf yok — Rölöve & 3D sekmesinde çizim yapın ya da Fotoğraflar sekmesinden render / plan görseli ekleyin.</p>'}
+    </div>`;
+  };
+  const loadThumbs = () => $$('img[data-ph]', root).forEach(async im => { const p = (job.photos || []).find(x => x.id === im.dataset.ph); if (p && ctx?.photoUrl) try { im.src = await ctx.photoUrl(p); } catch { /* fotoğraf yüklenemedi */ } });
   const draw = () => {
     const T = quoteTotals(q);
     const groups = CATEGORIES.map(c => ({ c, items: q.items.filter(i => i.cat === c.k) })).filter(g => g.items.length);
@@ -109,6 +141,7 @@ export function renderQuote(root, job, settings, save, ctx) {
         <div class="card">
           <label>Notlar<textarea class="inp" rows="3" data-q="notes" placeholder="Malzeme markaları, kapsam dışı işler…">${esc(q.notes)}</textarea></label>
           <label>Şartlar ve koşullar<textarea class="inp" rows="6" data-q="terms">${esc(q.terms)}</textarea></label>
+          ${attHtml()}
         </div>
         <div class="card totals">
           <div class="grid2">
@@ -118,7 +151,6 @@ export function renderQuote(root, job, settings, save, ctx) {
             <label>KDV<div class="inp-unit"><input class="inp" type="number" data-q="vatPct" value="${q.vatPct}"><span>%</span></div></label>
           </div>
           <label class="check"><input type="checkbox" data-q="showVat" ${q.showVat ? 'checked' : ''}> KDV ekle</label>
-          <label class="check"><input type="checkbox" data-q="includeRenders" ${q.includeRenders ? 'checked' : ''}> Render / plan görsellerini teklife ekle</label>
           ${settings.company?.stamp ? `<label class="check"><input type="checkbox" data-q="stamp" ${q.stamp !== false ? 'checked' : ''}> Kaşeyi teklife ekle</label>` : `<p class="muted small">Teklife kaşe basmak için Ayarlar → Firma bilgileri'nden kaşe görseli yükleyin.</p>`}
           ${T.profit ? `<div class="tline"><span>Maliyet (kalemler)</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>+ ${fmtMoney(T.profit)}</b></div>` : ''}
           <div class="tline"><span>Ara toplam${T.profit ? ' (kâr dahil)' : ''}</span><b>${fmtMoney(T.sub)}</b></div>
@@ -137,6 +169,7 @@ export function renderQuote(root, job, settings, save, ctx) {
         </div>
       </div>`;
     $$('textarea.q-desc', root).forEach(autoGrow);
+    loadThumbs();
   };
   draw();
 
@@ -155,6 +188,8 @@ export function renderQuote(root, job, settings, save, ctx) {
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
     if (k === 'format') { q.format = e.target.value; save(); return; }
+    const ak = e.target.dataset.att;
+    if (ak) { q.attach = q.attach.filter(x => x !== ak); if (e.target.checked) q.attach.push(ak); save(); redrawTotals(); return; }
     if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
@@ -169,6 +204,8 @@ export function renderQuote(root, job, settings, save, ctx) {
     }
     if (a === 'add') { q.items.push({ id: uid('q'), cat: 'diger', desc: '', unit: 'adet', qty: 1, price: 0 }); save(); draw(); $$('.q-desc', root).at(-1)?.focus(); }
     if (a === 'lib') { const added = await libraryPicker(settings.catalog, met, job); if (added?.length) { q.items.push(...added); save(); draw(); toast(`${added.length} kalem eklendi`); } }
+    if (a === 'attpr') { q.attach = attachCands(job, ctx).filter(c => c.kind === 'plan' || c.p.tag === 'render' || c.p.tag === 'rolove').map(c => c.key); save(); redrawTotals(); }
+    if (a === 'attnone') { q.attach = []; save(); redrawTotals(); }
     if (a === 'print') printQuote(job, settings, ctx);
     if (a === 'wa') {
       const T = quoteTotals(q);
@@ -237,12 +274,11 @@ export const docFooter = () => `<footer class="p-foot">
 async function printQuote(job, settings, ctx) {
   const q = job.quote, T = quoteTotals(q), c = job.customer, stamp = q.stamp !== false && settings.company?.stamp;
   const valid = new Date(q.date); valid.setDate(valid.getDate() + (+q.validDays || 0));
-  let imgs = '';
-  if (q.includeRenders && ctx?.photoUrl) {
-    const ph = (job.photos || []).filter(p => p.tag === 'render' || p.tag === 'rolove').slice(0, 4);
-    const urls = await Promise.all(ph.map(p => ctx.photoUrl(p)));
-    if (urls.length) imgs = `<section class="p-imgs">${urls.map((u, i) => `<figure><img src="${u}"><figcaption>${esc(ph[i].caption || (ph[i].tag === 'render' ? 'Görselleştirme' : 'Rölöve'))}</figcaption></figure>`).join('')}</section>`;
-  }
+  // ekler: liste teklifte, her biri ayrı tam sayfa (plan yüksek çözünürlüklü, sayfa oranında)
+  ensureAttach(q, job);
+  const att = await Promise.all(attachOrdered(job, q, ctx).map(async c => ({ ...c, src: c.kind === 'plan' ? ctx.planImg(c.id, 1300, 1700) : await Promise.resolve().then(() => ctx.photoUrl(c.p)).catch(() => '') })));
+  const annexList = att.length ? `<section class="p-notes p-annexlist"><h4>Ekler</h4><ol>${att.map((a, i) => `<li><b>Ek-${i + 1}:</b> ${esc(a.title)} <span>(${esc(a.sub)})</span></li>`).join('')}</ol><p class="p-annex-note">Ekler bu teklifin ayrılmaz parçasıdır.</p></section>` : '';
+  const annexPages = att.map((a, i) => `<section class="p-break p-annex"><div class="p-annex-h"><b>EK-${i + 1}</b><span>${esc(a.title)}</span><small>${esc(q.no)} no'lu teklifin ekidir</small></div><figure class="p-annex-f">${a.src ? `<img src="${a.src}" alt="">` : '<span>Görsel yüklenemedi</span>'}</figure></section>`).join('');
   let n = 0;
   const k = priceK(q), spread = k !== 1, brief = q.format === 'ozet';   // özet: kalem ve miktarlar, fiyat yok — yalnızca toplam
   const rows = CATEGORIES.map(cat => {
@@ -273,10 +309,11 @@ async function printQuote(job, settings, ctx) {
       <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
     </section>`}
     ${q.notes ? `<section class="p-notes"><h4>Notlar</h4><p>${esc(q.notes).replace(/\n/g, '<br>')}</p></section>` : ''}
-    ${imgs}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
+    ${annexList}
     ${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
     <section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>
+    ${annexPages}
     ${docFooter()}
   </div>`;
   printDoc(html, `Teklif ${q.no} - ${c.name || ''}`);
