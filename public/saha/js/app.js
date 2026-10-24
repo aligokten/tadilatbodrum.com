@@ -17,7 +17,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.24-1';
+export const APP_VERSION = '2026.10.24-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -384,6 +384,27 @@ async function newJobDialog() {
   S.jobs.unshift(structuredClone(j));
   openJob(j);
   location.hash = `#/is/${j.id}`;
+}
+
+/* kaşe görseli: en çok 800 px, açık (beyaz) zemin saydam, kenar boşlukları kırpılır → PNG veri adresi */
+async function prepStamp(file) {
+  const url = URL.createObjectURL(file), im = new Image(); im.src = url;
+  try { await im.decode(); } finally { URL.revokeObjectURL(url); }
+  const sc = Math.min(1, 800 / im.naturalWidth), w = Math.max(1, Math.round(im.naturalWidth * sc)), h = Math.max(1, Math.round(im.naturalHeight * sc));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.drawImage(im, 0, 0, w, h);
+  const d = g.getImageData(0, 0, w, h), p = d.data; let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let i = 0; i < p.length; i += 4) {
+    const l = p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11;
+    p[i + 3] = Math.round(p[i + 3] * Math.min(1, Math.max(0, (245 - l) / 75)));   // açık tonlar saydamlaşır
+    if (p[i + 3] > 30) { const k = i / 4, x = k % w, y = (k - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) throw new Error('görselde kaşe bulunamadı');
+  g.putImageData(d, 0, 0);
+  const pad = 6, cw = Math.min(w, x1 - x0 + 1 + 2 * pad), ch = Math.min(h, y1 - y0 + 1 + 2 * pad);
+  const o = document.createElement('canvas'); o.width = cw; o.height = ch;
+  o.getContext('2d').drawImage(c, Math.max(0, x0 - pad), Math.max(0, y0 - pad), cw, ch, 0, 0, cw, ch);
+  return o.toDataURL('image/png');
 }
 
 /* ═════════ iş detayı ═════════ */
@@ -1482,6 +1503,11 @@ function settingsView() {
           <label>IBAN<input class="inp" data-f="company.iban"></label>
         </div>
         <label>Adres<textarea class="inp" rows="2" data-f="company.address"></textarea></label>
+        <div class="stamp-set">
+          <b>Kaşe görseli</b><span class="muted small">Teklifte "Kaşe / İmza" alanına basılır. Beyaz zemin otomatik saydam yapılır.</span>
+          <div class="stamp-prev" id="stPrev"></div>
+          <div class="row wrap"><label class="btn btn-ghost btn-sm">${icon('upload')}Kaşe yükle<input type="file" accept="image/*" hidden data-stamp></label><button class="btn btn-ghost btn-sm danger-t" data-stamp-del hidden>${icon('trash')}Kaldır</button></div>
+        </div>
       </div>
       <div class="card">
         <h3>${gicon('file')}Teklif varsayılanları</h3>
@@ -1531,6 +1557,16 @@ function settingsView() {
   };
   const persist = debounce(() => S.be.saveSettings(S.settings).then(() => toast('Ayarlar kaydedildi')).catch(e => toast(e.message, 'err')), 900);
   bindFields(view(), st, persist);
+  const drawStamp = () => {
+    $('#stPrev').innerHTML = st.company.stamp ? `<img src="${st.company.stamp}" alt="Kaşe">` : '<span class="muted small">Kaşe yüklenmedi</span>';
+    $('[data-stamp-del]').hidden = !st.company.stamp;
+  };
+  drawStamp();
+  $('[data-stamp]').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { st.company.stamp = await prepStamp(f); persist(); drawStamp(); } catch (er) { toast('Görsel okunamadı: ' + er.message, 'err'); }
+  };
+  $('[data-stamp-del]').onclick = async () => { if (await confirmDlg('Kaşe görseli kaldırılsın mı?', 'Kaldır')) { delete st.company.stamp; persist(); drawStamp(); } };
   const drawCat = () => {
     $('#ct').innerHTML = `<div class="ct-row ct-h"><span>Kategori</span><span>Açıklama</span><span>Birim</span><span>Fiyat ₺</span><span>Metraj</span><span></span></div>` +
       st.catalog.map(c => `<div class="ct-row" data-id="${c.id}">

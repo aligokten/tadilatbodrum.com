@@ -119,6 +119,7 @@ export function renderQuote(root, job, settings, save, ctx) {
           </div>
           <label class="check"><input type="checkbox" data-q="showVat" ${q.showVat ? 'checked' : ''}> KDV ekle</label>
           <label class="check"><input type="checkbox" data-q="includeRenders" ${q.includeRenders ? 'checked' : ''}> Render / plan görsellerini teklife ekle</label>
+          ${settings.company?.stamp ? `<label class="check"><input type="checkbox" data-q="stamp" ${q.stamp !== false ? 'checked' : ''}> Kaşeyi teklife ekle</label>` : `<p class="muted small">Teklife kaşe basmak için Ayarlar → Firma bilgileri'nden kaşe görseli yükleyin.</p>`}
           ${T.profit ? `<div class="tline"><span>Maliyet (kalemler)</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>+ ${fmtMoney(T.profit)}</b></div>` : ''}
           <div class="tline"><span>Ara toplam${T.profit ? ' (kâr dahil)' : ''}</span><b>${fmtMoney(T.sub)}</b></div>
           ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
@@ -154,7 +155,7 @@ export function renderQuote(root, job, settings, save, ctx) {
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
     if (k === 'format') { q.format = e.target.value; save(); return; }
-    if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
+    if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
   root.onclick = async e => {
@@ -234,7 +235,7 @@ export const docFooter = () => `<footer class="p-foot">
   <div class="p-bar"></div></footer>`;
 
 async function printQuote(job, settings, ctx) {
-  const q = job.quote, T = quoteTotals(q), c = job.customer;
+  const q = job.quote, T = quoteTotals(q), c = job.customer, stamp = q.stamp !== false && settings.company?.stamp;
   const valid = new Date(q.date); valid.setDate(valid.getDate() + (+q.validDays || 0));
   let imgs = '';
   if (q.includeRenders && ctx?.photoUrl) {
@@ -275,7 +276,7 @@ async function printQuote(job, settings, ctx) {
     ${imgs}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
     ${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
-    <section class="p-sign"><div>TadilatBodrum.com<span>Kaşe / İmza</span></div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>
+    <section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>
     ${docFooter()}
   </div>`;
   printDoc(html, `Teklif ${q.no} - ${c.name || ''}`);
