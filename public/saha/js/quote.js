@@ -18,11 +18,13 @@ export function quoteTotals(q) {
   const cost = q.items.reduce((s, i) => s + (+i.qty || 0) * (+i.price || 0), 0);
   const profit = cost * (+q.profitPct || 0) / 100;
   const sub = cost + profit;
-  const disc = sub * (+q.discountPct || 0) / 100;
+  // iskonto: oran (%) ya da tutar (₺, kâr dahil ara toplamdan düşülür, ara toplamı aşamaz)
+  const disc = q.discMode === 'amt' ? Math.min(sub, Math.max(0, +q.discountAmt || 0)) : sub * (+q.discountPct || 0) / 100;
   const net = sub - disc;
   const vat = q.showVat ? net * (+q.vatPct || 0) / 100 : 0;
   return { cost, profit, sub, disc, net, vat, total: net + vat };
 }
+const discLabel = q => q.discMode === 'amt' ? 'İskonto' : `İskonto (%${fmtNum(q.discountPct)})`;
 /* "birim fiyatlara dağıt" modunda müşteriye giden birim fiyat çarpanı */
 const priceK = q => q.profitMode === 'spread' ? 1 + (+q.profitPct || 0) / 100 : 1;
 
@@ -147,14 +149,17 @@ export function renderQuote(root, job, settings, save, ctx) {
           <div class="grid2">
             <label>Yüklenici kârı<div class="inp-unit"><input class="inp" type="number" step="0.5" data-q="profitPct" value="${q.profitPct || 0}"><span>%</span></div></label>
             <label>Teklifte<select class="inp" data-q="profitMode"><option value="line" ${q.profitMode !== 'spread' ? 'selected' : ''}>Ayrı satır göster</option><option value="spread" ${q.profitMode === 'spread' ? 'selected' : ''}>Birim fiyatlara dağıt</option></select></label>
-            <label>İskonto<div class="inp-unit"><input class="inp" type="number" data-q="discountPct" value="${q.discountPct}"><span>%</span></div></label>
+            <label>İskonto<div class="inp-unit disc-unit">${q.discMode === 'amt'
+              ? `<input class="inp" type="number" min="0" step="0.01" data-q="discountAmt" value="${+q.discountAmt || 0}">`
+              : `<input class="inp" type="number" min="0" step="0.5" data-q="discountPct" value="${q.discountPct}">`}
+              <select data-q="discMode" aria-label="İskonto türü"><option value="pct" ${q.discMode !== 'amt' ? 'selected' : ''}>%</option><option value="amt" ${q.discMode === 'amt' ? 'selected' : ''}>₺</option></select></div></label>
             <label>KDV<div class="inp-unit"><input class="inp" type="number" data-q="vatPct" value="${q.vatPct}"><span>%</span></div></label>
           </div>
           <label class="check"><input type="checkbox" data-q="showVat" ${q.showVat ? 'checked' : ''}> KDV ekle</label>
           ${settings.company?.stamp ? `<label class="check"><input type="checkbox" data-q="stamp" ${q.stamp !== false ? 'checked' : ''}> Kaşeyi teklife ekle</label>` : `<p class="muted small">Teklife kaşe basmak için Ayarlar → Firma bilgileri'nden kaşe görseli yükleyin.</p>`}
           ${T.profit ? `<div class="tline"><span>Maliyet (kalemler)</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>+ ${fmtMoney(T.profit)}</b></div>` : ''}
           <div class="tline"><span>Ara toplam${T.profit ? ' (kâr dahil)' : ''}</span><b>${fmtMoney(T.sub)}</b></div>
-          ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
+          ${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
           ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : ''}
           <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
           ${T.profit ? `<p class="muted small">Kalem fiyatları maliyet olarak girilir. ${q.profitMode === 'spread' ? 'Teklif çıktısında kâr birim fiyatlara dağıtılır; müşteri ayrı kâr satırı görmez.' : 'Teklif çıktısında "Genel giderler ve yüklenici kârı" ayrı satır olarak görünür.'} Net kâr (iskonto sonrası): <b>${fmtMoney(T.profit - T.disc)}</b></p>` : ''}
@@ -176,6 +181,7 @@ export function renderQuote(root, job, settings, save, ctx) {
   const redrawTotals = () => { const y = scrollY; draw(); scrollTo(0, y); };
   root.oninput = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
+    if (k === 'discMode') return;   // tür değişimi 'change'te işlenir (mevcut iskonto korunarak)
     if (k) { q[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'number' ? +e.target.value : e.target.value; save(); return; }
     if (ik) {
       const it = q.items.find(i => i.id === e.target.closest('.q-row').dataset.id);
@@ -190,7 +196,13 @@ export function renderQuote(root, job, settings, save, ctx) {
     if (k === 'format') { q.format = e.target.value; save(); return; }
     const ak = e.target.dataset.att;
     if (ak) { q.attach = q.attach.filter(x => x !== ak); if (e.target.checked) q.attach.push(ak); save(); redrawTotals(); return; }
-    if (k && ['discountPct', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
+    if (k === 'discMode') {   // tür değişince mevcut iskonto aynı tutarda kalsın
+      const cur = quoteTotals(q).disc, sub = quoteTotals(q).sub;
+      q.discMode = e.target.value;
+      if (q.discMode === 'amt') q.discountAmt = Math.round(cur * 100) / 100; else q.discountPct = sub ? Math.round(cur / sub * 10000) / 100 : 0;
+      save(); redrawTotals(); return;
+    }
+    if (k && ['discountPct', 'discountAmt', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
   root.onclick = async e => {
@@ -300,11 +312,11 @@ async function printQuote(job, settings, ctx) {
     <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th>${brief ? '' : '<th class="r">Birim fiyat</th><th class="r">Tutar</th>'}</tr></thead><tbody>${rows}</tbody></table>
     ${brief ? `<section class="p-totals">
       <div class="tline grand"><span>Toplam teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
-      <div class="tline"><span>${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${T.disc ? ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır` : ''}</span><b></b></div>
+      <div class="tline"><span>${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${T.disc ? (q.discMode === 'amt' ? ` · ${fmtMoney(T.disc)} iskonto uygulanmıştır` : ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır`) : ''}</span><b></b></div>
     </section>` : `<section class="p-totals">
       ${T.profit && !spread ? `<div class="tline"><span>İş kalemleri toplamı</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Genel giderler ve yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>${fmtMoney(T.profit)}</b></div>` : ''}
       <div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>
-      ${T.disc ? `<div class="tline"><span>İskonto (%${q.discountPct})</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
+      ${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
       ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : '<div class="tline"><span>KDV</span><b>Hariç</b></div>'}
       <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
     </section>`}
