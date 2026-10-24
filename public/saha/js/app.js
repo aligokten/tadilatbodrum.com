@@ -17,7 +17,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.24-4';
+export const APP_VERSION = '2026.10.24-5';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -494,7 +494,7 @@ function tabGenel(tb) {
           <a href="#/is/${j.id}/kesif"><b>${j.findings.length}</b><small>Tespit</small></a>
           <a href="#/is/${j.id}/rolove"><b>${fmtNum(met.floor, 1)}</b><small>m² (${met.rooms.length} mahal)</small></a>
           <a href="#/is/${j.id}/foto"><b>${j.photos.length}</b><small>Fotoğraf</small></a>
-          <a href="#/is/${j.id}/teklif"><b>${T ? fmtMoney(T.total).replace(/,\d+ /, ' ') : '—'}</b><small>Teklif</small></a>
+          <a href="#/is/${j.id}/teklif"><b>${T ? fmtMoney(T.total).replace(/,\d+\s/, '\u00A0') : '—'}</b><small>Teklif</small></a>
         </div>
       </div>
     </div>
