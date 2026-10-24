@@ -3,7 +3,7 @@
  * adetleri üzerinden; tezgah etiketlenmese de numara tüketir). Bölge ön görünüş koordinatlarında (cm, yerden, dizinin
  * solundan) döner; elevation() çizimine vurgulu dikdörtgen olarak eklenir.
  */
-import { partsList, layoutRow, frontsOf, MT, modY0, modInner, shelfPos, rowLen } from './cabinet.js';
+import { partsList, layoutRow, frontsOf, MT, modY0, modInner, shelfPos, rowLen, fridgeGeo } from './cabinet.js';
 
 /* tüm parça örnekleri: [{ key: 'D1-042', ci, r (satır), i (adet sırası), mod, part }] */
 export function partInstances(cabs) {
@@ -28,7 +28,7 @@ export function modOf(cab, no) {
   return { p, row, t, kind, y0, y1, x0: p.x0, x1: p.x1, w: p.x1 - p.x0 };
 }
 
-const FRONT_PARTS = ['Kapak', 'Çekmece önü', 'Cihaz kapağı', 'Camlı kapak (çerçeve)'];
+const FRONT_PARTS = ['Kapak', 'Çekmece önü', 'Cihaz kapağı', 'Camlı kapak (çerçeve)', 'Sabit kapak'];
 
 /* parça → { view: 'front' | 'inside', rects: [{x,y,w,h}], step } */
 export function partRegion(cab, inst, all) {
@@ -65,6 +65,8 @@ export function partRegion(cab, inst, all) {
     const all2 = [...sp, ...extra], v = all2[i] ?? all2[0] ?? inn.h / 2;
     return { view: 'inside', rects: [R(x0 + t0, inn.y + v - t0 / 2, w - 2 * t0, t0)], step: 'raf' };
   }
+  if (part === 'Buzdolabı bölme tablası') { const G = fridgeGeo(p.m, s); return { view: 'inside', rects: [R(x0 + t0, G.nicheTop, w - 2 * t0, t0)], step: 'raf' }; }
+  if (part === 'Davlumbaz bölme tablası') return { view: 'inside', rects: [R(x0 + t0, y0 + 6, w - 2 * t0, t0)], step: 'raf' };
   if (part === 'Dolgu paneli') return { view: 'front', rects: [R(x0, y0, w, y1 - y0)], step: 'kapak' };
   if (part === 'Askılık panosu') return { view: 'inside', rects: [R(x0 + t0 + 2, inn.y + inn.h * 0.44, w - 2 * t0 - 4, inn.h * 0.4)], step: 'aksesuar' };
   if (part === 'Lamel çıta') { const x = x0 + t0 + 3 + i * 6; return { view: 'inside', rects: [R(x, inn.y + inn.h * 0.42, 3.4, inn.h * 0.44)], step: 'aksesuar' }; }
@@ -72,7 +74,7 @@ export function partRegion(cab, inst, all) {
   // kapak / çekmece ve çekmece kutusu: modüldeki ön yüz sırası kesim listesindekiyle aynı
   const slots = [];
   if (M.row === 'ward') (t.drawers || []).reduce((y, f) => { const dh = inn.h * f; slots.push({ x: x0 + t0 + 1, y, w: w - 2 * t0 - 2, h: dh - 1, view: 'inside' }); return y + dh; }, inn.y);
-  if (!(M.row === 'ward' && s.doors === 'surgulu')) frontsOf(p.m, mk, s, x0).filter(f => f.k !== 'oven' && f.k !== 'micro').forEach(f => slots.push({ x: f.x, y: f.y, w: f.w, h: f.h, view: 'front' }));
+  if (!(M.row === 'ward' && s.doors === 'surgulu')) frontsOf(p.m, mk, s, x0).filter(f => f.k !== 'oven' && f.k !== 'micro' && f.k !== 'visor').forEach(f => slots.push({ x: f.x, y: f.y, w: f.w, h: f.h, view: 'front' }));
   // bu satıra kadar aynı modülde kaç ön yüz satırı var / son çekmece ön yüzü hangisi
   let fi = -1;
   for (const q of all) {

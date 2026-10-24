@@ -6,6 +6,7 @@ import { icon, esc, h, $, $$, toast, confirmDlg, downloadBlob, fmtNum } from './
 import {
   MT, typesFor, mod, doorCount, autoFill, layoutRow, rowLen, runLength, itemDims, elevation, elevationSvg, elevationDxf,
   partsList, partsCsv, quoteItems, FRONTS, BODIES, TOPS, HANDLES, HANDLE_COLORS, pick, fmt, WARD_DOORS, isOpenMod, modWarn, modD, shelfPos, shelfable, modInner,
+  HINGE_BRANDS, HOODS, LED_TEMPS, FRIDGE_TOP, fridgeGeo, hoodOf,
 } from './cabinet.js';
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -122,8 +123,17 @@ export function openCabinetDesigner(item, ctx) {
           <label>Tür<select class="inp sm" data-m="type">${typesFor(kind, f.r).map(o => `<option value="${o.k}" ${o.k === f.m.type ? 'selected' : ''}>${o.t}</option>`).join('')}</select></label>
           <label>Genişlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="w" value="${f.m.w}"><span>cm</span></div></label>
           ${isW && (t.appl || t.boiler) ? `<label>Derinlik<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="D" value="${modD(f.m, cab.s)}"><span>cm</span></div></label>` : ''}
-          ${isW ? modWarn(f.m, cab.s).map(w => `<p class="cd-warn">${icon('alert')}${esc(w)}</p>`).join('') : ''}
-          ${shelfable(f.m, kind) ? (() => { const sp = shelfPos(f.m, cab.s, kind), ih = modInner(f.m, cab.s, kind).h; return `<div class="cd-shelves">
+          ${t.fridge ? (() => { const G = fridgeGeo(f.m, cab.s); return `<div class="cd-fridge">
+            <div class="grid2"><label>Kapak<select class="inp sm" data-m="frDoors"><option value="2" ${G.doors === 2 ? 'selected' : ''}>Çift kapak (alt dondurucu)</option><option value="1" ${G.doors === 1 ? 'selected' : ''}>Tek kapak</option></select></label>
+              <label>Menteşe<select class="inp sm" data-m="hinge"><option value="L" ${(f.m.hinge || 'L') === 'L' ? 'selected' : ''}>Sol</option><option value="R" ${f.m.hinge === 'R' ? 'selected' : ''}>Sağ</option></select></label></div>
+            <div class="grid2"><label>Cihaz genişliği<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="frW" value="${G.frW}"><span>cm</span></div></label>
+              <label>Cihaz yüksekliği<div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-m="frH" value="${G.frH}"><span>cm</span></div></label></div>
+            <label>Buzdolabının üstü<select class="inp sm" data-m="frTop" ${G.topH < 12 ? 'disabled' : ''}>${FRIDGE_TOP.map(o => `<option value="${o.k}" ${G.top === o.k ? 'selected' : ''}>${o.t}</option>`).join('')}</select></label>
+            <p class="muted small">Ankastre cihazın nişi: ${fmt(G.frW + 0.6)} × ${fmt(G.frH + 1)} cm · boy dolap ${fmt(cab.s.tallH)} cm · üstte kalan iç yükseklik <b>${fmt(Math.max(0, G.topH))} cm</b>. Ölçüleri cihazın montaj kataloğundan girin; boy dolap yüksekliği "Ölçüler"den değişir.</p></div>`; })() : ''}
+          ${t.hood ? `<label>Davlumbaz tipi<select class="inp sm" data-m="hood">${HOODS.map(o => `<option value="${o.k}" ${hoodOf(f.m) === o.k ? 'selected' : ''}>${o.t}</option>`).join('')}</select></label>
+            <p class="muted small">${{ ankastre: 'Sürgülü davlumbaz üst dolabın altına gömülür; üstteki bölüm kapaklı dolaptır.', gizli: 'Cihaz kapaklı dolabın içinde gizlidir; dışarıdan diğer üst dolaplar gibi görünür.', aspirator: 'Duvara monte fan; modül genişliğinde üst dolap yoktur.', egik: 'Eğik cam panelli, bacalı duvar tipi davlumbaz.', bacali: 'Paslanmaz bacalı duvar tipi (T) davlumbaz.' }[hoodOf(f.m)]}</p>` : ''}
+          ${modWarn(f.m, cab.s).map(w => `<p class="cd-warn">${icon('alert')}${esc(w)}</p>`).join('')}
+          ${shelfable(f.m, kind, cab.s) ? (() => { const sp = shelfPos(f.m, cab.s, kind), ih = modInner(f.m, cab.s, kind).h; return `<div class="cd-shelves">
             <div class="row-between"><b>Raflar <small class="muted">${f.m.shelves ? 'elle' : 'varsayılan'} · iç yükseklik ${fmt(ih)} cm</small></b>${f.m.shelves ? `<button class="btn btn-xs btn-ghost" data-op="shreset" title="Modül tipinin varsayılan raflarına dön">Varsayılan</button>` : ''}</div>
             ${sp.length ? sp.map((v, k) => `<div class="cd-shrow"><span>${k + 1}.</span><div class="inp-unit sm"><input type="number" step="0.5" inputmode="decimal" data-shelf="${k}" value="${v}"><span>cm</span></div><button class="icon-btn sm danger" data-op="shdel" data-k="${k}" title="Rafı kaldır">${icon('trash')}</button></div>`).join('') : '<p class="muted small">Raf yok.</p>'}
             <div class="row wrap"><button class="btn btn-xs btn-primary" data-op="shadd">${icon('plus')}Raf ekle</button>
@@ -153,6 +163,7 @@ export function openCabinetDesigner(item, ctx) {
             <label><input type="checkbox" data-o="fridge" ${o.fridge ? 'checked' : ''}> Ankastre buzdolabı</label>
             <label><input type="checkbox" data-o="dish" ${o.dish ? 'checked' : ''}> Bulaşık makinesi</label>
             <label><input type="checkbox" data-o="hood" ${o.hood ? 'checked' : ''}> Davlumbaz</label></div>
+            <label>Davlumbaz tipi<select class="inp sm" data-o="hoodType">${HOODS.map(h => `<option value="${h.k}" ${(o.hoodType || 'bacali') === h.k ? 'selected' : ''}>${h.t}</option>`).join('')}</select></label>
             <label>Fırın<select class="inp sm" data-o="oven"><option value="kolon" ${o.oven === 'kolon' ? 'selected' : ''}>Boy kolonda</option><option value="alt" ${o.oven === 'alt' ? 'selected' : ''}>Ocak altında</option><option value="yok" ${o.oven === 'yok' ? 'selected' : ''}>Yok</option></select></label>`}
           <button class="btn btn-sm btn-ghost" data-a="auto">${icon('sparkle')}Yeniden diz</button>
           <p class="muted small">Pencere ve kapılar duvardan okunur; evye pencere altına, davlumbaz ocağın üstüne yerleşir.</p>
@@ -161,7 +172,11 @@ export function openCabinetDesigner(item, ctx) {
           <label>Kapak rengi</label>${sw(FRONTS, 'front')}
           <label>Gövde${sel1(BODIES, 'body')}</label>
           ${isW ? '' : `<label>Tezgah${sel1(TOPS, 'top')}</label>`}
-          <div class="grid2"><label>Kulp${sel1(HANDLES, 'handle')}</label><label>Kulp rengi${sel1(HANDLE_COLORS, 'hcolor')}</label></div>
+          <div class="grid2"><label>Kulp / açma${sel1(HANDLES, 'handle')}</label><label>Kulp rengi${sel1(HANDLE_COLORS, 'hcolor')}</label></div>
+          <label>Menteşe markası${sel1(HINGE_BRANDS, 'hinge')}</label>
+          <p class="muted small">Seçilen kulp ön görünüşte, 3D'de ve çizimin sağındaki büyütülmüş kesit detayında gösterilir; menteşe markası kesim listesine ürün adıyla yazılır.</p>
+          ${isW ? '' : `<div class="cd-chk"><label><input type="checkbox" data-led="on" ${cab.led?.on ? 'checked' : ''}> Üst dolap altı LED aydınlatma</label></div>
+            ${cab.led?.on ? `<label>Işık rengi<select class="inp sm" data-led="temp">${LED_TEMPS.map(x => `<option value="${x.k}" ${(cab.led.temp || '3000') === x.k ? 'selected' : ''}>${x.t}</option>`).join('')}</select></label>` : ''}`}
           ${isW ? `<label>Kapak tipi<select class="inp sm" data-s="doors">${WARD_DOORS.map(d => `<option value="${d.k}" ${(S.doors || 'menteseli') === d.k ? 'selected' : ''}>${d.t}</option>`).join('')}</select></label>
             <p class="muted small">Vestiyer askılık, oturak ve ayna modülleri her zaman kapaksızdır; "Kapaksız (açık)" seçilirse tüm dizi açık raf / askı olarak tasarlanır.</p>` : ''}
         </details>
@@ -189,11 +204,19 @@ export function openCabinetDesigner(item, ctx) {
         else if (k === 'doors') { if (t.value) f.m.doors = +t.value; else delete f.m.doors; }
         else if (k === 'hinge') f.m.hinge = t.value;
         else if (k === 'D') { const v = parseFloat(String(t.value).replace(',', '.')); if (v > 0) f.m.D = Math.max(v, MT[f.m.type]?.minD || 0); }
+        else if (k === 'frW' || k === 'frH') { const v = parseFloat(String(t.value).replace(',', '.')); if (v > 20) f.m[k] = Math.round(v * 2) / 2; }
+        else if (k === 'frDoors') f.m.frDoors = +t.value;
+        else if (k === 'frTop' || k === 'hood') f.m[k] = t.value;
         return changed();
       }
       if (t.dataset.s) { cab.s[t.dataset.s] = t.dataset.s === 'doors' ? t.value : (parseFloat(String(t.value).replace(',', '.')) || cab.s[t.dataset.s]); return changed(); }
       if (t.dataset.mat) { cab.mat[t.dataset.mat] = t.value; return changed(); }
-      if (t.dataset.o) { cab.opts[t.dataset.o] = t.type === 'checkbox' ? t.checked : t.value; return; }
+      if (t.dataset.led) { cab.led = { ...(cab.led || {}), [t.dataset.led]: t.type === 'checkbox' ? t.checked : t.value }; return changed(); }
+      if (t.dataset.o) {
+        cab.opts[t.dataset.o] = t.type === 'checkbox' ? t.checked : t.value;
+        if (t.dataset.o === 'hoodType') { cab.upper.forEach(m => { if (MT[m.type].hood) m.hood = t.value; }); return changed(); }   // mevcut davlumbazlara da uygula
+        return;
+      }
       if (t.dataset.auto) { wantL = parseFloat(String(t.value).replace(',', '.')) || wantL; }
     });
     side.addEventListener('click', async e => {
@@ -251,11 +274,15 @@ export function openCabinetDesigner(item, ctx) {
     document.addEventListener('keydown', onKey);
 
     function sheetHtml() {
-      const img = interior => { const E = elevation(cab, { obstacles: ctx.obstacles || [], interior, wallH: ctx.wallH }); const ratio = (E.L + 70) / (E.H + 80);   // elevationSvg görünüm kutusu oranı; yükseklik ~600 px'i geçmesin
+      const img = interior => { const E = elevation(cab, { obstacles: ctx.obstacles || [], interior, wallH: ctx.wallH }); const ratio = ((E.xr || E.L) + 70) / (E.H + 80);   // elevationSvg görünüm kutusu oranı; yükseklik ~600 px'i geçmesin
         return `<img class="cd-pimg" style="width:${Math.round(600 * ratio)}px" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(elevationSvg(E, { standalone: true, maxW: 1400 }))}" alt="">`; };
       const pl = partsList(cab), S = cab.s;
       const spec = isW ? [['Ölçü', `${fmt(rowLen(cab.ward))} × ${S.H} × ${S.D + S.frontT} cm`], ['Kapak', (WARD_DOORS.find(d => d.k === S.doors) || WARD_DOORS[0]).t], ['Kapak rengi', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t]]
-        : [['Dizi uzunluğu', fmt(runLength(cab)) + ' cm'], ['Tezgah yüksekliği', fmt(S.plinth + S.carcH + S.topT) + ' cm'], ['Kapak', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Tezgah', pick(TOPS, cab.mat.top).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t]];
+        : [['Dizi uzunluğu', fmt(runLength(cab)) + ' cm'], ['Tezgah yüksekliği', fmt(S.plinth + S.carcH + S.topT) + ' cm'], ['Kapak', pick(FRONTS, cab.mat.front).t], ['Gövde', pick(BODIES, cab.mat.body).t], ['Tezgah', pick(TOPS, cab.mat.top).t], ['Kulp', pick(HANDLES, cab.mat.handle).t + ' · ' + pick(HANDLE_COLORS, cab.mat.hcolor).t],
+          ...(cab.led?.on ? [['Üst dolap altı LED', pick(LED_TEMPS, cab.led.temp || '3000').t]] : []),
+          ...cab.upper.filter(m => MT[m.type].hood).map(m => ['Davlumbaz', HOODS.find(h => h.k === hoodOf(m)).t + ' · ' + fmt(m.w) + ' cm']),
+          ...cab.base.filter(m => MT[m.type].fridge).map(m => { const G = fridgeGeo(m, S); return ['Ankastre buzdolabı', `${fmt(G.frW)} × ${fmt(G.frH)} cm · ${G.doors === 2 ? 'çift kapak' : 'tek kapak'} · üstü: ${FRIDGE_TOP.find(o => o.k === G.top).t.toLowerCase()}`]; })];
+      spec.push(['Menteşe', pick(HINGE_BRANDS, cab.mat.hinge).t]);
       const mods = rows.map(r => layoutRow(cab[r]).map((p, i) => `<tr><td>${(r === 'upper' ? 'Ü' : r === 'ward' ? 'G' : 'A') + (i + 1)}</td><td>${esc(MT[p.m.type].t)}</td><td class="r">${fmt(p.x1 - p.x0)}</td></tr>`).join('')).join('');
       return `<section class="p-cust">${spec.slice(0, 3).map(([a, b]) => `<div><small>${a}</small><b>${esc(b)}</b></div>`).join('')}</section>
         <section><h3>Ön görünüş</h3><div class="p-plan">${img(false)}</div></section>

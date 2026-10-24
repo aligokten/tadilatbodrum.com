@@ -37,17 +37,18 @@ export function modInner(m, s, kind) {
   const t = MT[m.type] || {};
   if (kind === 'wardrobe') { const y0 = modY0(m, s); return { y: y0 + s.t, h: s.H - y0 - 2 * s.t }; }
   if (t.row === 'upper') return { y: s.upZ + s.t, h: s.upH - 2 * s.t };
+  if (t.fridge) { const G = fridgeGeo(m, s); return { y: G.topY, h: Math.max(0, G.topH) }; }   // buzdolabının üstündeki bölüm
   if (t.tall) return { y: s.plinth + s.t, h: s.tallH - s.plinth - 2 * s.t };
   return { y: s.plinth + s.t, h: s.carcH - 2 * s.t };
 }
 /* elle raf eklenebilen modül mü */
-export const shelfable = (m, kind) => { const t = MT[m.type] || {}; return !(t.empty || t.filler || t.hood || t.mirror || t.appliance || (t.drawers && kind !== 'wardrobe') || (t.oven && !t.tall)); };
+export const shelfable = (m, kind, s) => { const t = MT[m.type] || {}; if (t.fridge && s) { const G = fridgeGeo(m, s); if (G.top === 'dolgu' || G.topH < 20) return false; } return !(t.empty || t.filler || t.hood || t.mirror || t.appliance || (t.drawers && kind !== 'wardrobe') || (t.oven && !t.tall)); };
 /* raf konumları (iç tabandan cm, sıralı): elle girildiyse m.shelves, yoksa modül tipinin varsayılanı */
 export function shelfPos(m, s, kind) {
   const t = MT[m.type] || {}, { h } = modInner(m, s, kind);
   if (Array.isArray(m.shelves)) return m.shelves.filter(v => v > 0 && v < h).sort((a, b) => a - b);
   if (Array.isArray(t.shelves)) return t.shelves.map(f => +(h * f).toFixed(1));
-  const n = kind === 'wardrobe' ? 0 : t.tall ? (t.fridge ? 1 : t.oven ? 2 : (t.shelves || 4)) : (t.shelves || 0);
+  const n = kind === 'wardrobe' ? 0 : t.tall ? (t.fridge ? (h > 45 ? 1 : 0) : t.oven ? 2 : (t.shelves || 4)) : (t.shelves || 0);
   return Array.from({ length: n }, (_, i) => +(h * (i + 1) / (n + 1)).toFixed(1));
 }
 /* modül uyarıları: genişlik / yükseklik cihaza yetmiyor */
@@ -56,6 +57,12 @@ export function modWarn(m, s) {
   if (t.minW && m.w < t.minW) w.push(`Genişlik en az ${t.minW} cm olmalı (cihaz 60 cm + gövde + montaj payı)`);
   if (t.minH && s.H < t.minH) w.push(`Dolap yüksekliği en az ${t.minH} cm olmalı (cihazlar üst üste sığmıyor)`);
   if (t.appl && s.doors === 'surgulu') w.push('Sürgülü kapak makine kapağının açılmasını engelleyebilir; menteşeli ya da açık önerilir');
+  if (t.fridge) {
+    const G = fridgeGeo(m, s), minW = G.frW + 2 * s.t;
+    if (m.w < minW - 0.01) w.push(`Modül genişliği en az ${fmt(minW)} cm olmalı (cihaz ${fmt(G.frW)} cm + iki yan gövde)`);
+    if (G.topH < 0) w.push(`Boy dolap yüksekliği buzdolabına yetmiyor: en az ${fmt(G.minTall)} cm olmalı`);
+    else if (G.topH < 12) w.push('Buzdolabının üstünde dolap için yer yok; üst kısım sabit dolgu kapakla kapatılır');
+  }
   return w;
 }
 
@@ -73,7 +80,42 @@ export const TOPS = [
   { k: 'granit', t: 'Siyah granit', c: '#2A2B2E' }, { k: 'beton', t: 'Beton gri', c: '#9C9D9A' },
   { k: 'mese', t: 'Masif meşe', c: '#B88A5A' }, { k: 'laminat', t: 'Laminat (açık)', c: '#DCD5C8' },
 ];
-export const HANDLES = [{ k: 'cubuk', t: 'Çubuk kulp' }, { k: 'gola', t: 'Gola (kulpsuz profil)' }, { k: 'dugme', t: 'Düğme kulp' }, { k: 'takac', t: 'Tak-aç (kulpsuz)' }];
+export const HANDLES = [
+  { k: 'cubuk', t: 'Çubuk kulp' }, { k: 'dugme', t: 'Düğme kulp' }, { k: 'kenar', t: 'Kenar (tırnak) kulp' },
+  { k: 'j', t: 'J profil kulp' }, { k: 'gizli', t: 'Gizli kulp (frezeli kanal)' },
+  { k: 'gola', t: 'Gola (kulpsuz profil)' }, { k: 'takac', t: 'Tak-aç (itmeli, kulpsuz)' },
+];
+/* menteşe markaları: kesim listesinde menteşe ve kapak kaldırma ürün adı */
+export const HINGE_BRANDS = [
+  { k: 'standart', t: 'Standart (marka belirtilmedi)', h: 'Menteşe (frenli, 110°)', lift: 'Kapak kaldırma mekanizması' },
+  { k: 'blum', t: 'Blum', h: 'Blum CLIP top BLUMOTION menteşe (frenli, 110°)', lift: 'Blum AVENTOS HK-S kapak kaldırma' },
+  { k: 'hafele', t: 'Häfele', h: 'Häfele Metalla 510 menteşe (frenli, 110°)', lift: 'Häfele Free Flap kapak kaldırma' },
+  { k: 'samet', t: 'Samet', h: 'Samet frenli menteşe (110°)', lift: 'Samet kapak kaldırma mekanizması' },
+  { k: 'grass', t: 'Grass', h: 'Grass Tiomos menteşe (frenli, 110°)', lift: 'Grass Kinvaro kapak kaldırma' },
+];
+/* davlumbaz tipleri; ankastre ve gizli tipler gövdeli (dolap) modüldür */
+export const HOODS = [
+  { k: 'bacali', t: 'Duvar tipi bacalı davlumbaz' }, { k: 'egik', t: 'Eğik cam davlumbaz (bacalı)' },
+  { k: 'ankastre', t: 'Ankastre (sürgülü) davlumbaz + üst dolap' }, { k: 'gizli', t: 'Dolap içine gizli davlumbaz (kapaklı)' },
+  { k: 'aspirator', t: 'Aspiratör (duvar fanı)' },
+];
+export const hoodOf = m => m.hood || 'bacali';
+export const hoodCab = m => !!MT[m.type]?.hood && (hoodOf(m) === 'ankastre' || hoodOf(m) === 'gizli');
+/* üst dolap altı LED renk sıcaklığı */
+export const LED_TEMPS = [{ k: '3000', t: 'Sıcak beyaz (3000 K)', c: '#FFD27A' }, { k: '4000', t: 'Gün ışığı (4000 K)', c: '#FFF0C2' }, { k: '6500', t: 'Soğuk beyaz (6500 K)', c: '#E3F0FF' }];
+/* ankastre buzdolabı: üstteki bölüm */
+export const FRIDGE_TOP = [{ k: 'kapak', t: 'Kapaklı dolap' }, { k: 'kalkar', t: 'Yukarı açılır kapak' }, { k: 'acik', t: 'Açık raf' }, { k: 'dolgu', t: 'Kapalı (sabit dolgu kapak)' }];
+/* buzdolabı boy dolabı geometrisi (yerden, cm): cihaz nişi, bölme tablası, üstteki bölüm */
+export function fridgeGeo(m, s) {
+  const t = s.t, frW = m.frW || 56, frH = m.frH || 178, y0 = s.plinth;
+  const nicheTop = y0 + t + frH + 1;              // alt tabla + cihaz + 1 cm montaj payı
+  const coverH = Math.min(nicheTop + t, s.tallH) - y0;   // buzdolabı kapakları bölme tablasını da örter (boy dolabı aşmaz)
+  const topY = nicheTop + t, topH = s.tallH - t - topY;
+  return { frW, frH, nicheTop, coverH, topY, topH, doors: m.frDoors === 1 ? 1 : 2, top: topH < 12 ? 'dolgu' : (m.frTop || 'kapak'), minTall: y0 + 3 * t + frH + 1 };
+}
+/* kapak başına menteşe sayısı (yüksekliğe göre) ve tutma kenarı: alt kısımda üst kenar, üstte alt kenar */
+export const hingeN = h => h <= 100 ? 2 : h <= 160 ? 3 : h <= 210 ? 4 : 5;
+const gripTop = f => f.k === 'drawer' || (f.k !== 'lift' && f.y + f.h / 2 < 110);
 export const HANDLE_COLORS = [{ k: 'inox', t: 'Inox', c: '#A9AEB3' }, { k: 'siyah', t: 'Siyah', c: '#1E1F22' }, { k: 'altin', t: 'Altın', c: '#C2A15A' }];
 const pick = (list, k) => list.find(x => x.k === k) || list[0];
 
@@ -144,7 +186,7 @@ export const doorCount = (m, kind, s) => {
 /* yeni dizi */
 export function newCabinet(kind, L, style = '') {
   const s = { ...(kind === 'wardrobe' ? (style === 'vestiyer' ? VESTIYER_DEF : WARDROBE_DEF) : KITCHEN_DEF) };
-  const mat = { front: kind === 'wardrobe' ? 'beyaz' : 'beyaz', body: 'beyaz', top: 'kuvars', handle: kind === 'wardrobe' ? 'cubuk' : 'gola', hcolor: 'inox' };
+  const mat = { front: kind === 'wardrobe' ? 'beyaz' : 'beyaz', body: 'beyaz', top: 'kuvars', handle: kind === 'wardrobe' ? 'cubuk' : 'gola', hcolor: 'inox', hinge: 'standart' };
   const cab = { kind, s, mat, base: [], upper: [], ward: [], opts: { fridge: true, oven: 'kolon', dish: true, hood: true }, ...(style ? { style } : {}) };
   autoFill(cab, L, []);
   return cab;
@@ -273,6 +315,7 @@ export function autoFill(cab, L, obstacles = []) {
     if (freeUp.some(([a, b]) => c - w / 2 >= a - 0.1 && c + w / 2 <= b + 0.1)) ufixed.push({ type: 'davlumbaz', x0: c - w / 2, x1: c + w / 2 });
   }
   cab.upper = sequence(L, ufixed, freeUp, 'upper', 'kitchen');
+  if (o.hoodType) cab.upper.forEach(m => { if (MT[m.type].hood) m.hood = o.hoodType; });
   cab.ward = [];
   return cab;
 }
@@ -301,7 +344,12 @@ export function frontsOf(m, kind, s, x0) {
   }
   if (t.row === 'upper') {
     const y0 = s.upZ, h = s.upH;
-    if (t.hood || t.open) return F;
+    if (t.hood) {   // ankastre: altta sürgülü davlumbaz paneli, üstü dolap; gizli: kapak arkasında cihaz
+      if (hoodOf(m) === 'ankastre') { const vh = 6; F.push({ k: 'visor', x: x0 + g, y: y0 + g / 2, w: W - 2 * g, h: vh - g }); doors(y0 + vh, h - vh, doorCount(m, kind, s)); }
+      else if (hoodOf(m) === 'gizli') doors(y0, h, doorCount(m, kind, s), { hood: true });
+      return F;
+    }
+    if (t.open) return F;
     if (t.lift) { F.push({ k: 'lift', x: x0 + g, y: y0 + g / 2, w: W - 2 * g, h: h - g }); return F; }
     doors(y0, h, doorCount(m, kind, s), { glass: !!t.glass });
     return F;
@@ -309,7 +357,19 @@ export function frontsOf(m, kind, s, x0) {
   const y0 = s.plinth, h = s.carcH;
   if (t.tall) {
     const H = s.tallH - s.plinth;
-    if (t.fridge) { const hb = H * 0.55; doors(y0, hb, 1, { app: 'fridge' }); doors(y0 + hb, H - hb, 1, { app: 'fridge' }); return F; }
+    if (t.fridge) {   // cihaz kapak(lar)ı + üstteki bölüm (kapaklı / yukarı açılır / açık / sabit dolgu)
+      const G = fridgeGeo(m, s), hinge = m.hinge || 'L';
+      const one = (y, hh, extra = {}) => F.push({ k: 'door', x: x0 + g, y: y + g / 2, w: W - 2 * g, h: hh - g, hinge, app: 'fridge', ...extra });
+      if (G.doors === 2) { const fz = Math.round(G.coverH * (m.frSplit || 0.38)); one(y0, fz, { frz: true }); one(y0 + fz, G.coverH - fz); }
+      else one(y0, G.coverH);
+      const ty = y0 + G.coverH, th = s.tallH - ty;
+      if (th > 1) {
+        if (G.top === 'kalkar') F.push({ k: 'lift', x: x0 + g, y: ty + g / 2, w: W - 2 * g, h: th - g });
+        else if (G.top === 'dolgu') F.push({ k: 'fixed', x: x0 + g, y: ty + g / 2, w: W - 2 * g, h: th - g });
+        else if (G.top === 'kapak') doors(ty, th, doorCount(m, kind, s));
+      }
+      return F;
+    }
     if (t.oven) {
       drawers(y0, 60, [0.5, 0.5]);
       F.push({ k: 'oven', x: x0 + g, y: y0 + 60 + g / 2, w: W - 2 * g, h: 60 - g });
@@ -341,27 +401,52 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
     R(ob.x0, y0, ob.x1 - ob.x0, h, { s: '#5B9BD5', f: ob.type === 'window' ? '#E3F1FB' : '#F1F3F5', sw: 0.8, dash: true, layer: 'ACIKLIK' });
     T((ob.x0 + ob.x1) / 2, y0 + h / 2, ob.type === 'window' ? 'Pencere' : ob.type === 'door' ? 'Kapı' : 'Boşluk', { size: 7, c: '#5B9BD5' });
   }
+  const bgEnd = P.length;   // duvar / açıklık katmanının sonu (LED ışığı bunun üstüne, dolapların altına)
   const handle = cab.mat.handle, hcol = pick(HANDLE_COLORS, cab.mat.hcolor).c;
   const drawFront = (f, m) => {
+    if (f.k === 'visor') {   // ankastre davlumbazın sürgülü paneli
+      R(f.x, f.y, f.w, f.h, { s: '#24272B', f: '#C9CDD2', sw: 0.6, layer: 'CIHAZ' }); Ln(f.x + 3, f.y + f.h * 0.35, f.x + f.w - 3, f.y + f.h * 0.35, { s: '#8A9096', sw: 0.5, layer: 'CIHAZ' });
+      T(f.x + f.w / 2, f.y + f.h * 0.68, 'Sürgülü davlumbaz', { size: 3.6, c: '#4B5159' }); return;
+    }
     const fill = f.k === 'oven' || f.k === 'micro' ? '#2B2D31' : f.glass ? '#DCEFF2' : front;
     R(f.x, f.y, f.w, f.h, { s: '#24272B', f: fill, sw: 0.7, layer: 'KAPAK' });
+    if (f.k === 'fixed') { T(f.x + f.w / 2, f.y + f.h / 2, 'sabit', { size: 4, c: '#9AA1A9' }); return; }
     if (f.glass) R(f.x + 6, f.y + 6, f.w - 12, f.h - 12, { s: '#24272B', f: '#EAF6F8', sw: 0.4, layer: 'KAPAK' });
     if (f.k === 'oven' || f.k === 'micro') { R(f.x + 5, f.y + 6, f.w - 10, f.h - 18, { s: '#8A9096', f: '#16171A', sw: 0.4, layer: 'CIHAZ' }); T(f.x + f.w / 2, f.y + f.h - 6, f.k === 'oven' ? 'Fırın' : 'Mikrodalga', { size: 5, c: '#C9CDD2' }); return; }
     if (f.k === 'panel') { T(f.x + f.w / 2, f.y + f.h / 2, f.label, { size: 8, c: '#7A8594' }); if (f.washer) P.push({ t: 'circle', x: f.x + f.w / 2, y: f.y + f.h / 2, r: Math.min(f.w, f.h) * 0.3, s: '#7A8594', sw: 0.6, layer: 'CIHAZ' }); }
-    // açılım işareti (kesik V: tepesi menteşe tarafında)
+    if (f.app === 'fridge') { const G = fridgeGeo(m, s); T(f.x + f.w / 2, f.y + f.h / 2, f.frz ? 'Dondurucu' : `Buzdolabı ${fmt(G.frW)}×${fmt(G.frH)}`, { size: 4.2, c: '#7A8594' }); }
+    if (f.hood) { R(f.x + 6, f.y + 4, f.w - 12, 14, { s: '#8A9096', sw: 0.4, dash: true, layer: 'CIHAZ' }); T(f.x + f.w / 2, f.y + 11, 'gizli davlumbaz', { size: 3.6, c: '#7A8594' }); }
+    // açılım işareti (kesik V: tepesi menteşe tarafında) ve menteşe kaseleri (Ø35)
     if (f.k === 'door') {
       const hx = f.hinge === 'L' ? f.x : f.x + f.w, ox = f.hinge === 'L' ? f.x + f.w : f.x;
       Ln(ox, f.y, hx, f.y + f.h / 2, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); Ln(hx, f.y + f.h / 2, ox, f.y + f.h, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' });
+      if (!f.app) { const n = hingeN(f.h), cx = f.hinge === 'L' ? f.x + 2.25 : f.x + f.w - 2.25; for (let i = 0; i < n; i++) P.push({ t: 'circle', x: cx, y: n === 1 ? f.y + f.h / 2 : f.y + 10 + i * (f.h - 20) / (n - 1), r: 1.75, s: '#B4BAC0', sw: 0.3, layer: 'MENTESE' }); }
     }
     if (f.k === 'lift') { Ln(f.x, f.y, f.x + f.w / 2, f.y + f.h, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); Ln(f.x + f.w / 2, f.y + f.h, f.x + f.w, f.y, { s: '#9AA1A9', sw: 0.4, dash: true, layer: 'ACILIM' }); }
     if (f.k === 'door' && MT[m?.type]?.vent) for (const yb of [f.y + 6, f.y + f.h - 16]) for (let k = 0; k < 5; k++) Ln(f.x + f.w * 0.2, yb + k * 2.2, f.x + f.w * 0.8, yb + k * 2.2, { s: '#6E747B', sw: 0.6, layer: 'MENFEZ' });   // havalandırma menfezi
     // kulp
     if (handle === 'takac' || f.k === 'panel') return;
     const upper = f.y > s.plinth + (s.carcH || 0) + 10 && kind !== 'wardrobe';
-    if (handle === 'gola') { if (!upper && f.k !== 'lift') Ln(f.x, f.y + f.h - 1.5, f.x + f.w, f.y + f.h - 1.5, { s: hcol, sw: 1.4, layer: 'KULP' }); return; }
+    if (handle === 'gola') { if (!upper && f.k !== 'lift' && f.y + f.h < 110) Ln(f.x, f.y + f.h - 1.5, f.x + f.w, f.y + f.h - 1.5, { s: hcol, sw: 1.4, layer: 'KULP' }); return; }
+    const top = gripTop(f), ey = top ? f.y + f.h : f.y, sd = top ? -1 : 1;   // tutma kenarı ve kapağın içine doğru yön
+    const vEdge = kind === 'wardrobe' && f.k === 'door';                    // giysi dolabında profil kulp açılan dikey kenarda
+    const oxE = f.hinge === 'L' ? f.x + f.w : f.x;
+    if (handle === 'j') {
+      if (vEdge) { R(f.hinge === 'L' ? oxE - 1.2 : oxE, f.y, 1.2, f.h, { s: hcol, f: hcol, sw: 0.3, layer: 'KULP' }); return; }
+      R(f.x, top ? ey - 1.2 : ey, f.w, 1.2, { s: hcol, f: hcol, sw: 0.3, layer: 'KULP' }); Ln(f.x, ey + sd * 2, f.x + f.w, ey + sd * 2, { s: hcol, sw: 0.4, layer: 'KULP' }); return;
+    }
+    if (handle === 'gizli') {
+      if (vEdge) { R(f.hinge === 'L' ? oxE - 2 : oxE, f.y, 2, f.h, { s: '#24272B', f: shade(front, -40), sw: 0.3, layer: 'KULP' }); return; }
+      R(f.x, top ? ey - 2 : ey, f.w, 2, { s: '#24272B', f: shade(front, -40), sw: 0.3, layer: 'KULP' }); Ln(f.x, ey + sd * 3.2, f.x + f.w, ey + sd * 3.2, { s: '#6E747B', sw: 0.3, dash: true, layer: 'KULP' }); return;
+    }
+    if (handle === 'kenar') {
+      const kw = Math.min(10, f.w / 3), kx = f.k === 'door' ? (f.hinge === 'L' ? f.x + f.w - kw - 3 : f.x + 3) : f.x + f.w / 2 - kw / 2;
+      if (vEdge) { R(f.hinge === 'L' ? oxE - 1 : oxE, f.y + f.h * 0.48 - 5, 1, 10, { s: hcol, f: hcol, sw: 0.3, layer: 'KULP' }); return; }
+      R(kx, top ? ey - 1 : ey, kw, 1, { s: hcol, f: hcol, sw: 0.3, layer: 'KULP' }); return;
+    }
     let hx, hy, vertical = true;
     if (f.k === 'drawer' || f.k === 'lift') { hx = f.x + f.w / 2; hy = f.k === 'lift' ? f.y + 4 : f.y + f.h - Math.min(6, f.h / 3); vertical = false; }
-    else { const side = f.hinge === 'L' ? 1 : -1; hx = f.hinge === 'L' ? f.x + f.w - 4 : f.x + 4; hy = upper ? f.y + 10 : f.y + f.h - 12; if (kind === 'wardrobe') hy = f.y + f.h * 0.48; void side; }
+    else { hx = f.hinge === 'L' ? f.x + f.w - 4 : f.x + 4; hy = top ? f.y + f.h - 12 : f.y + 10; if (kind === 'wardrobe') hy = f.y + f.h * 0.48; }
     if (handle === 'dugme') P.push({ t: 'circle', x: hx, y: hy, r: 1.3, s: hcol, f: hcol, sw: 0.4, layer: 'KULP' });
     else if (vertical) Ln(hx, hy - (kind === 'wardrobe' ? 15 : 6), hx, hy + (kind === 'wardrobe' ? 15 : 6), { s: hcol, sw: 1.4, layer: 'KULP' });
     else Ln(hx - Math.min(10, f.w / 4), hy, hx + Math.min(10, f.w / 4), hy, { s: hcol, sw: 1.4, layer: 'KULP' });
@@ -418,8 +503,22 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
       }
       R(p.x0, 0, w, s.plinth, { s: '#24272B', f: '#55595F', sw: 0.5, layer: 'BAZA' });
       R(p.x0, s.plinth, w, H - s.plinth, { s: '#24272B', f: t.filler ? front : body, sw: 0.8, layer: 'GOVDE' });
-      if (interior && shelfable(p.m, 'kitchen')) { const inn = modInner(p.m, s, 'kitchen'); R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
-      else frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
+      if (t.fridge) {   // baza havalandırma ızgarası; iç düzende cihaz silueti + bölme tablası
+        for (let k = 0; k < 4; k++) Ln(p.x0 + w * 0.25, 2.5 + k * 1.6, p.x1 - w * 0.25, 2.5 + k * 1.6, { s: '#C9CDD2', sw: 0.5, layer: 'MENFEZ' });
+        const G = fridgeGeo(p.m, s);
+        if (interior) {
+          R(p.x0 + s.t, s.plinth + s.t, w - 2 * s.t, G.nicheTop - s.plinth - s.t, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' });
+          R(p.x0 + (w - G.frW) / 2, s.plinth + s.t, G.frW, G.frH, { s: '#5B6168', f: '#F4F5F6', sw: 0.7, layer: 'CIHAZ' });
+          if (G.doors === 2) Ln(p.x0 + (w - G.frW) / 2, s.plinth + s.t + G.frH * 0.36, p.x0 + (w + G.frW) / 2, s.plinth + s.t + G.frH * 0.36, { s: '#5B6168', sw: 0.5, layer: 'CIHAZ' });
+          T(p.x0 + w / 2, s.plinth + s.t + G.frH * 0.62, 'Buzdolabı', { size: 5, c: '#5B6168', bold: true });
+          T(p.x0 + w / 2, s.plinth + s.t + G.frH * 0.62 - 7, `${fmt(G.frW)} × ${fmt(G.frH)} cm`, { size: 4.2, c: '#5B6168' });
+          if (G.topH > 0) R(p.x0 + s.t, G.nicheTop, w - 2 * s.t, s.t, { s: '#24272B', f: body, sw: 0.5, layer: 'GOVDE' });
+          if (G.top === 'dolgu' || G.topH < 20) frontsOf(p.m, 'kitchen', s, p.x0).filter(f => f.k === 'fixed').forEach(f => drawFront(f, p.m));
+        }
+      }
+      if (interior && shelfable(p.m, 'kitchen', s)) { const inn = modInner(p.m, s, 'kitchen'); R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
+      else if (!(interior && t.fridge)) frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
+      if (t.fridge && !interior && fridgeGeo(p.m, s).top === 'acik') { const inn = modInner(p.m, s, 'kitchen'); R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
       if (t.sink) { R(p.x0 + w / 2 - 22, cY + s.topT, 44, 1.5, { s: '#8A9096', f: '#C9CDD2', sw: 0.4, layer: 'CIHAZ' }); Ln(p.x0 + w / 2 + 14, cY + s.topT, p.x0 + w / 2 + 14, cY + s.topT + 30, { s: '#8A9096', sw: 1.2, layer: 'CIHAZ' }); Ln(p.x0 + w / 2 + 14, cY + s.topT + 30, p.x0 + w / 2 + 4, cY + s.topT + 26, { s: '#8A9096', sw: 1.2, layer: 'CIHAZ' }); }
       if (t.hob) R(p.x0 + 4, cY + s.topT, w - 8, 1.2, { s: '#16171A', f: '#16171A', sw: 0.4, layer: 'CIHAZ' });
       T(p.x0 + w / 2, (t.tall ? H : cY) + (t.tall ? 6 : s.topT + 6), String(i + 1), { size: 6, c: '#00AFB0', bold: true });
@@ -433,19 +532,45 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
       const t = MT[p.m.type], w = p.x1 - p.x0;
       hits.push({ id: p.m.id, row: 'upper', x: p.x0, y: s.upZ, w, h: s.upH });
       if (t.empty) return;
-      if (t.hood) {
-        const hw = w, hy = s.upZ + 5;
-        P.push({ t: 'poly', pts: [[p.x0, hy], [p.x1, hy], [p.x1 - hw * 0.2, hy + 14], [p.x0 + hw * 0.2, hy + 14]], s: '#24272B', f: '#C9CDD2', sw: 0.7, layer: 'CIHAZ' });
-        R(p.x0 + w / 2 - 15, hy + 14, 30, s.upZ + s.upH - hy - 14, { s: '#24272B', f: '#D9DCDF', sw: 0.7, layer: 'CIHAZ' });
+      if (t.hood && !hoodCab(p.m)) {
+        const ht = hoodOf(p.m), cx = p.x0 + w / 2;
+        if (ht === 'aspirator') {   // duvar fanı: dairesel ızgara
+          const r = Math.min(13, w / 3), cy = s.upZ + s.upH / 2;
+          P.push({ t: 'circle', x: cx, y: cy, r: r + 2, s: '#24272B', f: '#E3E6E9', sw: 0.7, layer: 'CIHAZ' });
+          for (let k = -2; k <= 2; k++) Ln(cx - Math.sqrt(r * r - (k * r / 3) ** 2), cy + k * r / 3, cx + Math.sqrt(r * r - (k * r / 3) ** 2), cy + k * r / 3, { s: '#8A9096', sw: 0.5, layer: 'CIHAZ' });
+          T(cx, cy - r - 6, 'Aspiratör', { size: 4.5, c: '#5B6168' });
+        } else if (ht === 'egik') {   // eğik cam panel + baca
+          R(p.x0 + 2, s.upZ, w - 4, 3, { s: '#24272B', f: '#C9CDD2', sw: 0.6, layer: 'CIHAZ' });
+          P.push({ t: 'poly', pts: [[p.x0 + 2, s.upZ + 3], [p.x1 - 2, s.upZ + 3], [p.x1 - 2, s.upZ + 34], [p.x0 + 2, s.upZ + 34]], s: '#24272B', f: '#2B2D31', sw: 0.7, layer: 'CIHAZ' });
+          Ln(p.x0 + 6, s.upZ + 30, p.x0 + 16, s.upZ + 8, { s: '#6E747B', sw: 0.6, layer: 'CIHAZ' });
+          R(cx - 13, s.upZ + 34, 26, s.upZ + s.upH - s.upZ - 34, { s: '#24272B', f: '#D9DCDF', sw: 0.7, layer: 'CIHAZ' });
+        } else {   // duvar tipi bacalı (T)
+          const hy = s.upZ + 5;
+          P.push({ t: 'poly', pts: [[p.x0, hy], [p.x1, hy], [p.x1 - w * 0.2, hy + 14], [p.x0 + w * 0.2, hy + 14]], s: '#24272B', f: '#C9CDD2', sw: 0.7, layer: 'CIHAZ' });
+          R(cx - 15, hy + 14, 30, s.upZ + s.upH - hy - 14, { s: '#24272B', f: '#D9DCDF', sw: 0.7, layer: 'CIHAZ' });
+        }
+        T(cx, s.upZ + s.upH + 6, 'Ü' + (i + 1), { size: 6, c: '#EB591F', bold: true });
         return;
       }
       R(p.x0, s.upZ, w, s.upH, { s: '#24272B', f: t.filler ? front : body, sw: 0.8, layer: 'GOVDE' });
       const inn = modInner(p.m, s, 'kitchen');
-      const showIn = interior && shelfable(p.m, 'kitchen');
+      const showIn = interior && shelfable(p.m, 'kitchen', s);
       if ((t.open || showIn) && !t.filler) { if (showIn) R(p.x0 + s.t, inn.y, w - 2 * s.t, inn.h, { s: '#24272B', f: shade(body, -10), sw: 0.4, layer: 'GOVDE' }); shelfPos(p.m, s, 'kitchen').forEach(v => Ln(p.x0 + s.t, inn.y + v, p.x1 - s.t, inn.y + v, { s: '#6E747B', sw: 0.8, layer: 'RAF' })); }
       if (!showIn) frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, p.m));
       T(p.x0 + w / 2, s.upZ + s.upH + 6, 'Ü' + (i + 1), { size: 6, c: '#EB591F', bold: true });
     });
+    if (cab.led?.on) {   // üst dolap altı LED: şerit + tezgaha düşen ışık
+      const lc = pick(LED_TEMPS, cab.led.temp || '3000').c;
+      const runs = []; let run = null;   // ardışık LED'li üst dolaplar tek ışık alanı
+      for (const p of up) {
+        const t = MT[p.m.type]; if (t.empty || t.hood) { run = null; continue; }
+        if (run && Math.abs(run[1] - p.x0) < 0.1) run[1] = p.x1; else runs.push(run = [p.x0, p.x1]);
+        R(p.x0 + 2, s.upZ - 0.9, p.x1 - p.x0 - 4, 0.9, { s: '#E0A41C', f: '#FFC83D', sw: 0.3, layer: 'LED' });
+      }
+      for (const [a, b] of runs) P.splice(bgEnd, 0, { t: 'poly', pts: [[a + 1, s.upZ], [b - 1, s.upZ], [b + 3, cY + s.topT], [a - 3, cY + s.topT]], f: lc, op: 0.4, noDxf: true, layer: 'LED' });
+      const fu = up.find(p => !MT[p.m.type].empty && !MT[p.m.type].hood);
+      if (fu) T(fu.x0 + 10, s.upZ - 4, 'LED', { size: 4, c: '#B07A00', bold: true });
+    }
     dimChain(P, base, -14, s);
     dimChain(P, up.filter(p => !MT[p.m.type].empty || true), s.upZ + s.upH + 16, s, true);
     // yükseklik ölçüleri
@@ -453,10 +578,38 @@ export function elevation(cab, { obstacles = [], interior = false, wallH = 280, 
     for (const [a, b] of hz) { Ln(-22, a, -22, b, { s: '#7A8594', sw: 0.4, layer: 'OLCU' }); Ln(-25, b, -19, b, { s: '#7A8594', sw: 0.4, layer: 'OLCU' }); T(-26, (a + b) / 2, fmt(b - a), { size: 5.5, rot: -90, c: '#7A8594' }); }
     Ln(-25, 0, -19, 0, { s: '#7A8594', sw: 0.4, layer: 'OLCU' });
   }
+  // kulp / açma detayı (büyütülmüş kesit), çizimin sağında
+  const dY = kind === 'wardrobe' ? Math.min(s.H - 40, 170) : s.plinth + s.carcH;
+  handleDetail(P, L + 48, dY, handle, hcol, front, kind);
   // toplam
   Ln(0, -32, L, -32, { s: '#24272B', sw: 0.5, layer: 'OLCU' }); Ln(0, -35, 0, -29, { s: '#24272B', sw: 0.5, layer: 'OLCU' }); Ln(L, -35, L, -29, { s: '#24272B', sw: 0.5, layer: 'OLCU' });
   T(L / 2, -38, `Toplam ${fmt(L)} cm`, { size: 7, bold: true });
-  return { P, hits, L, H: Math.max(wallH, kind === 'wardrobe' ? s.H : s.tallH) };
+  return { P, hits, L, xr: L + 92, H: Math.max(wallH, kind === 'wardrobe' ? s.H : s.tallH) };
+}
+/* kulp detayı: kapağın tutma kenarından düşey kesit, 4 kat büyütülmüş (ox, oy: kapak üst kenarının ön yüzü) */
+function handleDetail(P, ox, oy, handle, hcol, front, kind) {
+  const k = 4, d = 1.8 * k, R = (x, y, w, h, o = {}) => P.push({ t: 'rect', x, y, w, h, ...o }), Ln = (x1, y1, x2, y2, o = {}) => P.push({ t: 'line', x1, y1, x2, y2, ...o }), T = (x, y, txt, o = {}) => P.push({ t: 'text', x, y, txt, ...o });
+  const name = (HANDLES.find(h => h.k === handle) || HANDLES[0]).t, L0 = 'DETAY', al = { s: '#4B5159', f: hcol, sw: 0.4, layer: L0 };
+  const bx = ox - 26, by = oy - 72;
+  R(bx, by, 70, 114, { s: '#C9CDD2', sw: 0.4, dash: true, layer: L0 });
+  T(bx + 35, by + 108, 'KULP DETAYI', { size: 5, bold: true });
+  T(bx + 35, by + 102, name, { size: 3.8, c: '#4B5159' });
+  T(bx + 35, by + 4, 'Düşey kesit · 4 kat büyütülmüş', { size: 3, c: '#7A8594' });
+  // kapak kesiti (arka yüz solda, ön yüz sağda); gizli kulpta üst-arka köşe frezeli
+  const dx = ox - d;
+  if (handle === 'gizli') P.push({ t: 'poly', pts: [[dx, oy - 44], [ox, oy - 44], [ox, oy], [dx + d * 0.45, oy], [dx + d * 0.45, oy - 8], [dx, oy - 13]], s: '#24272B', f: front, sw: 0.6, layer: L0 });
+  else R(dx, oy - 44, d, 44, { s: '#24272B', f: front, sw: 0.6, layer: L0 });
+  T(dx - 7, oy - 30, '18', { size: 3.2, c: '#7A8594', rot: -90 });
+  const note = (t1, t2) => { T(bx + 35, by + 17, t1, { size: 3.3, c: '#24272B' }); if (t2) T(bx + 35, by + 11, t2, { size: 3, c: '#7A8594' }); };
+  const ctr = kind !== 'wardrobe';
+  if (ctr && (handle === 'gola' || handle === 'j' || handle === 'gizli' || handle === 'kenar')) { R(dx - 14, oy + 13, 34, 7, { s: '#24272B', f: '#E9E6E1', sw: 0.5, layer: L0 }); T(dx + 3, oy + 16.5, 'tezgah', { size: 2.6, c: '#7A8594' }); }   // tezgah (ölçeksiz)
+  if (handle === 'cubuk') { R(ox, oy - 12, 12, 2.4, al); R(ox, oy - 36, 12, 2.4, al); R(ox + 10, oy - 38, 3.2, 28.4, al); note('Çubuk kulp · 128 mm aks', 'kapaktan 30 mm çıkıntı, vidalı'); }
+  else if (handle === 'dugme') { R(ox, oy - 14, 7, 3, al); R(ox + 6, oy - 19, 4, 13, al); note('Düğme kulp · Ø25 mm', 'tek vida, kapaktan 28 mm'); }
+  else if (handle === 'kenar') { R(dx, oy, d + 3.2, 1.6, al); R(ox + 1.6, oy - 6, 1.6, 7.6, al); note('Kenar (tırnak) kulp · 40–100 mm', 'kapak üst kenarına vidalı alüminyum'); }
+  else if (handle === 'j') { P.push({ t: 'poly', pts: [[dx, oy], [ox + 1.2, oy], [ox + 1.2, oy + 10], [dx + 2.4, oy + 10], [dx + 2.4, oy + 8.8], [ox, oy + 8.8], [ox, oy + 1.2], [dx, oy + 1.2]], ...al }); note('J profil · 25 mm, kapak boyunca', 'parmak profilin arkasından kavrar'); }
+  else if (handle === 'gizli') { Ln(dx + d * 0.45, oy - 8, dx + d * 0.45 + 10, oy + 2, { s: '#EB591F', sw: 0.5, layer: L0 }); note('Gizli kulp · kanal freze', 'kapak üst-arka kenarı, 8 mm derinlik'); }
+  else if (handle === 'gola') { P.push({ t: 'poly', pts: [[dx - 4, oy + 1], [dx - 4, oy + 12], [ox + 1, oy + 12], [ox + 1, oy + 10.8], [dx - 2.8, oy + 10.8], [dx - 2.8, oy + 2.2], [ox - 2, oy + 2.2], [ox - 2, oy + 1]], ...al }); note('Gola C profil (gövdeye)', 'kapak üstünde ~30 mm parmak boşluğu'); }
+  else { R(dx - 8, oy - 24, 8, 5, { s: '#4B5159', f: '#C9CDD2', sw: 0.4, layer: L0 }); Ln(ox + 3, oy - 21.5, ox + 12, oy - 21.5, { s: '#EB591F', sw: 0.5, layer: L0 }); note('Tak-aç (itmeli) mekanizma', 'kapağa basınca açılır, kulpsuz'); }
 }
 const fmt = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
 function dimChain(P, lay, y, s, above = false) {
@@ -474,12 +627,12 @@ function shade(hex, d) {
 
 /* ilkellerden SVG (y yukarı → SVG'de çevrilir) */
 export function elevationSvg(E, { sel = null, pad = 50, standalone = false, maxW = 0 } = {}) {
-  const x0 = -45, x1 = E.L + 25, y0 = -50, y1 = E.H + 30;
+  const x0 = -45, x1 = (E.xr || E.L) + 25, y0 = -50, y1 = E.H + 30;
   const W = x1 - x0, H = y1 - y0, Y = y => y1 - y + y0;   // y'yi çevir
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let o = '';
   for (const p of E.P) {
-    const st = `stroke="${p.s || 'none'}" stroke-width="${p.sw || 0.5}" fill="${p.f || 'none'}"${p.dash ? ' stroke-dasharray="3 2"' : ''}`;
+    const st = `stroke="${p.s || 'none'}" stroke-width="${p.sw || 0.5}" fill="${p.f || 'none'}"${p.op ? ` fill-opacity="${p.op}"` : ''}${p.dash ? ' stroke-dasharray="3 2"' : ''}`;
     if (p.t === 'rect') o += `<rect x="${p.x}" y="${Y(p.y + p.h)}" width="${Math.max(0, p.w)}" height="${Math.max(0, p.h)}" ${st}/>`;
     else if (p.t === 'line') o += `<line x1="${p.x1}" y1="${Y(p.y1)}" x2="${p.x2}" y2="${Y(p.y2)}" ${st} stroke-linecap="round"/>`;
     else if (p.t === 'circle') o += `<circle cx="${p.x}" cy="${Y(p.y)}" r="${p.r}" ${st}/>`;
@@ -500,6 +653,7 @@ export function elevationDxf(E) {
   const k = 10, out = ['0', 'SECTION', '2', 'ENTITIES'];
   const line = (L, x1, y1, x2, y2) => out.push('0', 'LINE', '8', L, '10', (x1 * k).toFixed(1), '20', (y1 * k).toFixed(1), '30', '0', '11', (x2 * k).toFixed(1), '21', (y2 * k).toFixed(1), '31', '0');
   for (const p of E.P) {
+    if (p.noDxf) continue;
     const L = p.layer || '0';
     if (p.t === 'rect') { line(L, p.x, p.y, p.x + p.w, p.y); line(L, p.x + p.w, p.y, p.x + p.w, p.y + p.h); line(L, p.x + p.w, p.y + p.h, p.x, p.y + p.h); line(L, p.x, p.y + p.h, p.x, p.y); }
     else if (p.t === 'line') line(L, p.x1, p.y1, p.x2, p.y2);
@@ -573,18 +727,22 @@ export function build3D(THREE, g, it, mat) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(M(w), M(h), M(d)), m);
     b.position.set(M(x0 - W / 2 + w / 2), M(y0 + h / 2), M(z0 - D / 2 + d / 2)); b.castShadow = b.receiveShadow = true; g.add(b); return b;
   };
-  const handle = cab.mat.handle;
+  const handle = cab.mat.handle, groove = mat(shade(pick(FRONTS, cab.mat.front).c, -55), 0.8);
   const drawFront = (f, zFront, kind) => {
+    if (f.k === 'visor') { box(f.x, f.y, zFront, f.w, f.h, s.frontT + 1, steel); return; }
     const isApp = f.k === 'oven' || f.k === 'micro';
     box(f.x, f.y, zFront, f.w, f.h, s.frontT, isApp ? black : f.glass ? glass : front);
     if (isApp) { box(f.x + 4, f.y + f.h - 8, zFront + s.frontT, f.w - 8, 2, 1, steel); return; }
-    if (handle === 'takac' || f.k === 'panel') return;
+    if (handle === 'takac' || f.k === 'panel' || f.k === 'fixed') return;
     const upper = kind === 'kitchen' && f.y > s.plinth + s.carcH + 10;
-    if (handle === 'gola') { if (!upper && f.k !== 'lift') box(f.x, f.y + f.h - 2.5, zFront + s.frontT - 0.6, f.w, 2.5, 0.7, hcol); return; }
-    const z = zFront + s.frontT;
+    if (handle === 'gola') { if (!upper && f.k !== 'lift' && f.y + f.h < 110) box(f.x, f.y + f.h - 2.5, zFront + s.frontT - 0.6, f.w, 2.5, 0.7, hcol); return; }
+    const z = zFront + s.frontT, top = gripTop(f), vEdge = kind === 'wardrobe' && f.k === 'door', oe = f.hinge === 'L' ? f.x + f.w : f.x;
+    if (handle === 'j') { if (vEdge) box(f.hinge === 'L' ? oe - 1.2 : oe, f.y, 1.2, f.h, 2.4, hcol); else box(f.x, top ? f.y + f.h - 0.4 : f.y - 0.8, z - 2, f.w, 1.2, 2.6, hcol); return; }
+    if (handle === 'gizli') { if (vEdge) box(f.hinge === 'L' ? oe - 2 : oe, f.y, 2, f.h, 0.08, groove); else box(f.x, top ? f.y + f.h - 2 : f.y, z, f.w, 2, 0.08, groove); return; }
+    if (handle === 'kenar') { const kw = Math.min(10, f.w / 3), kx = f.k === 'door' ? (f.hinge === 'L' ? f.x + f.w - kw - 3 : f.x + 3) : f.x + f.w / 2 - kw / 2; if (vEdge) box(f.hinge === 'L' ? oe - 1 : oe, f.y + f.h * 0.48 - 5, 1, 10, 2.2, hcol); else box(kx, top ? f.y + f.h - 0.2 : f.y - 0.8, z - 2, kw, 1, 2.4, hcol); return; }
     if (handle === 'dugme') { const c = new THREE.Mesh(new THREE.CylinderGeometry(M(1.4), M(1.4), M(2.5), 12), hcol); c.rotation.x = Math.PI / 2; const hx = f.k === 'door' ? (f.hinge === 'L' ? f.x + f.w - 4 : f.x + 4) : f.x + f.w / 2, hy = f.k === 'door' ? (upper ? f.y + 8 : f.y + f.h - 8) : f.y + f.h - 5; c.position.set(M(hx - W / 2), M(hy), M(z - D / 2 + 1.2)); g.add(c); return; }
     if (f.k === 'drawer' || f.k === 'lift') { const hw = Math.min(20, f.w * 0.5); box(f.x + f.w / 2 - hw / 2, f.k === 'lift' ? f.y + 3 : f.y + f.h - 6, z, hw, 1.2, 2.2, hcol); }
-    else { const hl = kind === 'wardrobe' ? 40 : 14, hx = f.hinge === 'L' ? f.x + f.w - 5 : f.x + 3.8; const hy = kind === 'wardrobe' ? f.y + f.h * 0.48 - hl / 2 : upper ? f.y + 3 : f.y + f.h - 4 - hl; box(hx, hy, z, 1.2, hl, 2.2, hcol); }
+    else { const hl = kind === 'wardrobe' ? 40 : 14, hx = f.hinge === 'L' ? f.x + f.w - 5 : f.x + 3.8; const hy = kind === 'wardrobe' ? f.y + f.h * 0.48 - hl / 2 : top ? f.y + f.h - 4 - hl : f.y + 3; box(hx, hy, z, 1.2, hl, 2.2, hcol); }
   };
   /* kapaksız (açık) giysi dolabı / vestiyer modülü: yanlar, alt / üst, arkalık ve iç donanım görünür */
   const openWard = (p, t, w) => {
@@ -649,6 +807,7 @@ export function build3D(THREE, g, it, mat) {
       box(p.x0 + w / 2 - 1.3, cY + s.topT + 28, 6, 2.6, 2.6, 18, steel);
     }
     if (t.hob) { box(p.x0 + 4, cY + s.topT, 6, w - 8, 0.6, 50, black); }
+    if (t.fridge) { const G = fridgeGeo(p.m, s); if (G.top === 'acik') { box(p.x0 + s.t, G.nicheTop, 0, w - 2 * s.t, s.t, s.baseD, body); shelfPos(p.m, s, 'kitchen').forEach(v => box(p.x0 + s.t, G.topY + v, 0, w - 2 * s.t, s.t, s.baseD - 1, body)); } }
   }
   // tezgah
   let seg = null; const segs = [];
@@ -658,10 +817,20 @@ export function build3D(THREE, g, it, mat) {
   // tezgah arası (backsplash) hafif şerit yok; üst dolaplar
   for (const p of layoutRow(cab.upper)) {
     const t = MT[p.m.type], w = p.x1 - p.x0; if (t.empty) continue;
-    if (t.hood) { box(p.x0, s.upZ + 4, 0, w, 6, 50, steel); box(p.x0 + w / 2 - 15, s.upZ + 10, 0, 30, s.upH - 10, 25, steel); continue; }
+    if (t.hood && !hoodCab(p.m)) {
+      const ht = hoodOf(p.m);
+      if (ht === 'aspirator') { const c = new THREE.Mesh(new THREE.CylinderGeometry(M(Math.min(15, w / 2.6)), M(Math.min(15, w / 2.6)), M(4), 28), mat('#E3E6E9', 0.4)); c.rotation.x = Math.PI / 2; c.position.set(M(p.x0 + w / 2 - W / 2), M(s.upZ + s.upH / 2), M(2 - D / 2)); g.add(c); continue; }
+      if (ht === 'egik') { const gl = new THREE.Mesh(new THREE.BoxGeometry(M(w - 4), M(36), M(1.2)), mat('#1E2023', 0.08, 0.4)); gl.rotation.x = -0.75; gl.position.set(M(p.x0 + w / 2 - W / 2), M(s.upZ + 16), M(26 - D / 2)); g.add(gl); box(p.x0 + w / 2 - 13, s.upZ + 26, 0, 26, s.upH - 26, 22, steel); continue; }
+      box(p.x0, s.upZ + 4, 0, w, 6, 50, steel); box(p.x0 + w / 2 - 15, s.upZ + 10, 0, 30, s.upH - 10, 25, steel); continue;
+    }
     box(p.x0, s.upZ, 0, w, s.upH, s.upD, t.filler ? front : body);
     if (t.open) { const inn = modInner(p.m, s, 'kitchen'); shelfPos(p.m, s, 'kitchen').forEach(v => box(p.x0 + s.t, inn.y + v, 0, w - 2 * s.t, s.t, s.upD, body)); }
     frontsOf(p.m, 'kitchen', s, p.x0).forEach(f => drawFront(f, s.upD, 'kitchen'));
+    if (cab.led?.on && !t.hood) {   // üst dolap altı LED şerit (kendinden ışıklı)
+      const lc = pick(LED_TEMPS, cab.led.temp || '3000').c;
+      const led = new THREE.Mesh(new THREE.BoxGeometry(M(w - 4), M(0.6), M(1.6)), new THREE.MeshStandardMaterial({ color: lc, emissive: lc, emissiveIntensity: 2.2 }));
+      led.position.set(M(p.x0 + w / 2 - W / 2), M(s.upZ - 0.3), M(s.upD - 5 - D / 2)); g.add(led);
+    }
   }
 }
 
@@ -671,8 +840,8 @@ export function partsList(cab) {
   const frontName = 'Kapak · ' + pick(FRONTS, cab.mat.front).t, bodyName = 'Gövde · ' + pick(BODIES, cab.mat.body).t + ' 18 mm';
   // ops: CNC işlemleri (hinge: menteşe kase delikleri, pins: raf pimi sıraları)
   const add = (mod, part, matl, L, W, n = 1, band = '', ops = null) => { if (L > 0 && W > 0 && n > 0) rows.push({ mod, part, mat: matl, L: Math.round(L * 10), W: Math.round(W * 10), n, band, ...(ops ? { ops } : {}) }); };
-  const H = (k, n) => { hw[k] = (hw[k] || 0) + n; };
-  const hinges = h => h <= 100 ? 2 : h <= 160 ? 3 : h <= 210 ? 4 : 5;
+  const H = (k, n) => { hw[k] = +((hw[k] || 0) + n).toFixed(2); };
+  const hinges = hingeN, brand = pick(HINGE_BRANDS, cab.mat.hinge), hd = cab.mat.handle;
   const carcass = (no, w, h, d, shelves, back = true) => {
     add(no, 'Yan dikme', bodyName, h, d, 2, '1 uzun kenar', shelves ? { pins: true } : null);
     add(no, 'Alt / üst tabla', bodyName, w - 2 * t, d, 2, '1 uzun kenar');
@@ -681,12 +850,23 @@ export function partsList(cab) {
   };
   const fronts = (no, fs, kindK) => {
     for (const f of fs) {
-      if (f.k === 'oven' || f.k === 'micro') continue;
-      add(no, f.k === 'drawer' ? 'Çekmece önü' : f.k === 'panel' ? 'Cihaz kapağı' : f.glass ? 'Camlı kapak (çerçeve)' : 'Kapak', frontName, f.h, f.w, 1, '4 kenar', f.k === 'door' ? { hinge: hinges(f.h) } : null);
-      if (f.k === 'door') H('Menteşe (frenli)', hinges(f.h));
-      if (f.k === 'lift') H('Kapak kaldırma mekanizması', 1);
+      if (f.k === 'oven' || f.k === 'micro' || f.k === 'visor') continue;
+      if (f.k === 'fixed') { add(no, 'Sabit kapak', frontName, f.h, f.w, 1, '4 kenar'); continue; }
+      const grip = hd === 'gizli' && f.k !== 'panel', hg = f.k === 'door' && !f.app;   // buzdolabı kapağı cihaza kızakla bağlanır, menteşe yok
+      const ops = hg || grip ? { ...(hg ? { hinge: hinges(f.h) } : {}), ...(grip ? { groove: kindK === 'wardrobe' && f.k === 'door' ? 'side' : gripTop(f) ? 'top' : 'bottom' } : {}) } : null;
+      add(no, f.k === 'drawer' ? 'Çekmece önü' : f.k === 'panel' ? 'Cihaz kapağı' : f.glass ? 'Camlı kapak (çerçeve)' : 'Kapak', frontName, f.h, f.w, 1, '4 kenar', ops);
+      if (hg) H(brand.h, hinges(f.h));
+      if (f.app === 'fridge') H('Buzdolabı kapak bağlantı (kızak) kiti', 1);
+      if (f.k === 'lift') H(brand.lift, 1);
       if (f.k === 'drawer') { H('Çekmece rayı (tam açılır, takım)', 1); const bh = Math.max(8, Math.min(18, f.h - 6)), bw = f.w - 2 * t - 2.6, bd = (kindK === 'wardrobe' ? s.D : s.baseD) - 8; add(no, 'Çekmece yanı', bodyName, bd, bh, 2, '1 uzun kenar'); add(no, 'Çekmece ön/arka', bodyName, bw - 2 * t, bh, 2); add(no, 'Çekmece tabanı', 'Arkalık · 8 mm', bw, bd, 1); }
-      if (f.k !== 'panel') { if (cab.mat.handle === 'takac') H('Tak-aç mekanizması', 1); else if (cab.mat.handle !== 'gola') H(cab.mat.handle === 'dugme' ? 'Düğme kulp' : 'Çubuk kulp', 1); }
+      if (f.k !== 'panel') {
+        const vE = kindK === 'wardrobe' && f.k === 'door';
+        if (hd === 'takac') H('Tak-aç mekanizması', 1);
+        else if (hd === 'j') H('J profil kulp (m)', (vE ? f.h : f.w) / 100);
+        else if (hd === 'gizli') H('Gizli kulp kanal frezesi (m)', (vE ? f.h : f.w) / 100);
+        else if (hd === 'kenar') H('Kenar (tırnak) kulp', 1);
+        else if (hd !== 'gola') H(hd === 'dugme' ? 'Düğme kulp' : 'Çubuk kulp', 1);
+      }
     }
   };
   let sum = { base: 0, upper: 0, tall: 0, top: 0, ward: 0, frontM2: 0 };
@@ -727,7 +907,15 @@ export function partsList(cab) {
       if (ty.empty) return;
       if (ty.filler) { add(no, 'Dolgu paneli', frontName, ty.tall ? s.tallH - s.plinth : s.carcH, m.w, 1, '2 uzun kenar'); sum.base += m.w / 100; return; }
       const nSh = shelfPos(m, s, 'kitchen').length;
-      if (ty.tall) { carcass(no, m.w, s.tallH - s.plinth, s.baseD, nSh); sum.tall += 1; H('Ayar ayağı', 4); }
+      if (ty.tall) {
+        carcass(no, m.w, s.tallH - s.plinth, s.baseD, nSh); sum.tall += 1; H('Ayar ayağı', 4);
+        if (ty.fridge) {
+          const G = fridgeGeo(m, s);
+          if (G.topH > 0) add(no, 'Buzdolabı bölme tablası', bodyName, m.w - 2 * t, s.baseD, 1, '1 uzun kenar');
+          H(`Ankastre buzdolabı · ${fmt(G.frW)} × ${fmt(G.frH)} cm · ${G.doors === 2 ? 'çift kapak (alt dondurucu)' : 'tek kapak'}`, 1);
+          H('Havalandırma ızgarası (baza + üst)', 1);
+        }
+      }
       else {
         add(no, 'Yan dikme', bodyName, s.carcH, s.baseD, 2, '1 uzun kenar', nSh ? { pins: true } : null);
         add(no, 'Alt tabla', bodyName, m.w - 2 * t, s.baseD, 1, '1 uzun kenar');
@@ -742,7 +930,6 @@ export function partsList(cab) {
         H('Ayar ayağı', 4);
         sum.base += m.w / 100;
       }
-      if (ty.fridge) H('Ankastre buzdolabı', 1);
       if (ty.oven && ty.tall) H('Ankastre fırın', 1);
       if (ty.micro) H('Ankastre mikrodalga', 1);
       fronts(no, frontsOf(m, 'kitchen', s, p.x0), 'kitchen');
@@ -750,7 +937,15 @@ export function partsList(cab) {
     layoutRow(cab.upper).forEach((p, i) => {
       const m = p.m, ty = MT[m.type], no = `Ü${i + 1}`;
       if (ty.empty) return;
-      if (ty.hood) { H('Davlumbaz', 1); return; }
+      if (ty.hood) {
+        const ht = hoodOf(m), w = fmt(m.w);
+        if (ht === 'aspirator') { H(`Aspiratör (duvar tipi, Ø15) · ${w} cm modül`, 1); H('Aspiratör dış panjuru', 1); return; }
+        H(ht === 'ankastre' ? `Ankastre (sürgülü) davlumbaz · ${w} cm` : ht === 'gizli' ? `Gizli (gömme) davlumbaz motoru · ${w} cm` : ht === 'egik' ? `Eğik cam davlumbaz (bacalı) · ${w} cm` : `Duvar tipi bacalı davlumbaz · ${w} cm`, 1);
+        H('Davlumbaz baca borusu + klape (takım)', 1);
+        if (!hoodCab(m)) return;
+        carcass(no, m.w, s.upH, s.upD, 0); add(no, 'Davlumbaz bölme tablası', bodyName, m.w - 2 * t, s.upD, 1, '1 uzun kenar');
+        H('Üst dolap askı aparatı', 2); fronts(no, frontsOf(m, 'kitchen', s, p.x0), 'kitchen'); sum.upper += m.w / 100; return;
+      }
       if (ty.filler) { add(no, 'Dolgu paneli', frontName, s.upH, m.w, 1, '2 uzun kenar'); sum.upper += m.w / 100; return; }
       carcass(no, m.w, s.upH, s.upD, shelfPos(m, s, 'kitchen').length);
       H('Üst dolap askı aparatı', 2);
@@ -766,6 +961,13 @@ export function partsList(cab) {
     const bz = base.filter(p => !MT[p.m.type].empty).reduce((a, p) => a + p.x1 - p.x0, 0);
     if (bz) add('Genel', 'Baza paneli', 'Baza · PVC / suntalam', bz, s.plinth - 1, 1);
     if (cab.mat.handle === 'gola') H('Gola profil (m)', +(sum.base).toFixed(2));
+    if (cab.led?.on) {   // üst dolap altı LED
+      const len = layoutRow(cab.upper).filter(p => !MT[p.m.type].empty && !MT[p.m.type].hood).reduce((a, p) => a + p.x1 - p.x0, 0) / 100;
+      if (len) {
+        H(`LED şerit · ${pick(LED_TEMPS, cab.led.temp || '3000').t} (m)`, len); H('LED alüminyum gömme profil + difüzör (m)', len);
+        H('LED sürücü / adaptör (12 V)', Math.max(1, Math.ceil(len / 5))); H('LED anahtarı (dokunmatik / sensörlü)', 1); sum.led = +len.toFixed(2);
+      }
+    }
   }
   // aynı parçaları birleştir (modül farkı gözetmeden kesim listesi için ayrıca)
   const band = rows.reduce((a, r) => a + r.n * bandLen(r), 0) / 1000;
@@ -794,6 +996,8 @@ export const PRICE_DEF = {
   'mf-boy': { desc: 'Mutfak boy dolabı / cihaz kolonu', unit: 'adet', price: 16000 },
   'mf-tez': { desc: 'Mutfak tezgahı', unit: 'm', price: 6500 },
   'mf-gola': { desc: 'Gola profil + aksesuar', unit: 'm', price: 900 },
+  'mf-led': { desc: 'Üst dolap altı LED aydınlatma (profil + şerit + sürücü)', unit: 'm', price: 1200 },
+  'mf-jprofil': { desc: 'J profil kulp (alüminyum)', unit: 'm', price: 450 },
   'gd-dolap': { desc: 'Giysi dolabı (gövde + kapak, ön yüz alanı)', unit: 'm²', price: 7500 },
   'gd-surgu': { desc: 'Sürgülü kapak sistemi farkı', unit: 'm²', price: 1500 },
 };
@@ -811,6 +1015,8 @@ export function quoteItems(cab, label, priceOf = (k, d) => d) {
   if (pl.sum.tall) out.push(it('mf-boy', pl.sum.tall, mt));
   if (pl.sum.top) out.push(it('mf-tez', pl.sum.top, pick(TOPS, cab.mat.top).t));
   if (cab.mat.handle === 'gola' && pl.sum.base) out.push(it('mf-gola', pl.sum.base));
+  if (cab.mat.handle === 'j' && pl.hw['J profil kulp (m)']) out.push(it('mf-jprofil', pl.hw['J profil kulp (m)']));
+  if (pl.sum.led) out.push(it('mf-led', pl.sum.led, pick(LED_TEMPS, cab.led.temp || '3000').t));
   return out;
 }
 export { pick, fmt };

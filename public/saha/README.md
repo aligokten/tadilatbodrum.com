@@ -59,7 +59,13 @@ Rölövede bir duvar seçip **Mutfak / dolap** (ya da duvar panelindeki *Bu duva
   giysi dolabında askılık, çift askı, uzun askı, raflı, çekmece + askı, ayakkabılık; menteşeli veya sürgülü kapak.
 - Her modülün türü, genişliği, kapak sayısı ve menteşe yönü değiştirilir; sola/sağa taşıma, çoğaltma, ikiye bölme.
 - **Ölçüler:** baza, gövde, tezgah kalınlığı/derinliği, üst dolap kotu ve yüksekliği, boy dolap yüksekliği, gövde kalınlığı.
-- **Malzeme:** kapak rengi, gövde, tezgah, kulp tipi (çubuk, gola, düğme, tak-aç) ve rengi.
+- **Malzeme:** kapak rengi, gövde, tezgah, kulp / açma tipi (çubuk, düğme, kenar (tırnak), J profil, gizli kanal, gola, tak-aç) ve rengi;
+  seçilen kulp ön görünüşte, 3D'de ve çizimin sağındaki büyütülmüş **kulp detayı** kesitinde çizilir; gizli kulpta CNC'ye kanal frezesi katmanı eklenir.
+- **Menteşe markası:** Blum, Häfele, Samet, Grass ya da standart — kesim listesinde menteşe ve kapak kaldırma ürün adıyla; ön görünüşte menteşe kaseleri.
+- **Ankastre buzdolabı:** cihaz eni / boyu elle girilir, tek kapak ya da çift kapak (alt dondurucu), menteşe yönü; boy dolabın üstünde kalan
+  boşluğa kapaklı dolap, yukarı açılır kapak, açık raf ya da sabit dolgu (raflar elle eklenebilir); yükseklik / genişlik yetmezse uyarı.
+- **Davlumbaz:** duvar tipi bacalı, eğik cam, ankastre (sürgülü, üstü dolap), dolap içine gizli (kapaklı) ya da aspiratör.
+- **Üst dolap altı LED:** ışık rengi (3000 / 4000 / 6500 K); ön görünüşte ışık alanı, 3D'de şerit; donanım listesinde şerit, profil, sürücü, anahtar ve teklif kalemi.
 - **Ön görünüş** (kotlu; kapak açılım işaretli), giysi dolabında **iç düzen**, **3D önizleme**.
 - **Kesim listesi** (parça, malzeme, boy × en mm, adet, kenar bandı) ve donanım listesi (menteşe, ray, kulp, ayak…).
 - Çıktılar: çizim + kesim listesi **PDF**, ön görünüş **DXF** (AutoCAD), kesim listesi **CSV** (Excel), **teklife ekle**

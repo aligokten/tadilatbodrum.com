@@ -69,7 +69,12 @@ export function nest(parts, o = {}) {
 
 /* parçanın yerel işlemleri (u: boy L boyunca, v: en W boyunca; delik yüzü = iç yüz) */
 function partOps(p) {
-  const holes = [], bands = [];
+  const holes = [], bands = [], grooves = [];
+  if (p.ops?.groove) {  // gizli kulp: tutma kenarına paralel kanal freze (kenardan 10 mm, 10 mm derinlik); kapakta boy = L, en = W
+    const g = p.ops.groove;
+    if (g === 'side') grooves.push([[0, p.W - 10], [p.L, p.W - 10]]);
+    else { const u = g === 'top' ? p.L - 10 : 10; grooves.push([[u, 0], [u, p.W]]); }
+  }
   if (p.ops?.hinge) {   // menteşe kaseleri: bir uzun kenarda, kenardan 22,5 mm; uçlardan 100 mm, aradakiler eşit
     const n = p.ops.hinge, long = p.L >= p.W, len = long ? p.L : p.W;
     for (let i = 0; i < n; i++) { const a = n === 1 ? len / 2 : 100 + i * (len - 200) / (n - 1); holes.push({ ...(long ? { u: a, v: 22.5 } : { u: 22.5, v: a }), d: 35, z: 13 }); }
@@ -82,14 +87,14 @@ function partOps(p) {
   if (p.band === '4 kenar') bands.push('u0', 'u1', 'v0', 'v1');
   else if (p.band === '2 uzun kenar') bands.push(...(longU ? ['v0', 'v1'] : ['u0', 'u1']));
   else if (p.band === '1 uzun kenar' || p.band === 'ön kenar') bands.push(longU ? 'v1' : 'u1');
-  return { holes, bands };
+  return { holes, bands, grooves };
 }
 
 /* levhalar → DXF (R12, mm). Levhalar yan yana, aralarında 300 mm */
 export function cncDxf(res, title = '') {
   const { sheets, sheetW, sheetH } = res, GAP = 300;
   const thicks = [...new Set(sheets.map(s => s.t))];
-  const layers = [['LEVHA', 8], ...thicks.map(t => [`KESIM_Z${t}`, 7]), ['MENTESE_D35_Z13', 5], ['RAF_PIMI_D5_Z12', 3], ['BANT', 30], ['YAZI', 2]];
+  const layers = [['LEVHA', 8], ...thicks.map(t => [`KESIM_Z${t}`, 7]), ['MENTESE_D35_Z13', 5], ['RAF_PIMI_D5_Z12', 3], ['KANAL_FREZE_Z10', 6], ['BANT', 30], ['YAZI', 2]];
   const out = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', String(layers.length + 1),
     ...[['0', 7], ...layers].flatMap(([n, c]) => ['0', 'LAYER', '2', n, '70', '0', '62', String(c), '6', 'CONTINUOUS']),
@@ -109,7 +114,8 @@ export function cncDxf(res, title = '') {
       poly(`KESIM_Z${s.t}`, [[x0, y0], [x0 + q.w, y0], [x0 + q.w, y0 + q.h], [x0, y0 + q.h]]);
       // yerelden levhaya: döndürülmemişse u→x, v→y; döndürülmüşse v→x, u→y
       const P = (u, v) => q.rot ? [x0 + v, y0 + u] : [x0 + u, y0 + v];
-      const { holes, bands } = partOps(p);
+      const { holes, bands, grooves } = partOps(p);
+      for (const [a, c] of grooves) { const A = P(...a), C = P(...c); line('KANAL_FREZE_Z10', A[0], A[1], C[0], C[1]); }
       for (const hl of holes) { const [x, y] = P(hl.u, hl.v); circle(hl.d === 35 ? 'MENTESE_D35_Z13' : 'RAF_PIMI_D5_Z12', x, y, hl.d / 2); }
       const k = 4;
       for (const b of bands) {

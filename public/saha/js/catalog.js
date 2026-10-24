@@ -183,6 +183,8 @@ export const DEFAULT_CATALOG = [
   { id: 'mf-boy', cat: 'mutfak', desc: 'Mutfak boy dolabı / cihaz kolonu', unit: 'adet', price: 16000 },
   { id: 'mf-tez', cat: 'mutfak', desc: 'Mutfak tezgahı', unit: 'm', price: 6500 },
   { id: 'mf-gola', cat: 'mutfak', desc: 'Gola profil + aksesuar', unit: 'm', price: 900 },
+  { id: 'mf-led', cat: 'mutfak', desc: 'Üst dolap altı LED aydınlatma (profil + şerit + sürücü)', unit: 'm', price: 1200 },
+  { id: 'mf-jprofil', cat: 'mutfak', desc: 'J profil kulp (alüminyum)', unit: 'm', price: 450 },
   { id: 'gd-dolap', cat: 'sabitmob', desc: 'Giysi dolabı (gövde + kapak, ön yüz alanı)', unit: 'm²', price: 7500 },
   { id: 'gd-surgu', cat: 'sabitmob', desc: 'Sürgülü kapak sistemi farkı', unit: 'm²', price: 1500 },
   { id: 'c1',  cat: 'yikim',    desc: 'Mevcut seramik/fayans söküm ve moloz atımı', unit: 'm²', price: 180, qty: 'wall' },
