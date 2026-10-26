@@ -5,6 +5,7 @@ import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
+import { ROOF_TYPES, COVERS, newRoof, roofModel, roofSvg, roofFrame, roofTakeoff, roofLayers, roofSheetSvg, roofSectionSvg, roofLayersSvg, outlineOf, coverOf } from './roof.js';
 import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
 import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
@@ -13,7 +14,7 @@ import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as 
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, roomMetrics, planBounds, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
+  offsetPoly, roomMetrics, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
 } from './plan-geom.js';
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
@@ -31,6 +32,7 @@ const TOOLS = [
   { k: 'window', t: 'Pencere', ic: 'window', key: 'p' },
   { k: 'rail', t: 'Korkuluk', ic: 'rail', key: 'k' },
   { k: 'item', t: 'Mobilya / donatı', ic: 'sofa', key: 'm' },
+  { k: 'roof', t: 'Çatı', ic: 'roof', key: 'c' },
   { k: 'dim', t: 'Ölçü çizgisi', ic: 'dim', key: 'o' },
   { k: 'text', t: 'Yazı', ic: 'text', key: 't' },
 ];
@@ -65,6 +67,7 @@ const HINTS = {
   window: 'Bir duvara dokunun — pencere o konuma yerleşir.',
   rail: 'Korkuluk hattının noktalarını duvar çizer gibi sırayla işaretleyin; Enter / Bitir ile tamamlayın. Uzunluğu yazıp Enter ile tam ölçü girin.',
   item: 'Listeden seçip plana dokunun.',
+  roof: 'Çatının oturacağı dış hattı otomatik oluşturun ya da köşeleri sırayla işaretleyin (ilk noktaya dokunarak / Bitir ile kapatın). Tip, eğim, saçak, örtü ve karkas sağ panelden.',
   dim: 'İki noktayı işaretleyin.',
   text: 'Yazı eklemek için plana dokunun.',
   calib: 'Altlık görselde bilinen bir mesafenin iki ucunu işaretleyin.',
@@ -73,13 +76,24 @@ const HINTS = {
 const OPEN_DEF = { door: { w: 90, h: 210, sill: 0 }, window: { w: 120, h: 140, sill: 90 }, gap: { w: 90, h: 220, sill: 0 } };
 
 export class PlanEditor {
-  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab, ghost } = {}) {
+  /* aktif katın planı: kök plan (zemin) ya da plan.levels[lv-1]; geri al / sürükleme aktif katı değiştirir */
+  get plan() { return this.lv ? this._root.levels[this.lv - 1] : this._root; }
+  set plan(v) {
+    if (this.lv) { this._root.levels[this.lv - 1] = v; return; }
+    const keep = this._root?.levels; this._root = v; if (keep) v.levels = keep;
+  }
+  get root() { return this._root; }
+  prep(P) { for (const k of ['walls', 'openings', 'rooms', 'items', 'dims', 'labels', 'rails', 'roofs']) P[k] ||= []; P.meta ||= { ...this._root.meta }; return P; }
+
+  constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab, ghost, onLevel } = {}) {
     this.addImage = addImage;
     this.ghost = ghost || null;   // proje çiziminde rölöve (mevcut durum) altlığı
     this.cabCtx = cab || {};      // mutfak/dolap tasarlayıcı: teklife ekleme, PDF, fiyatlar
     this.host = host;
+    this.lv = 0;                  // aktif kat (0 = zemin / kök plan)
+    this.onLevel = onLevel || null;
     this.plan = plan || emptyPlan();
-    this.plan.rails ||= [];
+    this.prep(this.plan);
     this.onChange = onChange || (() => {});
     this.resolvePhoto = resolvePhoto;
     this.pickBackground = pickBackground;
@@ -116,6 +130,8 @@ export class PlanEditor {
       <div class="pe-tools">${TOOLS.map(t => `<button class="tool ${t.k === this.tool ? 'on' : ''}" data-tool="${t.k}" title="${t.t} (${t.key.toUpperCase()})">${icon(t.ic)}<span>${t.t}</span></button>`).join('')}</div>
       <div class="pe-stage">
         <div class="pe-bar">
+          <select class="mini pe-lv" title="Kat / çatı planı"></select>
+          <span class="sep"></span>
           <button class="icon-btn" data-a="undo" title="Geri al (Ctrl+Z)">${icon('undo')}</button>
           <button class="icon-btn" data-a="redo" title="Yinele (Ctrl+Y)">${icon('redo')}</button>
           <span class="sep"></span>
@@ -153,6 +169,13 @@ export class PlanEditor {
     this.hud = $('.pe-hud', this.el);
     this.insp = $('.pe-insp', this.el);
 
+    this.lvSel = $('.pe-lv', this.el); this.updateLvSel();
+    this.lvSel.onchange = () => {
+      const v = this.lvSel.value;
+      if (v === '+floor') return this.addLevelDialog();
+      if (v === '+roof') return this.addRoofLevel();
+      this.setLevel(+v);
+    };
     $('.pe-tools', this.el).onclick = e => { const b = e.target.closest('[data-tool]'); if (b) this.setTool(b.dataset.tool); };
     $('.pe-bar', this.el).onclick = e => {
       const a = e.target.closest('[data-a]')?.dataset.a, o = e.target.closest('button[data-o]')?.dataset.o;
@@ -204,8 +227,85 @@ export class PlanEditor {
   }
 
   /* ───────────── geçmiş ───────────── */
+  /* ───────────── katlar ───────────── */
+  updateLvSel() {
+    if (!this.lvSel) return;
+    const L = planLevels(this._root);
+    this.lvSel.innerHTML = L.map(l => `<option value="${l.idx}" ${l.idx === this.lv ? 'selected' : ''}>${esc(l.name)}${l.kind === 'roof' ? '' : ` (${fmtNum(l.z / 100, 2)} m)`}</option>`).join('')
+      + '<option disabled>──────────</option><option value="+floor">＋ Kat ekle…</option><option value="+roof">＋ Çatı planı ekle</option>';
+  }
+  setLevel(i) {
+    if (this.chain) this.finishChain();
+    this.undoM ||= {}; this.undoM[this.lv] = [this.undoS, this.redoS];
+    this.lv = Math.max(0, Math.min((this._root.levels || []).length, i));
+    this.prep(this.plan);
+    [this.undoS, this.redoS] = this.undoM[this.lv] || [[], []];
+    this.arc = null; this.sel = null; this.msel = []; this.preview = null;
+    this.updateLvSel(); this.loadBg(); this.renderHud(); this.renderInsp(); this.render();
+    this.onLevel?.(this.lv);
+  }
+  async addLevelDialog() {
+    this.updateLvSel();
+    const cur = this.plan, below = planLevels(this._root).filter(l => l.kind !== 'roof').at(-1);
+    const r = await modal({ title: 'Kat ekle', body: `
+      <div class="grid2"><label>Kat adı<input class="inp" id="lvN" value="${(this._root.levels || []).filter(l => (l.kind || 'floor') === 'floor').length + 1}. Kat"></label>
+      <label>Döşeme kalınlığı<div class="inp-unit"><input class="inp" type="number" id="lvS" value="15"><span>cm</span></div></label>
+      <label>Kat yüksekliği (duvar)<div class="inp-unit"><input class="inp" type="number" id="lvH" value="${below.plan.meta?.wallH || this._root.meta.wallH}"><span>cm</span></div></label></div>
+      <label>Başlangıç<select class="inp" id="lvC"><option value="walls">Alt katın duvarlarını kopyala (kapı / pencere hariç)</option><option value="all">Alt katın tamamını kopyala (duvar, oda, kapı, pencere)</option><option value="none">Boş kat</option></select></label>
+      <p class="muted small">Yeni kat, en üstteki katın (${esc(below.name)}) üzerine eklenir. Alt kat çizimde soluk görünür; kat kotu = alt katın kotu + kat yüksekliği + döşeme kalınlığı.</p>`,
+      actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Kat ekle', cls: 'btn-primary' }] });
+    if (r?.k !== 'ok') return this.updateLvSel();
+    const L = newLevel(this._root, 'floor');
+    L.name = $('#lvN', r.el).value.trim() || L.name; L.slab = Math.max(0, +$('#lvS', r.el).value || 0); L.meta.wallH = Math.max(100, +$('#lvH', r.el).value || 280);
+    const mode = $('#lvC', r.el).value, src = below.plan;
+    if (mode !== 'none') {
+      const map = {};
+      L.walls = (src.walls || []).map(w => { const n = { ...JSON.parse(JSON.stringify(w)), id: uid('w') }; map[w.id] = n.id; delete n.h; return n; });
+      if (mode === 'all') {
+        L.openings = (src.openings || []).filter(o => map[o.wallId]).map(o => ({ ...o, id: uid('o'), wallId: map[o.wallId] }));
+        L.rooms = (src.rooms || []).map(x => ({ ...JSON.parse(JSON.stringify(x)), id: uid('r'), walls: (x.walls || []).map(id => map[id] || null) }));
+      }
+    }
+    // çatı planı katı varsa yeni kat onun altına girer
+    const lv = this._root.levels ||= [], ri = lv.findIndex(l => l.kind === 'roof');
+    if (ri >= 0) lv.splice(ri, 0, L); else lv.push(L);
+    this.onChange(this._root);
+    this.setLevel(ri >= 0 ? ri + 1 : lv.length);
+    toast(`${L.name} eklendi`);
+  }
+  addRoofLevel() {
+    const lv = this._root.levels ||= [];
+    let i = lv.findIndex(l => l.kind === 'roof');
+    if (i < 0) { const L = newLevel(this._root, 'roof'); L.slab = 15; lv.push(L); i = lv.length - 1; this.onChange(this._root); }
+    this.setLevel(i + 1);
+    if (!this.plan.roofs.length) setTimeout(() => this.autoRoof(), 50);
+  }
+  /* bu katın (yoksa alt katın) duvarlarından dış hat → çatı */
+  autoRoof() {
+    const L = planLevels(this._root), cur = L[this.lv];
+    const src = (this.plan.walls.length || this.plan.rooms.length) ? this.plan : [...L.slice(0, this.lv)].reverse().find(l => l.kind !== 'roof' && (l.plan.walls?.length || l.plan.rooms?.length))?.plan;
+    if (!src) { toast('Çatı hattı için önce duvar çizin ya da köşeleri işaretleyin', 'err'); return; }
+    const pts = outlineOf({ ...src, meta: { ...this._root.meta, ...src.meta } });
+    if (!pts || pts.length < 3) { toast('Dış hat bulunamadı — köşeleri elle işaretleyin', 'err'); return; }
+    this.createRoof(pts, cur?.kind === 'roof' ? {} : { base: 0 });
+  }
+  createRoof(pts, o = {}) {
+    this.snap();
+    const r = newRoof(uid('rf'), pts, o);
+    this.plan.roofs.push(r);
+    this.chain = null; this.setTool('select'); this.sel = { kind: 'roof', id: r.id };
+    this.changed();
+    const m = roofModel(r); if (m?.warn?.length) toast(m.warn[0]);
+  }
+  /* alt katın soluk görünümü */
+  lowerSvg() {
+    if (!this.lv) return '';
+    const L = planLevels(this._root), below = [...L.slice(0, this.lv)].reverse().find(l => l.kind !== 'roof'); if (!below) return '';
+    return this.ghostOf(below.plan, '#8E959E', 0.6, false);
+  }
+
   snap() { this.undoS.push(JSON.stringify(this.plan)); if (this.undoS.length > 120) this.undoS.shift(); this.redoS = []; }
-  changed() { this.onChange(this.plan); this.render(); this.renderInsp(); }
+  changed() { this.onChange(this._root); this.render(); this.renderInsp(); }
   undo() {
     if (!this.undoS.length) return;
     this.redoS.push(JSON.stringify(this.plan));
@@ -242,7 +342,7 @@ export class PlanEditor {
   }
 
   /* ───────────── nesne erişimi ───────────── */
-  coll(kind) { return { wall: 'walls', opening: 'openings', room: 'rooms', item: 'items', dim: 'dims', label: 'labels', rail: 'rails' }[kind]; }
+  coll(kind) { return { wall: 'walls', opening: 'openings', room: 'rooms', item: 'items', dim: 'dims', label: 'labels', rail: 'rails', roof: 'roofs' }[kind]; }
   obj(sel) { return sel && this.plan[this.coll(sel.kind)]?.find(o => o.id === sel.id); }
   wall(id) { return this.plan.walls.find(w => w.id === id); }
   T(w) { return w.t || this.plan.meta.wallT; }
@@ -360,6 +460,10 @@ export class PlanEditor {
       const i = so.pts.findIndex(q => V.dist(p, q) < 12 / this.s);
       if (i >= 0) return { kind: 'room', id: so.id, handle: i };
     }
+    if (so && this.sel.kind === 'roof') {
+      const i = so.pts.findIndex(q => V.dist(p, q) < 12 / this.s);
+      if (i >= 0) return { kind: 'roof', id: so.id, handle: i };
+    }
     if (so && this.sel.kind === 'item') {
       const hp = this.itemRotHandle(so);
       if (V.dist(p, hp) < 12 / this.s) return { kind: 'item', id: so.id, handle: 'rot' };
@@ -380,6 +484,7 @@ export class PlanEditor {
     for (const d of this.plan.dims) { const [a, b] = this.dimPts(d); if (projSeg(p, a, b).d < tol) return { kind: 'dim', id: d.id }; }
     for (const w of this.plan.walls) if (projSeg(p, w.a, w.b).d < this.T(w) / 2 + tol / 2) return { kind: 'wall', id: w.id };
     for (const r of [...this.plan.rooms].reverse()) if (pointInPoly(p, r.pts)) return { kind: 'room', id: r.id };
+    for (const rf of [...(this.plan.roofs || [])].reverse()) { const m = roofModel(rf); if (m && pointInPoly(p, m.eave.map(m.F.toW))) return { kind: 'roof', id: rf.id }; }
     return null;
   }
   nearestWall(p, maxPx = 40) {
@@ -539,7 +644,7 @@ export class PlanEditor {
     if (t === 'arc') {
       const A = this.arc;   // 1. ve 2. nokta: önceki noktaya göre; 3. nokta serbest
       this.preview = this.snapPt(wp, A && !A.p2 ? A.p1 : null);
-    } else if (t === 'wall' || t === 'poly' || t === 'rail' || t === 'dim' || t === 'calib' || t === 'scale') {
+    } else if (t === 'wall' || t === 'poly' || t === 'roof' || t === 'rail' || t === 'dim' || t === 'calib' || t === 'scale') {
       const from = this.chain?.pts.at(-1) || null;
       this.preview = this.snapPt(wp, from);
     } else if (t === 'door' || t === 'window') {
@@ -563,7 +668,7 @@ export class PlanEditor {
       if (!A.p2) { if (V.dist(p, A.p1) < 5) return; A.p2 = p; this.renderHud(); this.renderUI(); setTimeout(() => $('#peSag', this.hud)?.focus(), 0); return; }
       this.commitArc(p); return;
     }
-    if (t === 'wall' || t === 'poly' || t === 'rail' || t === 'dim' || t === 'calib' || t === 'scale') {
+    if (t === 'wall' || t === 'poly' || t === 'roof' || t === 'rail' || t === 'dim' || t === 'calib' || t === 'scale') {
       if (!p) return;
       if (!this.chain) { this.chain = { pts: [p] }; this.renderHud(); this.renderUI(); return; }
       this.addChainPt(p);
@@ -636,6 +741,73 @@ export class PlanEditor {
     const all = this.plan.walls.filter(x => x.arc?.id === ws[0].arc.id);
     return all.length === ws.length ? all.sort((a, b) => a.arc.i - b.arc.i) : null;
   }
+  /* ───────────── çatı paneli ───────────── */
+  roofInsp(r) {
+    const m = roofModel(r), q = m ? roofTakeoff(r, m) : null, fr = r.frame || {}, cv = coverOf(r);
+    const nm = (k, label, v, unit = 'cm', step = 1) => `<label>${label}<div class="inp-unit sm"><input type="number" inputmode="decimal" step="${step}" data-k="r.${k}" data-num value="${v}"><span>${unit}</span></div></label>`;
+    const sel = (k, label, opts, cur) => `<label>${label}<select class="inp sm" data-k="r.${k}">${opts.map(([v, t]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    const flat = r.type === 'duz', deg = Math.atan((+r.slope || 0) / 100) * 180 / Math.PI;
+    const lay = roofLayers(r);
+    return `<h4>Çatı</h4>
+      <div class="row wrap"><button class="btn btn-xs btn-primary" data-act="roofPdf">${icon('print')}Çatı paftası (PDF)</button><button class="btn btn-xs btn-ghost" data-act="roofOutline" title="Oturma hattını duvarlardan yeniden çıkar">${icon('rotate')}Hattı yenile</button></div>
+      ${sel('type', 'Çatı tipi', ROOF_TYPES.map(t => [t.k, t.t]), r.type)}
+      <div class="grid2">${flat ? nm('parapet', 'Parapet', r.parapet ?? 80) : nm('slope', `Eğim (≈ ${fmtNum(deg, 1)}°)`, r.slope, '%')}${nm('overhang', 'Saçak taşması', r.overhang)}</div>
+      ${r.type === 'besik' ? sel('ridge', 'Mahya yönü', [['auto', 'Otomatik (uzun kenar)'], ['x', 'Yatay'], ['y', 'Dikey']], r.ridge) : ''}
+      ${r.type === 'tek' || flat ? sel('low', flat ? 'Su akış yönü' : 'Eğim yönü (alçak taraf)', [['down', '↓ Aşağı'], ['up', '↑ Yukarı'], ['left', '← Sol'], ['right', '→ Sağ']], r.low) : ''}
+      ${flat ? '' : sel('cover', 'Çatı örtüsü', Object.entries(COVERS).filter(([k]) => k !== 'membran').map(([k, c]) => [k, c.t]), r.cover)}
+      ${!flat && (+r.slope || 0) < (cv.minSlope || 0) ? `<p class="warn small">${esc(cv.t)} için önerilen en az eğim %${cv.minSlope}.</p>` : ''}
+      ${nm('base', 'Oturma kotu farkı (duvar üstüne göre)', r.base || 0)}
+      ${m?.warn?.length ? `<p class="warn small">${esc(m.warn.join(' '))}</p>` : ''}
+      ${q ? `<div class="mtable">
+        <div><span>Çatı izdüşüm alanı</span><b>${fmtNum(q.plan)} m²</b></div>
+        <div><span>${flat ? 'Çatı alanı' : 'Eğimli çatı alanı'}</span><b>${fmtNum(q.area)} m²</b></div>
+        ${flat ? '' : `<div><span>Mahya yüksekliği (saçaktan)</span><b>${fmtNum(q.zTop / 100, 2)} m</b></div>
+        <div><span>Mahya / kırma / dere</span><b>${fmtNum(q.ridge, 1)} / ${fmtNum(q.hip, 1)} / ${fmtNum(q.valley, 1)} m</b></div>
+        <div><span>Saçak (oluk) / kalkan</span><b>${fmtNum(q.eaveLen, 1)} / ${fmtNum(q.rakeLen, 1)} m</b></div>`}</div>` : ''}
+      ${flat ? '' : `<h4>Karkas</h4>
+      <label class="check"><input type="checkbox" data-k="r.show.frame" ${r.show?.frame ? 'checked' : ''}> Karkası planda göster</label>
+      <div class="grid2">${nm('frame.rafterSp', 'Mertek aralığı', fr.rafterSp ?? 60)}${nm('frame.purlinSp', 'Aşık aralığı', fr.purlinSp ?? 250)}
+      ${nm('frame.rafterB', 'Mertek eni', fr.rafterB ?? 5)}${nm('frame.rafterH', 'Mertek yüksekliği', fr.rafterH ?? 15)}
+      ${nm('frame.purlinB', 'Aşık eni', fr.purlinB ?? 10)}${nm('frame.purlinH', 'Aşık yüksekliği', fr.purlinH ?? 15)}
+      ${nm('frame.ridgeH', 'Mahya kirişi yük.', fr.ridgeH ?? 20)}${nm('frame.postSp', 'Dikme aralığı', fr.postSp ?? 300)}</div>`}
+      <h4>Katmanlar <small class="muted">alttan üste</small></h4>
+      <div class="rf-lay">${lay.map(l => `<div><label class="check"><input type="checkbox" data-k="r.lay.${l.k}.on" ${l.on ? 'checked' : ''} ${l.k === 'orti' || l.k === 'mertek' ? 'disabled' : ''}> ${esc(l.t)}</label>${l.k === 'mertek' ? `<small>${fmtNum(l.th, 0)} mm</small>` : `<div class="inp-unit sm"><input type="number" step="0.5" data-k="r.lay.${l.k}.th" data-num value="${l.th}"><span>mm</span></div>`}</div>`).join('')}</div>
+      <p class="muted small">Köşe tutamaçlarıyla çatı hattını düzenleyin; gövdeyi sürükleyerek taşıyın. Metraj, karkas, kesit ve katman detayı "Çatı paftası"ndadır.</p>`;
+  }
+  roofPdf(r) {
+    const m = roofModel(r); if (!m) return toast('Çatı hattı geçersiz', 'err');
+    const q = roofTakeoff(r, m), L = planLevels(this._root), lv = L.slice(0, this.lv + 1), fmt = (n, d = 2) => fmtNum(n, d);
+    const T = ROOF_TYPES.find(t => t.k === r.type)?.t || '', cv = coverOf(r), flat = r.type === 'duz';
+    const groups = [...new Set(q.rows.map(x => x.g))];
+    const body = `
+      <section class="p-cust">
+        <div><small>Çatı</small><b>${esc(T)}</b>${flat ? `parapet ${fmt(r.parapet || 80, 0)} cm` : `eğim %${fmt(r.slope, 0)} (${fmt(q.deg, 1)}°) · saçak ${fmt(r.overhang, 0)} cm`}</div>
+        <div><small>Alan</small><b>${fmt(q.area)} m²</b>izdüşüm ${fmt(q.plan)} m² · bina ${fmt(q.foot)} m²</div>
+        <div><small>Örtü</small><b>${esc(cv.t)}</b>${flat ? '' : `mahya +${fmt(q.zTop / 100, 2)} m (saçaktan)`}</div>
+      </section>
+      <section><h3>Çatı planı</h3><div class="p-plan rf-svg">${roofSheetSvg(r, { frame: false })}</div>
+        <p class="muted small" style="font-size:8.5pt">Kalın siyah: mahya · ince siyah: kırma · mavi kesik: dere · turuncu ok: su akış yönü ve eğim · kesik çizgi: bina dış hattı (duvar dış yüzü) · dış çizgi: saçak.</p></section>
+      ${flat ? '' : `<section class="p-break"><h3>Karkas planı</h3><div class="p-plan rf-svg">${roofSheetSvg(r, { frame: true })}</div>
+        <p class="muted small" style="font-size:8.5pt">İnce kahverengi: mertekler (${fmt(r.frame?.rafterSp ?? 60, 0)} cm aralık) · kalın kahverengi: aşıklar · kare: dikmeler · siyah: mahya kirişi ve köşe mertekleri · mavi: dere mertekleri.</p></section>`}
+      <section ${flat ? 'class="p-break"' : ''}><h3>Kesit</h3><div class="p-plan rf-svg">${roofSectionSvg(r, { levels: lv })}</div></section>
+      <section><h3>Çatı katmanları <small>— alttan üste</small></h3><div class="p-plan rf-svg">${roofLayersSvg(r)}</div></section>
+      <section class="p-break"><h3>Metraj</h3>
+        <table class="p-table sm"><thead><tr><th>Kalem</th><th class="r">Miktar</th><th>Birim</th><th>Açıklama</th></tr></thead><tbody>
+        ${groups.map(g => `<tr class="grp"><td colspan="4">${esc(g)}</td></tr>${q.rows.filter(x => x.g === g).map(x => `<tr><td>${esc(x.t)}</td><td class="r"><b>${fmt(x.q, x.unit === 'm³' ? 3 : x.unit === 'adet' || x.unit === 'rulo' || x.unit === 'levha' || x.unit === 'paket' ? 0 : 2)}</b></td><td>${x.unit}</td><td><small>${esc(x.note)}</small></td></tr>`).join('')}`).join('')}
+        </tbody></table>
+        <p class="muted small" style="font-size:8.5pt">Miktarlar çizimden hesaplanmıştır; fire payları açıklamada belirtilmiştir. Taşıyıcı kesitler statik hesapla doğrulanmalı, siparişten önce ölçüler yerinde kontrol edilmelidir.</p></section>`;
+    if (this.cabCtx.printSheet) this.cabCtx.printSheet('Çatı Paftası', body);
+    else toast('Pafta bu ekranda açılamıyor', 'err');
+  }
+  async deleteLevel() {
+    if (!this.lv) return;
+    const L = planLevels(this._root)[this.lv];
+    if (!await confirmDlg(`"${L.name}" ve içindeki tüm çizimler silinecek.`, 'Katı sil')) return;
+    this._root.levels.splice(this.lv - 1, 1);
+    this.undoM = {}; this.lv = 0; this.undoS = []; this.redoS = [];
+    this.onChange(this._root); this.setLevel(Math.min(this._root.levels.length, L.idx - 1));
+  }
+
   /* yayın çizilen (tıklanan) noktaları: yüz çiziminde köşelerin yarıçap ofseti geri alınır */
   arcPts(ws) {
     const st = arcStats(ws); if (!st) return null;
@@ -747,7 +919,7 @@ export class PlanEditor {
       if (closes) { this.chain = null; this.sel = { kind: 'rail', id: r.id }; this.changed(); this.renderHud(); return; }
       c.pts.push(p); this.dir = null; this.changed(); this.renderHud(); return;
     }
-    if (t === 'poly') {
+    if (t === 'poly' || t === 'roof') {
       if (closes) { this.finishChain(); return; }
       c.pts.push(p); this.renderHud(); this.renderUI();
     }
@@ -774,6 +946,7 @@ export class PlanEditor {
 
   finishChain() {
     const c = this.chain; if (!c) return;
+    if (this.tool === 'roof') { this.chain = null; if (c.pts.length >= 3) this.createRoof(c.pts); else { this.renderHud(); this.render(); } return; }
     if (this.tool === 'poly' && c.pts.length >= 3) {
       this.snap();
       const r = polyRoom(this.plan, c.pts, this.nextRoomName(), this.polyWalls);
@@ -823,6 +996,9 @@ export class PlanEditor {
         (o.walls || []).forEach(id => { const w = this.wall(id); if (w) { w.a = V.add(w.a, sd); w.b = V.add(w.b, sd); } });
         this.plan.items.forEach(it => { if (pointInPoly(V.sub(it, sd), o.pts)) Object.assign(it, V.add(it, sd)); });
       }
+    } else if (ht.kind === 'roof') {
+      if (typeof ht.handle === 'number') o.pts[ht.handle] = this.snapPt(wp);
+      else o.pts = o.pts.map(p => V.add(p, sd));
     } else if (ht.kind === 'opening') {
       const w = this.wall(o.wallId), L = wallLen(w);
       const pr = projSeg(wp, w.a, w.b);
@@ -888,7 +1064,7 @@ export class PlanEditor {
   removeObjs(list) {
     const P = this.plan, ids = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
     const W = ids('wall');
-    for (const k of ['wall', 'opening', 'room', 'item', 'dim', 'label', 'rail']) { const S = ids(k), c = this.coll(k); if (S.size) P[c] = P[c].filter(o => !S.has(o.id)); }
+    for (const k of ['wall', 'opening', 'room', 'item', 'dim', 'label', 'rail', 'roof']) { const S = ids(k), c = this.coll(k); if (S.size) P[c] = P[c].filter(o => !S.has(o.id)); }
     if (W.size) {
       P.openings = P.openings.filter(o => !W.has(o.wallId));
       P.rooms.forEach(r => { if (r.walls) r.walls = r.walls.map(id => W.has(id) ? null : id); });
@@ -1006,7 +1182,7 @@ export class PlanEditor {
     c.labels.forEach(l => { const n = { ...l, id: uid('l'), x: l.x + sd.x, y: l.y + sd.y }; P.labels.push(n); sel.push({ kind: 'label', id: n.id }); });
     (c.rails || []).forEach(r => { const n = { ...r, id: uid('k'), a: V.add(r.a, sd), b: V.add(r.b, sd) }; P.rails.push(n); sel.push({ kind: 'rail', id: n.id }); });
     if (this.tool !== 'select') this.setTool('select');
-    this.onChange(this.plan);
+    this.onChange(this._root);
     this.setSel(sel);
     toast(`${c.n} nesne yapıştırıldı — seçili; sürükleyerek yerleştirin`);
   }
@@ -1221,15 +1397,18 @@ export class PlanEditor {
   render() {
     const r = this.svg.getBoundingClientRect();
     this.gW.setAttribute('transform', `matrix(${this.s} 0 0 ${this.s} ${this.ox} ${this.oy})`);
-    this.gW.innerHTML = this.grid(r) + this.drawPlan(this.plan, this.s, true) + this.ghostSvg();
+    this.gW.innerHTML = this.grid(r) + this.lowerSvg() + this.drawPlan(this.plan, this.s, true) + this.ghostSvg();
     this.renderUI();
     const z = $('.pe-zoom', this.el);
     if (z) z.innerHTML = this.scaleBar();
   }
   /* rölöve altlığı: mevcut duvarların dış hatları kesik çizgiyle (yıkılan / korunan duvarlar görünsün) */
   ghostSvg() {
-    const G = this.ghost; if (!G || this.opt.ghost === false) return '';
-    const px = n => n / this.s, T = G.meta?.wallT || 15;
+    const G = this.ghost; if (!G || this.opt.ghost === false || this.lv) return '';
+    return this.ghostOf(G, '#7B5CC4', 0.55, true);
+  }
+  ghostOf(G, color, op, dash) {
+    const px = n => n / this.s, T = G.meta?.wallT || this._root.meta.wallT || 15;
     let o = '';
     for (const w of G.walls) {
       const n = wallNormal(w), t = (w.t || T) / 2, a1 = V.add(w.a, V.mul(n, t)), b1 = V.add(w.b, V.mul(n, t)), a2 = V.sub(w.a, V.mul(n, t)), b2 = V.sub(w.b, V.mul(n, t));
@@ -1240,7 +1419,7 @@ export class PlanEditor {
       const u = wallDir(w), c = V.add(w.a, V.mul(u, op.pos)), A = V.sub(c, V.mul(u, op.w / 2)), B = V.add(c, V.mul(u, op.w / 2));
       o += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${px(3)}" stroke-dasharray="none"/>`;
     }
-    return `<g class="ghost" fill="none" stroke="#7B5CC4" stroke-opacity=".55" stroke-width="${px(1.4)}" stroke-dasharray="${px(6)} ${px(4)}" pointer-events="none">${o}</g>`;
+    return `<g class="ghost" fill="${dash ? 'none' : color}" fill-opacity="${dash ? 0 : 0.12}" stroke="${color}" stroke-opacity="${op}" stroke-width="${px(1.4)}" ${dash ? `stroke-dasharray="${px(6)} ${px(4)}"` : ''} pointer-events="none">${o}</g>`;
   }
   scaleBar() {
     const target = 90 / this.s, steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
@@ -1391,6 +1570,8 @@ export class PlanEditor {
       o += `<g transform="translate(${it.x} ${it.y}) rotate(${it.rot})">${itemShape(it, isSel, px)}
         ${fs > px(6) ? `<text class="itemtxt" y="${(it.type === 'ukanepe' ? -it.d / 2 + Math.min(95, it.d * 0.45, it.w * 0.32) / 2 : 0) + fs * 0.35}" font-size="${fs}"${it.rot > 90 && it.rot <= 270 ? ' transform="rotate(180)"' : ''}>${esc(it.label)}</text>` : ''}</g>`;
     }
+    // çatılar
+    for (const rf of P.roofs || []) o += roofSvg(rf, px, { frame: rf.show?.frame, courses: !rf.show?.frame && s > 0.25 });
     // ölçü çizgileri
     for (const d of P.dims) {
       const [a, b] = this.dimPts(d), L = V.dist(d.a, d.b), u = V.norm(V.sub(b, a)), n = { x: -u.y, y: u.x }, tk = px(5);
@@ -1442,6 +1623,9 @@ export class PlanEditor {
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${px(12)}"/>`;
         o += [so.a, so.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
       } else if (this.sel.kind === 'room') {
+        o += `<polygon class="selpoly" points="${so.pts.map(p => `${p.x},${p.y}`).join(' ')}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
+        o += so.pts.map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(6)}" stroke-width="${px(2)}"/>`).join('');
+      } else if (this.sel.kind === 'roof') {
         o += `<polygon class="selpoly" points="${so.pts.map(p => `${p.x},${p.y}`).join(' ')}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
         o += so.pts.map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(6)}" stroke-width="${px(2)}"/>`).join('');
       } else if (this.sel.kind === 'item') {
@@ -1554,6 +1738,8 @@ export class PlanEditor {
         : t === 'rail' ? `<div class="hud-row"><select class="inp sm" id="peRail">${RAIL_KINDS.map(k => `<option value="${k.k}" ${this.railPick.kind === k.k ? 'selected' : ''}>${k.t}</option>`).join('')}</select>
           <label class="mini-l">Yükseklik <input id="peRailH" type="number" value="${this.railPick.h}"> cm</label></div>`
         : `<label class="mini-l"><input type="checkbox" id="peWalls" ${this.polyWalls ? 'checked' : ''}> Duvarları da oluştur</label>`}`;
+    } else if (t === 'roof') {
+      extra = `<div class="hud-row"><button class="btn btn-xs btn-primary" data-autoroof>${icon('roof')}Dış hattan otomatik çatı</button>${this.chain ? `<button class="btn btn-xs btn-ghost" data-fin>${icon('check')}Bitir</button>` : ''}</div>`;
     } else if (t === 'arc') {
       const A = this.arc;
       extra = `<div class="hud-row"><div class="inp-unit sm"><input id="peSag" type="number" inputmode="decimal" placeholder="Ok yüksekliği" ${A?.p2 ? '' : 'disabled'}><span>cm</span></div>
@@ -1585,10 +1771,11 @@ export class PlanEditor {
       else { this.dir = { r: { x: 1, y: 0 }, l: { x: -1, y: 0 }, u: { x: 0, y: -1 }, d: { x: 0, y: 1 } }[b.dataset.dir]; $('#peLen', this.hud).focus(); }
     });
     const fin = $('[data-fin]', this.hud); if (fin) fin.onclick = () => this.finishChain();
+    const ar = $('[data-autoroof]', this.hud); if (ar) ar.onclick = () => this.autoRoof();
     const sg = $('#peSag', this.hud);
     if (sg) sg.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); this.arcSagitta(parseFloat(sg.value.replace(',', '.'))); } else if (e.key === 'Escape') { sg.blur(); this.arc = null; this.renderHud(); this.renderUI(); } };
     const ax = $('[data-arcx]', this.hud); if (ax) ax.onclick = () => { this.arc = null; this.preview = null; this.renderHud(); this.renderUI(); };
-    const th = $('#peT', this.hud); if (th) th.onchange = () => { this.plan.meta.wallT = Math.max(2, +th.value || 15); this.onChange(this.plan); };
+    const th = $('#peT', this.hud); if (th) th.onchange = () => { this.plan.meta.wallT = Math.max(2, +th.value || 15); this.onChange(this._root); };
     const it = $('#peItem', this.hud); if (it) it.onchange = () => { this.itemType = it.value; };
     const rk = $('#peRail', this.hud), rh = $('#peRailH', this.hud);
     if (rk) rk.onchange = () => { this.railPick.kind = rk.value; };
@@ -1625,14 +1812,24 @@ export class PlanEditor {
     if (!o) {
       const m = P.rooms.map(r => ({ r, m: roomMetrics(P, r) }));
       const tot = m.reduce((a, x) => a + x.m.area, 0);
-      body = `<h4>Plan</h4>
-        ${num('meta.wallH', 'Duvar yüksekliği', P.meta.wallH)}
-        ${num('meta.wallT', 'Varsayılan duvar kalınlığı', P.meta.wallT)}
+      const LV = planLevels(this._root), cl = LV[this.lv], isRoofLv = cl.kind === 'roof';
+      body = `<h4>${esc(cl.name)} <small class="muted">${isRoofLv ? 'çatı planı' : `kot ±${fmtNum(cl.z / 100, 2)} m`}</small></h4>
+        <label>Kat adı<input class="inp sm" data-k="lv.name" value="${esc(cl.name)}"></label>
+        ${num('lv.slab', this.lv ? (isRoofLv ? 'Tavan döşemesi (çatı altı)' : 'Döşeme kalınlığı') : 'Zemin döşemesi', cl.slab)}
+        ${isRoofLv ? `<p class="muted small">Alt kat soluk görünür. "Çatı" aracıyla dış hattan otomatik çatı oluşturun ya da köşeleri işaretleyin.</p>
+          <div class="row wrap"><button class="btn btn-xs btn-primary" data-act="autoroof">${icon('roof')}Dış hattan otomatik çatı</button></div>` : ''}
+        ${LV.length > 1 ? `<div class="mtable">${LV.map(l => `<div><span>${esc(l.name)}</span><b>${l.kind === 'roof' ? 'çatı' : `±${fmtNum(l.z / 100, 2)} m · h ${fmtNum(l.h, 0)}`}${l.idx && l.slab ? ` · d ${fmtNum(l.slab, 0)}` : ''}</b></div>`).join('')}</div>` : `<p class="muted small">Çok katlı yapı için üst çubuktaki kat menüsünden "＋ Kat ekle"; çatı için "＋ Çatı planı ekle".</p>`}
+        ${this.lv ? `<div class="row wrap"><button class="btn btn-xs btn-ghost danger-t" data-act="dellv">${icon('trash')}Bu katı sil</button></div>` : ''}
+        ${isRoofLv ? '' : `<h4>Plan</h4>
+        ${num('meta.wallH', 'Duvar yüksekliği (kat yüksekliği)', P.meta.wallH)}`}
+        ${isRoofLv ? '' : num('meta.wallT', 'Varsayılan duvar kalınlığı', P.meta.wallT)}
         <label>Duvar rengi (3D)<div class="swatches" data-k="meta.wallColor">${WALL_COLORS.map(c => `<button style="background:${c}" data-c="${c}" class="${P.meta.wallColor === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <h4>Metraj</h4>
         <div class="mtable">${m.map(x => `<div><span>${esc(x.r.name)}</span><b>${fmtNum(x.m.area)} m²</b></div>`).join('') || '<p class="muted small">Henüz oda yok.</p>'}
         ${m.length ? `<div class="tot"><span>Toplam net alan</span><b>${fmtNum(tot)} m²</b></div>` : ''}</div>
         <p class="muted small">${P.walls.length} duvar · ${P.openings.length} açıklık · ${P.items.length} donatı${P.rails.length ? ` · ${P.rails.length} korkuluk` : ''}</p>`;
+    } else if (s.kind === 'roof') {
+      body = this.roofInsp(o);
     } else if (s.kind === 'wall') {
       const ops = P.openings.filter(x => x.wallId === o.id);
       body = `<h4>Duvar</h4>
@@ -1768,7 +1965,18 @@ export class PlanEditor {
         if (el.type === 'number' && !Number.isFinite(v)) return;
         this.snap();
         const x = this.obj(this.sel);
-        if (k.startsWith('meta.')) P.meta[k.slice(5)] = v;
+        if (k.startsWith('lv.')) {
+          const q = k.slice(3);
+          if (this.lv) this.plan[q] = q === 'slab' ? Math.max(0, v) : v;
+          else this._root.meta[q === 'name' ? 'levelName' : 'slab'] = q === 'slab' ? Math.max(0, v) : v;
+          this.updateLvSel();
+        } else if (k.startsWith('r.')) {
+          const path = k.slice(2).split('.'); let t = x;
+          for (let i = 0; i < path.length - 1; i++) t = t[path[i]] ||= {};
+          const last = path.at(-1);
+          t[last] = el.dataset.num !== undefined ? (Number.isFinite(+v) ? +v : t[last]) : v;
+          if (path[0] === 'cover' || path[0] === 'type') x.lay = {};   // örtü değişince katmanlar varsayılana
+        } else if (k.startsWith('meta.')) P.meta[k.slice(5)] = v;
         else if (k.startsWith('tile.')) {
           const t = x.tile = tileOf(x), q = k.slice(5);
           if (q === 's') { if (v === 'ozel') t.s = 'ozel'; else applySize(t, v); }
@@ -1818,6 +2026,15 @@ export class PlanEditor {
       const a = b.dataset.act, x = this.obj(this.sel);
       if (a === 'del') return this.del();
       if (a === 'cabEdit') return this.openCab(x);
+      if (a === 'autoroof') return this.autoRoof();
+      if (a === 'dellv') return this.deleteLevel();
+      if (a === 'roofPdf') return this.roofPdf(x);
+      if (a === 'roofOutline') {
+        const L = planLevels(this._root), src = (this.plan.walls.length ? this.plan : [...L.slice(0, this.lv)].reverse().find(l => l.kind !== 'roof')?.plan);
+        const pts = src && outlineOf({ ...src, meta: { ...this._root.meta, ...src.meta } });
+        if (!pts) return toast('Dış hat bulunamadı', 'err');
+        this.snap(); x.pts = pts; this.changed(); return;
+      }
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
       if (a === 'cabV') return this.vestiyerDialog(x);
       this.snap();

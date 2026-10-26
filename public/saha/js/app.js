@@ -19,7 +19,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.26-11';
+export const APP_VERSION = '2026.10.27-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1058,9 +1058,10 @@ function planScreen() {
     </div>
   </div>`;
   const root = $('.plan-screen');
-  const sync3d = debounce(() => S.p3?.setPlan(S.editor.plan), 350);
+  const sync3d = debounce(() => S.p3?.setPlan(S.editor.root), 350);
   S.editor = new PlanEditor($('#ps2d'), dw.plan, {
     onChange: p => { setDrawingPlan(j, dw.id, p); save(); if (mode !== '2d') sync3d(); },
+    onLevel: lv => { if (S.p3) { S.p3.opt.level = lv; S.p3.build(); } },
     // proje çiziminde rölöve (mevcut durum) soluk altlık olarak görünür
     ghost: !dw.main && hasContent(j.plan) ? j.plan : null,
     resolvePhoto: id => { const p = j.photos.find(x => x.id === id); return p ? S.be.photoUrl(p) : ''; },
@@ -1094,15 +1095,15 @@ function planScreen() {
   const fname = ext => `${j.code}-${(dw.main ? 'rolove' : dw.name).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').replace(/[^A-Za-z0-9_-]+/g, '-')}.${ext}`;
   // 3D model: görünür 3D yoksa geçici, ekran dışı bir görüntüleyici kurulur
   const with3d = async fn => {
-    if (S.p3) { S.p3.setPlan(S.editor.plan); return fn(S.p3); }
+    if (S.p3) { S.p3.setPlan(S.editor.root); return fn(S.p3); }
     const { Plan3D } = await import('./plan3d.js');
     const host = h('<div style="position:fixed;left:-3000px;top:0;width:400px;height:300px"></div>'); document.body.append(host);
     const p3 = new Plan3D(host);
-    try { await p3.init(); p3.setPlan(S.editor.plan); return await fn(p3); } finally { p3.dispose(); host.remove(); }
+    try { await p3.init(); p3.opt.level = S.editor.lv; p3.setPlan(S.editor.root); return await fn(p3); } finally { p3.dispose(); host.remove(); }
   };
-  $('[data-share]').onclick = () => shareDialog(j, S.dw, S.editor.plan);
+  $('[data-share]').onclick = () => shareDialog(j, S.dw, S.editor.root);
   $('[data-exp]').onclick = async () => {
-    if (!hasContent(S.editor.plan)) return toast('Çizim boş', 'err');
+    if (!hasContent(S.editor.root)) return toast('Çizim boş', 'err');
     const opts = [
       ['dxf2', '2D çizim', 'DXF', 'AutoCAD / ArchiCAD / NanoCAD — duvar, kapı, pencere, oda, mobilya, ölçü katmanlarıyla (mm)'],
       ['png', '2D çizim', 'PNG', 'Plan görseli — fotoğraflara da kaydedilir'],
@@ -1122,8 +1123,8 @@ function planScreen() {
     const k = r?.k; if (!k || k === 'no') return;
     try {
       if (k === 'png') return savePng();
-      if (k === 'dograma') return printJoinery(j, dw, S.editor.plan);
-      if (k === 'zemin') return printFloorOrder(j, dw, S.editor.plan);
+      if (k === 'dograma') return printJoinery(j, dw, S.editor.root);
+      if (k === 'zemin') return printFloorOrder(j, dw, S.editor.root);
       if (k === 'etiket') {
         const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
         const off = new Set(j.jnOff?.[dw.id] || []), jnOnly = off.size ? new Set(S.editor.plan.openings.map(o => o.id).filter(id => !off.has(id))) : null;
@@ -1335,7 +1336,7 @@ function reviewsDialog() {
 }
 
 async function ensure3d() {
-  if (S.p3) { S.p3.setPlan(S.editor.plan); return S.p3; }
+  if (S.p3) { S.p3.opt.level = S.editor.lv; S.p3.setPlan(S.editor.root); return S.p3; }
   const { Plan3D } = await import('./plan3d.js');
   const host = $('#p3host'); if (!host) return;
   const p3 = new Plan3D(host);
@@ -1343,9 +1344,9 @@ async function ensure3d() {
   if (!$('#p3host')) { p3.dispose(); return; }
   S.p3 = p3;
   $('.p3-load', host)?.remove();
-  p3.setPlan(S.editor.plan);
+  p3.opt.level = S.editor.lv; p3.setPlan(S.editor.root);
   const sel = $('#p3room');
-  const fillRooms = () => { sel.innerHTML = S.editor.plan.rooms.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join(''); };
+  const fillRooms = () => { sel.innerHTML = S.editor.root.rooms.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join(''); };
   $('#sunAz').value = p3.opt.sunAz; $('#sunEl').value = p3.opt.sunEl; $('#expo').value = p3.opt.exposure;
   $('#sunAz').oninput = e => p3.set('sunAz', +e.target.value);
   $('#sunEl').oninput = e => p3.set('sunEl', +e.target.value);
@@ -1357,7 +1358,7 @@ async function ensure3d() {
     const c = b.dataset.c;
     if (c === 'interior') {
       fillRooms();
-      if (!S.editor.plan.rooms.length) return toast('İç mekan için önce oda çizin', 'err');
+      if (!S.editor.root.rooms.length) return toast('İç mekan için önce oda çizin', 'err');
       sel.hidden = false;
       if (!p3.opt.ceiling) { p3.set('ceiling', true); $('.p3-bar [data-t="ceiling"]').classList.add('on'); }
       if (p3.opt.cut) { p3.set('cut', false); $('.p3-bar [data-t="cut"]').classList.remove('on'); }
@@ -1406,7 +1407,7 @@ async function renderDialog() {
         if (k === 'dl' && blob) downloadBlob(blob, `${j.code}-render-${Date.now()}.png`);
         if (k === 'save' && blob) {
           const jpg = await toJpeg(blob);
-          await addBlobPhoto(jpg, { tag: 'render', caption: `Render${S.dw && !S.dw.main ? ' · ' + S.dw.name : ''} · ${p3.opt.mode === 'interior' ? (S.editor.plan.rooms.find(r => r.id === p3.opt.roomId)?.name || 'iç mekan') : 'genel görünüm'}` });
+          await addBlobPhoto(jpg, { tag: 'render', caption: `Render${S.dw && !S.dw.main ? ' · ' + S.dw.name : ''} · ${p3.opt.mode === 'interior' ? (S.editor.root.rooms.find(r => r.id === p3.opt.roomId)?.name || 'iç mekan') : 'genel görünüm'}` });
           toast('Render projeye kaydedildi'); btn('save').hidden = true;
         }
       };

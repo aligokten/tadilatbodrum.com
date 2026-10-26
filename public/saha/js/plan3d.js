@@ -4,7 +4,8 @@
  *   • hızlı   — rasterize + yumuşak gölge + GTAO ortam kapatma + IBL
  *   • gerçekçi — GPU path tracing (three-gpu-pathtracer), ilerlemeli örnekleme
  */
-import { V, wallLen, wallDir, polyCentroid, pointInPoly, wallExt } from './plan-geom.js';
+import { V, wallLen, wallDir, polyCentroid, pointInPoly, wallExt, planLevels } from './plan-geom.js';
+import { roofFaces, coverOf, outlineOf } from './roof.js';
 import { floorTexture } from './textures.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
@@ -145,17 +146,74 @@ export class Plan3D {
   }
 
   build() {
-    const P = this.plan; if (!P || !THREE) return;
+    const ROOT = this.plan; if (!ROOT || !THREE) return;
     this.root.clear();
     this.floors = [];
-    const g = this.root, meta = P.meta;
-    const cutH = 110;
-
     // zemin (dış)
     const b = this.bounds();
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), this.std('#D9D2C3', 1));
     ground.rotation.x = -Math.PI / 2; ground.position.set(b.cx, -0.02, b.cz); ground.receiveShadow = true; ground.userData.noExport = true;
-    g.add(ground);
+    this.root.add(ground);
+    // katlar: her kat kendi kotunda; kesitte etkin kata kadar (etkin kat kesik)
+    const L = planLevels(ROOT), act = Math.min(this.opt.level ?? 0, L.length - 1);
+    this.hTop = M(L.at(-1).z + L.at(-1).h) + ((L.some(l => l.plan.roofs?.length)) ? 1.5 : 0);   // bina yüksekliği (m), kadraj için
+    for (const lv of L) {
+      if (this.opt.cut && lv.idx > act) continue;
+      const lg = new THREE.Group(); lg.position.y = M(lv.z); lg.name = lv.name; this.root.add(lg);
+      const meta = { ...ROOT.meta, ...(lv.plan.meta || {}) };
+      if (lv.idx > 0 && lv.slab > 0) this.slab(lv.kind === 'roof' ? L[lv.idx - 1].plan : lv.plan, meta, lv.slab, lg);
+      if (lv.kind !== 'roof') this.buildLevel(lv.plan, lg, meta, this.opt.cut && lv.idx === act, lv.idx === 0);
+      // çatı: kesitte yalnızca çatı planı katı etkinken (alt katın içi görünsün diye)
+      if (!this.opt.cut || (lv.kind === 'roof' && lv.idx === act)) for (const rf of lv.plan.roofs || []) this.roof(rf, (lv.kind === 'roof' ? 0 : lv.h) + (+rf.base || 0), meta, lg);
+    }
+    this.placeSun();
+    this.dirty = true;
+  }
+
+  /* kat döşemesi: katın dış hattı, kat kotunun altında */
+  slab(P, meta, t, g) {
+    const pts = outlineOf({ ...P, meta }); if (!pts) return;
+    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(M(p.x), -M(p.y)))), { depth: M(t), bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, this.std('#C9C6C0', 0.95)); m.position.y = -M(t); m.castShadow = m.receiveShadow = true; m.name = 'Döşeme';
+    g.add(m);
+  }
+  /* çok kenarlı düzlemsel yüzey (cm; z yukarı) → üçgenlenmiş ağ */
+  polyMesh(P3, mat) {
+    const Q = P3.map(p => new THREE.Vector3(M(p.x), M(p.z), M(p.y))), n = Q.length; if (n < 3) return null;
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < n; i++) { const a = Q[i], c = Q[(i + 1) % n]; nx += (a.y - c.y) * (a.z + c.z); ny += (a.z - c.z) * (a.x + c.x); nz += (a.x - c.x) * (a.y + c.y); }
+    const ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
+    const P2 = Q.map(v => ax >= ay && ax >= az ? new THREE.Vector2(v.y, v.z) : ay >= az ? new THREE.Vector2(v.x, v.z) : new THREE.Vector2(v.x, v.y));
+    const tris = THREE.ShapeUtils.triangulateShape(P2, []); if (!tris.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(Q.flatMap(v => [v.x, v.y, v.z]), 3));
+    geo.setIndex(tris.flat()); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true;
+    return m;
+  }
+  roof(rf, base, meta, g) {
+    const cv = coverOf(rf);
+    const rm = this.mat('roof' + cv.c, () => new THREE.MeshStandardMaterial({ color: cv.c, roughness: 0.8, side: THREE.DoubleSide }));
+    const wm = this.mat('gable' + (meta.wallColor || '#F7F5F0'), () => new THREE.MeshStandardMaterial({ color: meta.wallColor || '#F7F5F0', roughness: 0.92, side: THREE.DoubleSide }));
+    for (const f of roofFaces(rf, base)) {
+      if (f.kind === 'parapet') {
+        const L = V.dist(f.a, f.b); if (L < 1) continue;
+        const u = V.norm(V.sub(f.b, f.a)), c = V.lerp(f.a, f.b, 0.5), t = 20;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(M(L + t), M(f.h), M(t)), wm);
+        m.position.set(M(c.x), M(f.z0 + f.h / 2), M(c.y)); m.rotation.y = -Math.atan2(u.y, u.x); m.castShadow = m.receiveShadow = true; m.name = 'Parapet';
+        g.add(m); continue;
+      }
+      const m = this.polyMesh(f.pts, f.kind === 'gable' ? wm : rm); if (!m) continue;
+      m.name = f.kind === 'gable' ? 'Kalkan duvarı' : 'Çatı';
+      g.add(m);
+    }
+    // düz çatı yüzeyi parapetin içinde biraz yukarıda değil; eğimli çatıya saçak kalınlığı: alın tahtası çizgisi yok sayılır
+  }
+
+  buildLevel(P, g, meta, cut, ground0) {
+    const cutH = 110;
+    this.curMeta = meta;
 
     // odalar: zemin + tavan
     for (const r of P.rooms) {
@@ -167,8 +225,8 @@ export class Plan3D {
       const fm = this.mat('floor' + r.floor, () => new THREE.MeshStandardMaterial({ map: tx.map, roughness: tx.rough }));
       const fl = new THREE.Mesh(geo, fm);
       fl.position.y = 0.002; fl.receiveShadow = true; fl.userData.room = r.id; fl.name = 'Zemin ' + (r.name || '');
-      g.add(fl); this.floors.push(fl);
-      if (this.opt.ceiling && !this.opt.cut) {
+      g.add(fl); if (ground0) this.floors.push(fl);
+      if (this.opt.ceiling && !cut) {
         // tavan aşağı bakmalı: +90° döndürmede şeklin y'si doğrudan z olur, bu yüzden plan y'si ters çevrilmeden verilir
         // (zemindeki -y şekliyle döndürülünce tavan plan üzerinde aynalanıp kayıyordu)
         const cg = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), M(p.y))))); cg.rotateX(Math.PI / 2);
@@ -191,7 +249,7 @@ export class Plan3D {
     const roomColorOf = w => P.rooms.find(r => (r.walls || []).includes(w.id) && r.wallColor)?.wallColor;
     for (const w of P.walls) {
       const L = wallLen(w); if (L < 1) continue;
-      const t = w.t || meta.wallT, H0 = w.h || meta.wallH, H = this.opt.cut ? Math.min(cutH, H0) : H0;
+      const t = w.t || meta.wallT, H0 = w.h || meta.wallH, H = cut ? Math.min(cutH, H0) : H0;
       const color = w.color || roomColorOf(w) || meta.wallColor || '#F7F5F0';
       const mw = this.std(color, 0.92);
       const u = wallDir(w), ang = -Math.atan2(u.y, u.x);
@@ -223,9 +281,6 @@ export class Plan3D {
 
     // mobilya
     for (const it of P.items) g.add(this.furniture(it));
-
-    this.placeSun();
-    this.dirty = true;
   }
 
   opening(o, w, u, ang, t, topClip) {
@@ -357,7 +412,7 @@ export class Plan3D {
     };
     const fx = fixtureOf(it.type);
     if (fx) {
-      if (fx.mount === 'ceil') { if (this.opt.cut) return g; g.position.y = M(this.plan.meta.wallH); }
+      if (fx.mount === 'ceil') { if (this.opt.cut) return g; g.position.y = M((this.curMeta || this.plan.meta).wallH); }
       fixture3D(THREE, g, it, (c, r, mt) => this.std(c, r, mt));
       return g;
     }
@@ -397,7 +452,7 @@ export class Plan3D {
       }
       case 'kasetklima': {  // çift yönlü kaset klima: gövde asma tavan içinde, panel tavanda; iki uzun kenarda üfleme
         if (this.opt.cut) return g;
-        g.position.y = M(this.plan.meta.wallH);
+        g.position.y = M((this.curMeta || this.plan.meta).wallH);
         box(W * 0.84, H - 0.02, D * 0.8, 0, -(H - 0.02) / 2 - 0.02, 0, this.std('#D9DCDF', 0.5));
         box(W, 0.02, D, 0, -0.01, 0, white);
         const slot = this.std('#2E3135', 0.5);
@@ -594,9 +649,9 @@ export class Plan3D {
     const b = this.bounds();
     this.opt.mode = 'orbit';
     this.camera.fov = 45; this.camera.updateProjectionMatrix();
-    const d = (b.r * 1.45 + 2.5) * Math.max(1, 1.4 / (this.camera.aspect || 1));
-    this.camera.position.set(b.cx + d * 0.55, d * 0.75, b.cz + d * 0.85);
-    this.controls.target.set(b.cx, 0.6, b.cz);
+    const H = this.hTop || 3, d = (Math.max(b.r, H * 0.9) * 1.45 + 2.5) * Math.max(1, 1.4 / (this.camera.aspect || 1));
+    this.camera.position.set(b.cx + d * 0.55, d * 0.75 + H * 0.3, b.cz + d * 0.85);
+    this.controls.target.set(b.cx, Math.max(0.6, H * 0.42), b.cz);
     this.controls.enableZoom = true; this.controls.enablePan = true;
     this.controls.minDistance = 0.5; this.controls.maxDistance = 200;
     this.controls.maxPolarAngle = Math.PI * 0.49;
