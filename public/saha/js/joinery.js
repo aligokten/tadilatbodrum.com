@@ -2,7 +2,7 @@
  * Aynı özellikteki açıklıklar tek pozda toplanır (K01, P01, B01…). Her poz için ölçülü görünüş çizilir:
  * pencere iç taraftan, kapı açıldığı taraftan görünür. Açılım sembolü: kesik çizgili üçgenin tepesi kol (açılan) tarafını gösterir.
  */
-import { V, wallDir, wallNormal, pointInPoly } from './plan-geom.js';
+import { V, wallDir, wallNormal, pointInPoly, planLevels } from './plan-geom.js';
 import { doorModel, doorUse, winModel, winUse, winRail, winHingeAtStart, sashes, leaves, frameColor, leafColor, modelName, useName, FRAME_COLORS, LEAF_COLORS } from './openings.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -33,17 +33,21 @@ function opening(o, mir) {
   return '—';
 }
 
-/* çizimdeki açıklıklar: mahal, açılım, plan konumu */
+/* çizimdeki açıklıklar (tüm katlar): mahal, açılım, plan konumu; lv: kat sırası, P: katın planı */
 export function joineryItems(plan) {
   const meta = plan.meta || {}, out = [];
-  for (const o of plan.openings || []) {
-    const w = plan.walls.find(x => x.id === o.wallId); if (!w) continue;
-    const t = w.t || meta.wallT || 15, u = wallDir(w), n = wallNormal(w), sd = o.side || 1;
-    const c = V.add(w.a, V.mul(u, o.pos));
-    const roomAt = k => plan.rooms.find(r => pointInPoly(V.add(c, V.mul(n, k)), r.pts))?.name || '';
-    const inner = roomAt(sd * (t / 2 + 12)), outer = roomAt(-sd * (t / 2 + 12));
-    const where = o.type === 'window' ? (inner || outer || '—') : [inner || 'Dış', outer || 'Dış'].filter((x, i, a) => a.indexOf(x) === i).join(' ↔ ');
-    out.push({ o, t, c, n, sd, mir: sd < 0, where, open: opening(o, sd < 0) });
+  const lvs = planLevels(plan).filter(l => l.kind !== 'roof'), multi = lvs.length > 1;
+  for (const L of lvs) {
+    const P = L.plan;
+    for (const o of P.openings || []) {
+      const w = (P.walls || []).find(x => x.id === o.wallId); if (!w) continue;
+      const t = w.t || P.meta?.wallT || meta.wallT || 15, u = wallDir(w), n = wallNormal(w), sd = o.side || 1;
+      const c = V.add(w.a, V.mul(u, o.pos));
+      const roomAt = k => (P.rooms || []).find(r => pointInPoly(V.add(c, V.mul(n, k)), r.pts))?.name || '';
+      const inner = roomAt(sd * (t / 2 + 12)), outer = roomAt(-sd * (t / 2 + 12));
+      const room = o.type === 'window' ? (inner || outer || '—') : [inner || 'Dış', outer || 'Dış'].filter((x, i, a) => a.indexOf(x) === i).join(' ↔ ');
+      out.push({ o, t, c, n, sd, mir: sd < 0, lv: L.idx, lvName: L.name, P, room, where: multi ? `${L.name} · ${room}` : room, open: opening(o, sd < 0) });
+    }
   }
   return out;
 }
@@ -190,16 +194,25 @@ function specRows(T, gap) {
 }
 
 /* anahtar plan: her açıklığın yanına poz numarası */
-function keyPlanOverlay(list) {
+function keyPlanOverlay(list, lv = 0) {
   return s => {
     let o = '';
     for (const T of list) for (const x of T.items) {
+      if (x.lv !== lv) continue;
       const p = V.add(x.c, V.mul(x.n, -x.sd * (x.t / 2 + 16 / s))), fs = 10 / s, w = (x.code.length * 6.4 + 8) / s, hh = 15 / s;
       const col = x.o.type === 'door' ? '#EB591F' : x.o.type === 'window' ? '#00989A' : '#7A8594';
       o += `<rect x="${p.x - w / 2}" y="${p.y - hh / 2}" width="${w}" height="${hh}" rx="${4 / s}" fill="${col}"/><text x="${p.x}" y="${p.y + fs * 0.36}" font-size="${fs}" font-family="Inter,Arial,sans-serif" font-weight="700" fill="#fff" text-anchor="middle">${x.code}</text>`;
     }
     return o;
   };
+}
+
+/* anahtar plan çizilecek katlar (seçili doğrama içerenler) */
+function keyLevels(all) {
+  const m = new Map(); all.forEach(x => { if (!m.has(x.lv)) m.set(x.lv, { lv: x.lv, name: x.lvName, P: x.P }); });
+  const out = [...m.values()].sort((a, b) => a.lv - b.lv), multi = all.some(x => x.where !== x.room);
+  out.forEach(L => L.multi = multi);
+  return out;
 }
 
 /* rapor gövdesi (docHeader / docFooter app tarafında eklenir) */
@@ -216,7 +229,7 @@ export function joineryHtml(plan, { gap = 1, keyPlan, only = null } = {}) {
       <div><small>Pencere</small><b>${Wn.length} adet</b>${num(area(Wn))} m² · ${list.filter(T => T.o.type === 'window').length} poz</div>
       <div><small>Toplam</small><b>${all.length} adet</b>${num(area(all))} m²${B.length ? ` · ${B.length} kapısız boşluk dahil` : ''}</div>
     </section>
-    ${keyPlan ? `<section><h3>Anahtar plan <small>— poz numaraları</small></h3><div class="p-plan"><img src="${keyPlan(keyPlanOverlay(list))}" alt="Anahtar plan"></div></section>` : ''}
+    ${keyPlan ? keyLevels(all).map(L => `<section><h3>Anahtar plan${L.multi ? ' — ' + esc(L.name) : ''} <small>— poz numaraları</small></h3><div class="p-plan"><img src="${keyPlan(keyPlanOverlay(list, L.lv), L.P)}" alt="Anahtar plan"></div></section>`).join('') : ''}
     <section><h3>Doğrama çizelgesi</h3>
       <table class="p-table sm"><thead><tr><th>Poz</th><th>Tanım</th><th class="r">G × Y (cm)</th>${gap ? '<th class="r">İmalat (cm)</th>' : ''}<th class="r">Parapet</th><th class="r">Duvar</th><th class="r">Adet</th><th class="r">m²</th><th>Mahal</th></tr></thead><tbody>
       ${['door', 'window', 'opening'].filter(t => list.some(T => T.o.type === t)).map(t => `<tr class="grp"><td colspan="${gap ? 9 : 8}">${{ door: 'Kapılar', window: 'Pencereler', opening: 'Kapısız boşluklar' }[t]}</td></tr>

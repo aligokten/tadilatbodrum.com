@@ -5,7 +5,7 @@
  * her etiket 300 dpi tuvale çizilip PDF'e görüntü olarak eklenir.
  */
 import { partsList } from './cabinet.js';
-import { joineryList } from './joinery.js';
+import { joineryList, joineryItems } from './joinery.js';
 import { modelName, useName, frameColor, leafColor, winUse, doorUse, FRAME_COLORS, LEAF_COLORS } from './openings.js';
 
 const LW = 100, LH = 60, DPI = 300;   // etiket mm; önizleme çözünürlüğü
@@ -173,7 +173,7 @@ export async function labelPreview(lb, opts = {}) {
 /* montaj: async (payload) => 'https://…/m/KİMLİK' | null — montaj şeması bağlantısını oluşturur / günceller (bulut) */
 export async function labelsDialog({ cabs = [], plan = null, job = null, settings = {}, fname = 'etiketler', jnOnly = null, montaj = null } = {}) {
   const { modal, toast, downloadBlob, esc } = await import('./ui.js');
-  const hasJ = !!plan?.openings?.length;
+  const nJ = plan ? joineryItems(plan).length : 0, hasJ = nJ > 0;   // tüm katlar
   if (!cabs.length && !hasJ) return toast('Etiketlenecek dolap ya da kapı / pencere yok', 'err');
   const opt = { cab: !!cabs.length, tops: false, jn: hasJ && !cabs.length, gap: settings.jnGap ?? 1 };
   const build = (url = '') => [...(opt.cab ? cabinetLabels(cabs, { job, tops: opt.tops, url }) : []), ...(opt.jn ? joineryLabels(plan, { job, gap: opt.gap, only: jnOnly, url }) : [])];
@@ -181,7 +181,7 @@ export async function labelsDialog({ cabs = [], plan = null, job = null, setting
     <p class="muted small">Her parça için benzersiz kimlik, QR kod (parça bilgisi) ve Code128 barkod içeren etiketler. PDF'in her sayfası bir etikettir (100 × 60 mm, yatay) — etiket yazıcısında kağıt boyutunu 100 × 60 mm seçip "gerçek boyut / %100" ile yazdırın.</p>
     ${cabs.length ? `<label class="check"><input type="checkbox" data-o="cab" ${opt.cab ? 'checked' : ''}> Dolap / mutfak parçaları <small>(${cabs.map(c => esc(c.label)).join(', ')})</small></label>
     <label class="check"><input type="checkbox" data-o="tops"> Tezgahı da etiketle</label>` : ''}
-    ${hasJ ? `<label class="check"><input type="checkbox" data-o="jn" ${opt.jn ? 'checked' : ''}> Kapı / pencere (doğrama) <small>(${jnOnly ? jnOnly.size : plan.openings.length} açıklık${jnOnly && jnOnly.size < plan.openings.length ? ' — doğrama listesindeki seçim' : ''})</small></label>` : ''}
+    ${hasJ ? `<label class="check"><input type="checkbox" data-o="jn" ${opt.jn ? 'checked' : ''}> Kapı / pencere (doğrama) <small>(${jnOnly ? jnOnly.size : nJ} açıklık${jnOnly && jnOnly.size < nJ ? ' — doğrama listesindeki seçim' : ''})</small></label>` : ''}
     <p class="muted small">${montaj ? 'QR kod okutulunca parçanın montaj şeması açılır: mobilya çizimi üzerinde parçanın yeri turuncu gösterilir (bağlantı buluta kaydedilir, iş için tek bağlantı; yeniden etiket alınca güncellenir).' : 'Yerel modda montaj şeması bağlantısı oluşturulamaz; QR kod parça bilgisini metin olarak içerir.'}</p>
     <p class="lb-sum"></p>
     <div class="lb-prev"></div>`,
