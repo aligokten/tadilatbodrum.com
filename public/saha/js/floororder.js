@@ -1,7 +1,7 @@
 /* ═══ Zemin kaplaması sipariş listesi: çizimdeki mahaller malzemeye göre gruplanır, sipariş miktarları (PDF) ═══
    Karo (seramik, mermer, traverten, dış mekan taş): yerleşim simülasyonundan adet / kutu, yapıştırıcı, derz dolgu.
    Diğerleri (parke, laminat, halı, mikro beton): alan + fire, paket / rulo / kg, şilte ve süpürgelik. */
-import { roomMetrics, polyCentroid } from './plan-geom.js';
+import { roomMetrics, polyCentroid, planLevels } from './plan-geom.js';
 import { floorOf } from './catalog.js';
 import { tileable, tileOf, tileLayout, TILE_PATTERNS } from './tiles.js';
 
@@ -18,21 +18,27 @@ export const FLOOR_MAT = {
 export const matCfg = (k, cfg = {}) => ({ name: '', ...(FLOOR_MAT[k] || { fire: 5, pack: 0 }), ...(cfg[k] || {}) });
 const SKIRT_L = 2.4, UNDER_ROLL = 10;   // süpürgelik boyu (m), şilte rulosu (m²)
 
+/* tüm katların mahalleri: { r, P (katın planı), lv, lvName, name } — birden çok katta ad kat adıyla */
+export function floorRooms(plan) {
+  const lvs = planLevels(plan).filter(l => l.kind !== 'roof'), multi = lvs.length > 1;
+  return lvs.flatMap(L => (L.plan.rooms || []).map(r => ({ r, P: L.plan, lv: L.idx, lvName: L.name, name: multi ? `${L.name} · ${r.name}` : r.name })));
+}
+
 /* gruplar: karo → malzeme + boyut + ürün adı; diğerleri → malzeme */
 export function floorOrderData(plan, { only = null, cfg = {} } = {}) {
   const groups = new Map();
-  for (const r of plan.rooms) {
+  for (const { r, P, lv, lvName, name } of floorRooms(plan)) {
     if (only && !only.has(r.id)) continue;
-    const m = roomMetrics(plan, r), perimNet = Math.max(0, m.perim - m.doorW);
+    const m = roomMetrics(P, r), perimNet = Math.max(0, m.perim - m.doorW), at = { P, lv, lvName, name };
     if (tileable(r)) {
       const t = tileOf(r), L = tileLayout(r, { perimNet, geom: false });
       const key = `${r.floor}|${L.a < L.b ? L.a : L.b}x${L.a < L.b ? L.b : L.a}|${t.th}|${(t.name || '').trim().toLocaleLowerCase('tr')}`;
       if (!groups.has(key)) groups.set(key, { tile: true, floor: r.floor, w: Math.min(L.a, L.b), l: Math.max(L.a, L.b), th: t.th, box: t.box, name: (t.name || '').trim(), rooms: [] });
-      groups.get(key).rooms.push({ r, m, t, L });
+      groups.get(key).rooms.push({ r, m, t, L, ...at });
     } else {
       const key = r.floor || 'parke';
       if (!groups.has(key)) groups.set(key, { tile: false, floor: key, rooms: [] });
-      groups.get(key).rooms.push({ r, m, perimNet });
+      groups.get(key).rooms.push({ r, m, perimNet, ...at });
     }
   }
   const out = [...groups.values()].sort((a, b) => (b.tile - a.tile) || floorOf(a.floor).t.localeCompare(floorOf(b.floor).t, 'tr') || (a.w * a.l || 0) - (b.w * b.l || 0));
@@ -101,25 +107,33 @@ export function floorOrderHtml(plan, groups, { keyPlan = null, note = '' } = {})
       </tbody></table>
       ${note ? `<p class="small">${esc(note)}</p>` : ''}
     </section>
-    ${keyPlan ? `<section><h3>Anahtar plan <small>— mahallerdeki malzeme kodları</small></h3><div class="p-plan"><img src="${keyPlan(keyOverlay(plan, groups))}" alt="Anahtar plan"></div></section>` : ''}
+    ${keyPlan ? keyLevels(groups).map(L => `<section><h3>Anahtar plan${L.multi ? ' — ' + esc(L.name) : ''} <small>— mahallerdeki malzeme kodları</small></h3><div class="p-plan"><img src="${keyPlan(keyOverlay(L.P, groups), L.P)}" alt="Anahtar plan"></div></section>`).join('') : ''}
     <section class="${keyPlan ? 'p-break' : ''}"><h3>Mahal bazında döküm</h3>
       ${groups.map(g => g.tile ? `
       <table class="p-table sm"><thead><tr><th colspan="8">${g.code} · ${esc(groupTitle(g))} · ${num(g.th, 1)} mm${g.name ? ' · ' + esc(g.name) : ''}</th></tr>
         <tr class="grp"><td>Mahal</td><td class="r">Alan</td><td>Döşeme</td><td class="r">Derz</td><td class="r">Tam</td><td class="r">Kesik</td><td class="r">Giren + yedek</td><td class="r">Süpürgelik</td></tr></thead><tbody>
-        ${g.rooms.map(x => `<tr><td>${esc(x.r.name)}</td><td class="r">${num(x.m.area)} m²</td><td>${esc(patName(x.L.t.pat))}${x.t.start === 'kose' ? ' <small class="muted">(köşeden)</small>' : ''}</td><td class="r">${num(x.t.g, 1)} mm</td><td class="r">${x.L.full}</td><td class="r">${x.L.cut}</td><td class="r">${x.L.used} + ${x.L.order - x.L.used}</td><td class="r">${x.L.skirt ? `${x.L.skirt.tiles} <small class="muted">(${num(x.L.skirt.len, 1)} m)</small>` : '—'}</td></tr>`).join('')}
+        ${g.rooms.map(x => `<tr><td>${esc(x.name)}</td><td class="r">${num(x.m.area)} m²</td><td>${esc(patName(x.L.t.pat))}${x.t.start === 'kose' ? ' <small class="muted">(köşeden)</small>' : ''}</td><td class="r">${num(x.t.g, 1)} mm</td><td class="r">${x.L.full}</td><td class="r">${x.L.cut}</td><td class="r">${x.L.used} + ${x.L.order - x.L.used}</td><td class="r">${x.L.skirt ? `${x.L.skirt.tiles} <small class="muted">(${num(x.L.skirt.len, 1)} m)</small>` : '—'}</td></tr>`).join('')}
         <tr class="grp"><td>Toplam</td><td class="r">${num(g.area)} m²</td><td></td><td></td><td class="r">${g.full}</td><td class="r">${g.cut}</td><td class="r">${g.order}</td><td class="r">${g.skirt || '—'}</td></tr>
         <tr><td colspan="6"><b>Sipariş</b></td><td class="r" colspan="2"><b>${g.total} adet${g.boxes ? ` · ${g.boxes} kutu` : ''}</b> · ${num(g.m2)} m²</td></tr>
       </tbody></table>` : `
       <table class="p-table sm"><thead><tr><th colspan="4">${g.code} · ${esc(groupTitle(g))}${g.name ? ' · ' + esc(g.name) : ''}</th></tr>
         <tr class="grp"><td>Mahal</td><td class="r">Net alan</td><td class="r">Fireli alan (%${num(g.cfg.fire, 1)})</td><td class="r">Süpürgelik</td></tr></thead><tbody>
-        ${g.rooms.map(x => `<tr><td>${esc(x.r.name)}</td><td class="r">${num(x.m.area)} m²</td><td class="r">${num(x.m.area * (1 + g.cfg.fire / 100))} m²</td><td class="r">${g.cfg.skirt ? num(x.perimNet) + ' m' : '—'}</td></tr>`).join('')}
+        ${g.rooms.map(x => `<tr><td>${esc(x.name)}</td><td class="r">${num(x.m.area)} m²</td><td class="r">${num(x.m.area * (1 + g.cfg.fire / 100))} m²</td><td class="r">${g.cfg.skirt ? num(x.perimNet) + ' m' : '—'}</td></tr>`).join('')}
         <tr class="grp"><td>Toplam</td><td class="r">${num(g.area)} m²</td><td class="r">${num(g.m2)} m²</td><td class="r">${g.skirtM ? num(g.skirtM) + ' m' : '—'}</td></tr>
       </tbody></table>`).join('')}
       <p class="muted small" style="font-size:8.5pt">Karo adetleri her mahalde karoların çizim üzerine yerleştirilmesiyle hesaplanmıştır: kesilen her karo bir karo sayılır, yarımdan küçük iki parça aynı karodan çıkarılır; yedek payı mahal bazında eklenir. Süpürgelik kapı genişlikleri düşülerek hesaplanır. Yapıştırıcı ve derz dolgu miktarları yaklaşıktır; ürünün teknik föyündeki sarfiyata göre kontrol edilmelidir. Siparişten önce ölçüler yerinde doğrulanmalıdır.</p>
     </section>`;
 }
 
-/* anahtar plan: her mahalin ortasında malzeme kodu */
+/* anahtar plan çizilecek katlar (seçili mahal içerenler) */
+function keyLevels(groups) {
+  const xs = groups.flatMap(g => g.rooms), m = new Map();
+  xs.forEach(x => { if (!m.has(x.lv)) m.set(x.lv, { lv: x.lv, name: x.lvName, P: x.P }); });
+  const multi = xs.some(x => x.name !== x.r.name);
+  return [...m.values()].sort((a, b) => a.lv - b.lv).map(L => ({ ...L, multi }));
+}
+
+/* anahtar plan: her mahalin ortasında malzeme kodu (plan: ilgili katın planı) */
 function keyOverlay(plan, groups) {
   const code = new Map(); groups.forEach(g => g.rooms.forEach(x => code.set(x.r.id, g.code)));
   return s => plan.rooms.filter(r => code.has(r.id)).map(r => {

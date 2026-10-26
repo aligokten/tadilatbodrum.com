@@ -109,7 +109,7 @@ function showJoinery(no) {
       <div><h1>${kind} ${esc(no)}</h1><p>${o.type === 'opening' ? 'Kapısız boşluk' : `${esc(useName(o))} · ${esc(modelName(o))}`}</p></div></div>
       <div class="dims">${o.w} × ${o.h} <small>cm kaba açıklık</small></div>
       <dl class="kv">${ms ? `<dt>İmalat ölçüsü</dt><dd>${ms[0]} × ${ms[1]} cm</dd>` : ''}${o.type === 'window' ? `<dt>Parapet</dt><dd>${o.sill || 0} cm</dd>` : ''}<dt>Duvar</dt><dd>${x.t} cm</dd><dt>Mahal</dt><dd>${esc(x.where)}</dd>${x.open && x.open !== '—' ? `<dt>Açılım</dt><dd>${esc(x.open)}</dd>` : ''}</dl></section>
-    <section class="card"><h2>Plandaki yeri</h2><div class="fig">${planThumbSvg(plan, 900, 620, true, false, ov)}</div></section>
+    <section class="card"><h2>Plandaki yeri</h2><div class="fig">${planThumbSvg(x.P || plan, 900, 620, true, false, ov)}</div></section>
     <section class="card"><h2>Ölçülü görünüş <small style="font-weight:500;color:var(--muted)">${o.type === 'window' ? '(iç taraftan)' : '(açıldığı taraftan)'}</small></h2><div class="fig" style="max-width:360px;margin:0 auto">${jnSvg(o, { mir: x.mir, gap, code: T.code })}</div></section>
     <footer>TadilatBodrum.com · montaj şeması</footer>`;
 }
