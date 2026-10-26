@@ -5,6 +5,7 @@ import { uid } from './store.js';
 import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from './ui.js';
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
+import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
 import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
 
@@ -1124,6 +1125,10 @@ export class PlanEditor {
     for (const r of P.rooms) {
       const f = floorOf(r.floor);
       o += `<polygon class="room ${live && this.sel?.id === r.id ? 'sel' : ''}" points="${r.pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="${f.c}" fill-opacity="0.28"/>`;
+      if (r.tile && tileable(r)) {   // karo derzleri, oda sınırına kırpılmış
+        const cid = 'tclip-' + r.id;
+        o += `<clipPath id="${cid}"><polygon points="${r.pts.map(p => `${p.x},${p.y}`).join(' ')}"/></clipPath><path class="tile-j" clip-path="url(#${cid})" d="${tilePlanPath(tileLayout(r))}" fill="none" stroke="#8E8778" stroke-opacity="0.45" stroke-width="${px(0.6)}"/>`;
+      }
     }
     // duvarlar
     for (const w of P.walls) {   // uçlar: ortak köşede yarım kalınlık uzar, serbest uçta tam noktada biter
@@ -1463,7 +1468,8 @@ export class PlanEditor {
         ${num('h', 'Tavan yüksekliği', o.h || P.meta.wallH)}
         <label>Zemin kaplaması<select class="inp sm" data-k="floor">${FLOORS.map(f => `<option value="${f.k}" ${o.floor === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
         <label>Duvar rengi (3D)<div class="swatches" data-k="wallColor">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.wallColor || '') === c ? 'on' : ''}"></button>`).join('')}</div></label>
-        <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>`;
+        <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>
+        ${tileable(o) ? this.tileInsp(o, m) : ''}`;
     } else if (s.kind === 'item' && o.type === 'cabinet' && o.cab) {
       const c = o.cab, isW = c.kind === 'wardrobe';
       const nb = isW ? c.ward.filter(m => !CAB_MT[m.type].empty).length : c.base.filter(m => !CAB_MT[m.type].empty).length, nu = isW ? 0 : c.upper.filter(m => !CAB_MT[m.type].empty).length;
@@ -1506,6 +1512,41 @@ export class PlanEditor {
     this.bindInsp(o);
   }
 
+  /* seramik / karo döşeme: boyut, döşeme şekli, derz → adet bazlı sarfiyat */
+  tileInsp(o, m) {
+    const t = tileOf(o), sq = +t.w === +t.l;
+    const L = tileLayout(o, { perimNet: Math.max(0, m.perim - m.doorW) });
+    const opt = (v, cur, txt) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${txt}</option>`;
+    const isStd = TILE_SIZES.some(z => `${z[0]}x${z[1]}` === t.s);
+    const row = (k, v, cls = '') => `<div class="${cls}"><span>${k}</span><b>${v}</b></div>`;
+    return `<h4>${o.floor === 'seramik' ? 'Seramik' : 'Karo'} döşeme hesabı</h4>
+      <label>Karo boyutu<select class="inp sm" data-k="tile.s">${TILE_SIZES.map(z => opt(`${z[0]}x${z[1]}`, t.s, `${z[0]} × ${z[1]} cm`)).join('')}${opt('ozel', isStd ? '' : 'ozel', 'Özel ölçü…')}</select></label>
+      ${isStd ? '' : `<div class="grid2"><label>En<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.w" value="${t.w}"><span>cm</span></div></label><label>Boy<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.l" value="${t.l}"><span>cm</span></div></label></div>`}
+      <label>Döşeme şekli<select class="inp sm" data-k="tile.pat">${TILE_PATTERNS.filter(p => !p.rect || !sq).map(p => opt(p.k, L.t.pat, p.t)).join('')}</select></label>
+      <div class="grid2"><label>Derz boşluğu<select class="inp sm" data-k="tile.g">${TILE_JOINTS.map(g => opt(g, t.g, fmtNum(g, 1) + ' mm')).join('')}</select></label>
+      <label>Başlangıç<select class="inp sm" data-k="tile.start">${opt('orta', t.start, 'Odanın ortası')}${opt('kose', t.start, 'Köşeden')}</select></label></div>
+      ${sq ? '' : `<label class="check"><input type="checkbox" data-k="tile.rot" ${t.rot ? 'checked' : ''}> Karo yönünü 90° çevir</label>`}
+      <div class="grid2"><label>Yedek payı<div class="inp-unit sm"><input type="number" inputmode="decimal" step="1" min="0" data-k="tile.fire" value="${t.fire}"><span>%</span></div></label>
+      <label>Kutu içi<div class="inp-unit sm"><input type="number" inputmode="numeric" step="1" min="0" data-k="tile.box" value="${t.box}"><span>adet</span></div></label>
+      <label>Karo kalınlığı<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.th" value="${t.th}"><span>mm</span></div></label></div>
+      <label class="check"><input type="checkbox" data-k="tile.skirt" ${t.skirt ? 'checked' : ''}> Süpürgelik aynı karodan kesilecek</label>
+      ${t.skirt ? `<label>Süpürgelik yüksekliği<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.skH" value="${t.skH}"><span>cm</span></div></label>` : ''}
+      <div class="tile-prev-w">${tilePreviewSvg(o, L)}<div class="tile-leg"><i class="f"></i>Tam karo <i class="c"></i>Kesilen karo</div></div>
+      <div class="mtable tile-mt">
+        ${row('Tam karo', `${L.full} adet`)}
+        ${row('Kesilen karo', `${L.cut} adet`)}
+        ${L.small > 1 ? row('Küçük parçalar (2\'si 1 karodan)', `−${Math.floor(L.small / 2)} adet`) : ''}
+        ${row('Döşemeye giren karo', `${L.used} adet`)}
+        ${row(`Yedek / kırılma (%${fmtNum(t.fire, 1)})`, `+${L.order - L.used} adet`)}
+        ${L.skirt ? row(`Süpürgelik (${fmtNum(L.skirt.len, 1)} m, karodan ${L.skirt.perTile} şerit)`, `+${L.skirt.tiles} adet`) : ''}
+        ${row('Sipariş', `${L.total} adet${L.boxes ? ` · ${L.boxes} kutu` : ''}`, 'tot')}
+        ${row('Sipariş alanı', `${fmtNum(L.m2)} m² <small class="muted">(zemin firesi %${fmtNum(L.wasteP, 1)})</small>`)}
+        ${row('Yapıştırıcı', `≈ ${fmtNum(L.glueKg, 0)} kg · ${L.glueBags} torba (25 kg)`)}
+        ${L.groutKg ? row('Derz dolgu', `≈ ${fmtNum(L.groutKg, 1)} kg · ${L.groutBags} torba (5 kg)`) : ''}
+      </div>
+      <p class="muted small">Karo yerleşimi oda çizimi üzerinde simüle edilir; her kesik karo bir karo sayılır, yarımdan küçük parçalar ikişer ikişer aynı karodan çıkarılır.</p>`;
+  }
+
   bindInsp(o) {
     const P = this.plan;
     $$('[data-k]', this.insp).forEach(el => {
@@ -1525,7 +1566,13 @@ export class PlanEditor {
         this.snap();
         const x = this.obj(this.sel);
         if (k.startsWith('meta.')) P.meta[k.slice(5)] = v;
-        else if (k === 'len' && this.sel.kind === 'rail') {
+        else if (k.startsWith('tile.')) {
+          const t = x.tile = tileOf(x), q = k.slice(5);
+          if (q === 's') { if (v === 'ozel') t.s = 'ozel'; else applySize(t, v); }
+          else if (q === 'g' || q === 'w' || q === 'l' || q === 'fire' || q === 'box' || q === 'th' || q === 'skH') t[q] = Math.max(0, +v);
+          else t[q] = v;
+          if ((q === 'w' || q === 'l') && t.w === t.l && t.pat === 'balik') t.pat = 'duz';
+        } else if (k === 'len' && this.sel.kind === 'rail') {
           const np = V.add(x.a, V.mul(V.norm(V.sub(x.b, x.a)), Math.max(1, v))); x.b = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) };
         } else if (k === 'len') {
           const r = x.face ? wallRef(x, P.meta.wallT, P) : null;   // yüz uzunluğu girildiyse eksen aynı farkla uzar
@@ -1559,6 +1606,7 @@ export class PlanEditor {
           ea.forEach(([w, kk]) => { w[kk] = { x: +A.x.toFixed(2), y: +A.y.toFixed(2) }; }); eb.forEach(([w, kk]) => { w[kk] = { x: +B.x.toFixed(2), y: +B.y.toFixed(2) }; });
           x.t = v;
         } else x[k] = v;
+        if (k === 'floor' && this.sel.kind === 'room' && tileable(x) && !x.tile) x.tile = tileDefaults();
         this.changed();
         if (k === 'meta.wallT') this.renderHud();
       };

@@ -81,7 +81,7 @@ export const CHECK_STATES = [
 export const FLOORS = [
   { k: 'parke',    t: 'Ahşap parke', c: '#B98A5E' },
   { k: 'laminat',  t: 'Laminat (açık)', c: '#D6B994' },
-  { k: 'seramik',  t: 'Seramik 60×60', c: '#E6E2DB' },
+  { k: 'seramik',  t: 'Seramik / porselen karo', c: '#E6E2DB' },
   { k: 'mermer',   t: 'Mermer', c: '#F1EFEA' },
   { k: 'traverten', t: 'Traverten (Bodrum)', c: '#DCCBB0' },
   { k: 'beton',    t: 'Mikro beton', c: '#A9A7A3' },
