@@ -1039,3 +1039,7 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .tile-leg i{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid #B9B3AA}
 .tile-leg i.f{background:#EFEBE4}.tile-leg i.c{background:#F6C9A8;border-color:#D99A6C;margin-left:8px}
 .tile-mt b{white-space:nowrap;padding-left:10px}.tile-mt small{font-weight:500}
+.fo-mat{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.fo-mat>b{font-size:13.5px}
+.fo-sum .p-table{margin:0}
+.p-table tr.sub td{color:var(--muted);font-size:.95em}
