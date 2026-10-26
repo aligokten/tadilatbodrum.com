@@ -109,7 +109,7 @@ jobs:
       - if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Bağımlılıkları kur
         if: steps.check.outputs.ok == 'true' && (github.event_name == 'push' || inputs.deploy)
