@@ -11,11 +11,15 @@
  * Bot anahtarı, sohbet kimliği ve ntfy konusu Secret Manager sırrıdır — repo
  * herkese açık olduğu için asla kaynak koduna veya Firestore'a yazılmaz.
  *
+ * Ayrıca (digest.js) her akşam yarınki, her sabah bugünkü keşiflerin özetini Telegram'a gönderir:
+ * müşteriye hatırlatma ve ekibe iş bilgisi için metni hazır WhatsApp düğmeleriyle.
+ *
  * Kurulum (tarayıcıdan): DEPLOY.md → 6). Yayın GitHub Actions ile yapılır
  * (.github/workflows/functions.yml); elle yayında yalnızca bu fonksiyonu seçin:
  *   firebase deploy --only functions:tbNotifyNewAppointment
  */
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const https = require("https");
@@ -197,3 +201,59 @@ exports.tbNotifyNewAppointment = onDocumentCreated(
     });
   }
 );
+
+/* ───────── Telegram günlük keşif özeti ───────── */
+const { loadAndBuild } = require("./digest");
+let _db = null;
+function db() {
+  if (!_db) {
+    const admin = require("firebase-admin");
+    if (!admin.apps.length) admin.initializeApp();
+    _db = admin.firestore();
+  }
+  return _db;
+}
+
+/** Telegram sendMessage, birden çok düğme satırıyla */
+function sendTelegramRows(botToken, chatId, html, rows) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      chat_id: chatId, text: html, parse_mode: "HTML", disable_web_page_preview: true,
+      ...(rows && rows.length ? { reply_markup: { inline_keyboard: rows } } : {}),
+    });
+    const req = https.request(
+      { hostname: "api.telegram.org", path: "/bot" + botToken + "/sendMessage", method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }, timeout: 10000 },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.statusCode);
+          let desc = "";
+          try { desc = JSON.parse(data).description || ""; } catch (_) { /* JSON değil */ }
+          reject(new Error(`Telegram yanıtı: HTTP ${res.statusCode} ${desc}`.trim()));
+        });
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("Telegram isteği zaman aşımına uğradı")));
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function runDigest(when) {
+  const botToken = secretValue(TELEGRAM_BOT_TOKEN), chatId = secretValue(TELEGRAM_CHAT_ID);
+  if (!botToken || !chatId) { console.error("Telegram tanımlı değil (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) — özet atlandı."); return; }
+  const msgs = await loadAndBuild(db(), when);
+  if (!msgs.length) { console.log(`Keşif özeti (${when}): keşif yok, mesaj gönderilmedi`); return; }
+  for (const m of msgs.slice(0, 25)) {             // sıra korunsun diye tek tek
+    await sendTelegramRows(botToken, chatId, m.html, m.rows);
+    await sleep(350);
+  }
+  console.log(`Keşif özeti gönderildi (${when}): ${Math.max(0, msgs.length - 1)} keşif`);
+}
+
+const DIGEST_OPTS = { timeZone: "Europe/Istanbul", secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], retryCount: 1 };
+exports.tbDigestEvening = onSchedule({ schedule: "0 19 * * *", ...DIGEST_OPTS }, () => runDigest("tomorrow"));
+exports.tbDigestMorning = onSchedule({ schedule: "0 8 * * *", ...DIGEST_OPTS }, () => runDigest("today"));

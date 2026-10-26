@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# GitHub Actions → keşif bildirimi fonksiyonu (Cloud Functions) yayın yetkileri (bir kez çalıştırılır).
+# GitHub Actions → keşif bildirimi ve günlük keşif özeti fonksiyonları (Cloud Functions + Cloud Scheduler)
+# yayın yetkileri (bir kez çalıştırılır; özet eklendikten sonra bir kez daha çalıştırın — zararsızdır).
 # Önce scripts/github-deploy-setup.sh kurulmuş olmalı (aynı hizmet hesabını kullanır).
 # Google Cloud Shell'de çalıştırın (tarayıcıdan / telefondan):
 #   curl -sL https://raw.githubusercontent.com/aligokten/tadilatbodrum.com/main/scripts/functions-deploy-setup.sh | bash
@@ -15,14 +16,14 @@ gcloud iam service-accounts describe "$SA" >/dev/null 2>&1 || { echo "✗ $SA yo
 echo "▶ Gerekli servisler açılıyor (Blaze planı gerekir)…"
 gcloud services enable cloudfunctions.googleapis.com run.googleapis.com eventarc.googleapis.com \
   artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com \
-  pubsub.googleapis.com firestore.googleapis.com --quiet \
+  pubsub.googleapis.com firestore.googleapis.com cloudscheduler.googleapis.com --quiet \
   || { echo "✗ Servisler açılamadı. Firebase Console → ⚙ → Kullanım ve faturalandırma → Blaze planına geçin, sonra tekrar çalıştırın."; exit 1; }
 
 bind() { gcloud projects add-iam-policy-binding "$PROJECT" --member="$1" --role="$2" --condition=None --quiet >/dev/null && echo "  ✓ $2"; }
 
 echo "▶ GitHub hizmet hesabına fonksiyon yayın yetkileri: $SA"
 for ROLE in roles/cloudfunctions.admin roles/run.admin roles/eventarc.admin roles/artifactregistry.admin \
-            roles/cloudbuild.builds.editor roles/secretmanager.admin roles/iam.serviceAccountUser; do
+            roles/cloudbuild.builds.editor roles/secretmanager.admin roles/iam.serviceAccountUser roles/cloudscheduler.admin; do
   bind "serviceAccount:$SA" "$ROLE"
 done
 
