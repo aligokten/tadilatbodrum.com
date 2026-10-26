@@ -19,7 +19,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.26-6';
+export const APP_VERSION = '2026.10.26-7';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -644,6 +644,7 @@ function tabAnket(tb) {
       ks.forEach(k => { if (!j.requests.some(r => r.category === k)) { j.requests.push({ id: uid('rq'), category: k, room: '', text: `${catOf(k).t} işleri (anketten)`, priority: 'normal', status: 'kapsamda', t: Date.now() }); n++; } });
       save(); toast(n ? `${n} kategori taleplere eklendi` : 'Tüm kapsam zaten taleplerde');
     }
+    if (a === 'paper') return openPaperSurvey(j);
     if (a === 'print') printDoc(`<div class="pdoc">${docHeader(S.settings, 'Müşteri Anketi', `<div class="p-meta"><span>${esc(j.code)}</span><span>${esc(j.customer.name)}</span><span>${fmtDate(Date.now())}</span></div>`)}${surveyPrintHtml(j)}${docFooter()}</div>`, `Anket ${j.code}`);
   });
 }
@@ -854,7 +855,7 @@ function tabRolove(tb) {
   tb.innerHTML = `
     <div class="card plan-card">
       <div class="row-between"><h3>${gicon('ruler')}Çizimler <small class="muted">${list.length}</small></h3>
-        <button class="btn btn-primary btn-sm" data-newdw>${icon('plus')}Yeni çizim</button></div>
+        <div class="row wrap"><button class="btn btn-ghost btn-sm" data-sketch title="Kağıt üzerinde çizip ölçü almak için ızgaralı A4 altlık">${icon('ruler')}Çizim altlığı (A4)</button><button class="btn btn-primary btn-sm" data-newdw>${icon('plus')}Yeni çizim</button></div></div>
       <p class="muted small">Rölöve mevcut durumu gösterir (metraj ve teklif buradan alınır). Müşterinin isteklerine göre hazırlanan tasarım için "Proje" çizimi ekleyin; birden fazla seçenek de hazırlayabilirsiniz.</p>
       <div class="dw-list">${list.map(card).join('')}</div>
     </div>
@@ -865,6 +866,7 @@ function tabRolove(tb) {
     </div>`;
   hydratePhotos(tb);
   $('[data-newdw]', tb).onclick = () => newDrawingDialog(j);
+  $('[data-sketch]', tb).onclick = () => openSketch(j);
   $$('[data-dwa]', tb).forEach(b => b.onclick = async () => {
     const id = b.closest('[data-dw]').dataset.dw, d = drawingOf(j, id), a = b.dataset.dwa;
     if (a === 'jn') return printJoinery(j, d, d.plan);
@@ -1499,6 +1501,17 @@ async function printJoinery(j, dw, plan) {
   printDoc(`<div class="pdoc">${docHeader(S.settings, 'Doğrama Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Doğrama Listesi ${j.code}`);
 }
 
+/* kağıt formlar (A4): anket formu ve rölöve çizim altlığı */
+async function openPaperSurvey(j) {
+  const { surveyFormHtml } = await import('./forms.js');
+  const by = teamOf(S.settings).find(m => m.id === j?.kesifBy)?.name || '';
+  printDoc(`<div class="pdoc">${docHeader(S.settings, 'Müşteri Anket Formu', `<div class="p-meta"><span>${j ? esc(j.code) : 'Keşif formu'}</span><span>A4 · kağıt</span></div>`)}${surveyFormHtml(j, { person: by })}${docFooter()}</div>`, j ? `Anket formu ${j.code}` : 'Anket formu');
+}
+async function openSketch(j) {
+  const { sketchDialog } = await import('./forms.js');
+  return sketchDialog({ job: j, settings: S.settings, fname: j ? `${j.code}-rolove-altligi` : 'rolove-altligi' });
+}
+
 /* zemin sipariş listesi: mahaller malzemeye göre gruplanır (PDF / metin) */
 async function printFloorOrder(j, dw, plan) {
   if (!plan?.rooms?.length) return toast('Çizimde oda / mahal yok', 'err');
@@ -1608,6 +1621,11 @@ function settingsView() {
         <label>Kapanış mesajları — "Süreç bizde, keyfi sizde" sahnesi (her satır bir madde, en çok 5)<textarea class="inp" rows="5" data-f="videoLines"></textarea></label>
         <p class="muted small">Müşterinin çekincelerine (bütçe aşımı, gecikme, dağınıklık, muhatap bulamama…) açıkça yanıt veren kısa cümleler yazın. Yalnızca gerçekten sunduğunuz güvenceleri yazın; garanti süresi gibi taahhütler yazılı teklifle de uyumlu olmalı.</p>
       </div>
+      <div class="card" id="prForms">
+        <h3>${gicon('print')}Basılı formlar <small class="muted">(A4, yazıcıdan)</small></h3>
+        <p class="muted small">Keşfe giderken yanınıza alabileceğiniz kağıt formlar. İş sayfasındaki Anket ve Rölöve sekmelerinden, müşteri bilgileri önceden yazılı olarak da alınabilir.</p>
+        <div class="row wrap"><button class="btn btn-ghost btn-sm" data-pf="survey">${icon('file')}Müşteri anket formu</button><button class="btn btn-ghost btn-sm" data-pf="sketch">${icon('ruler')}Rölöve çizim altlığı</button></div>
+      </div>
       <div class="card rm-set" id="rmSet"></div>
     </div>
     <div class="card">
@@ -1648,6 +1666,8 @@ function settingsView() {
   const persist = debounce(() => S.be.saveSettings(S.settings).then(() => toast('Ayarlar kaydedildi')).catch(e => toast(e.message, 'err')), 900);
   bindFields(view(), st, persist);
   renderRemindSettings($('#rmSet'), st, persist);
+  $('[data-pf="survey"]').onclick = () => openPaperSurvey(null);
+  $('[data-pf="sketch"]').onclick = () => openSketch(null);
   const drawStamp = () => {
     $('#stPrev').innerHTML = st.company.stamp ? `<img src="${st.company.stamp}" alt="Kaşe">` : '<span class="muted small">Kaşe yüklenmedi</span>';
     $('[data-stamp-del]').hidden = !st.company.stamp;

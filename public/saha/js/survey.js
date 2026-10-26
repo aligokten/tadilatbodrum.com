@@ -148,6 +148,7 @@ export function renderSurvey(root, job, onChange) {
       <div class="survey-actions">
         <button class="btn btn-ghost" data-act="toRequests">${icon('list')}Kapsamı taleplere aktar</button>
         <button class="btn btn-ghost" data-act="print">${icon('print')}Yazdır / PDF</button>
+        <button class="btn btn-ghost" data-act="paper" title="Müşteriyle yüz yüze doldurmak için boş A4 anket formu">${icon('file')}Kağıt form (PDF)</button>
       </div>`;
   };
   draw();
