@@ -687,11 +687,11 @@ export class PlanEditor {
     const P = this.plan, st = arcStats(ws), t = ws[0].t || P.meta.wallT, hh = ws[0].h || P.meta.wallH;
     const ops = P.openings.filter(o => ws.some(w => w.id === o.wallId)).length;
     this.insp.innerHTML = `<h4>Yay duvar</h4>
+      <div class="row wrap arc-acts"><button class="btn btn-xs btn-ghost" data-ac="flip" title="Yayı kirişin diğer tarafına yansıt">${icon('rotate')}Ters yöne çevir</button><button class="btn btn-xs btn-ghost" data-ac="copy">${icon('copy')}Kopyala</button><button class="btn btn-xs btn-danger" data-ac="del">${icon('trash')}Yayı sil</button></div>
       ${st ? `<div class="mtable"><div><span>Yarıçap (eksen)</span><b>${fmtNum(st.r, 1)} cm</b></div><div><span>Yay açısı</span><b>${fmtNum(st.deg, 1)}°</b></div><div><span>Yay uzunluğu</span><b>${fmtNum(st.len, 1)} cm</b></div><div><span>Kiriş</span><b>${fmtNum(st.chord, 1)} cm</b></div><div><span>Duvar parçası</span><b>${ws.length}</b></div></div>
       <label>Ok yüksekliği<div class="inp-unit sm"><input type="number" inputmode="decimal" step="1" min="1" data-ak="sag" value="${+Math.abs(this.arcPts(ws)?.h ?? st.sag).toFixed(1)}"><span>cm</span></div></label>` : ''}
       <label>Kalınlık<div class="inp-unit sm"><input type="number" inputmode="decimal" step="1" data-ak="t" value="${t}"><span>cm</span></div></label>
       <label>Yükseklik<div class="inp-unit sm"><input type="number" inputmode="decimal" step="1" data-ak="h" value="${hh}"><span>cm</span></div></label>
-      <div class="row wrap"><button class="btn btn-xs btn-ghost" data-ac="flip" title="Yayı kirişin diğer tarafına yansıt">${icon('rotate')}Ters yöne çevir</button><button class="btn btn-xs btn-ghost" data-ac="copy">${icon('copy')}Kopyala</button><button class="btn btn-xs btn-danger" data-ac="del">${icon('trash')}Yayı sil</button></div>
       <p class="muted small">Yay, düz duvar parçalarının zinciri olarak çizilir; kapı ve pencereyi parçaların üzerine ekleyebilirsiniz${ops ? ` (${ops} açıklık var)` : ''}. Yayı tutup sürükleyerek taşıyın. Şeklini değiştirmek için uçlardaki ve ortadaki tutamaçları sürükleyin ya da ok yüksekliğini yazın; ters yöne çevirebilir, silebilirsiniz.</p>`;
     this.insp.onchange = e => {
       const k = e.target.dataset?.ak; if (!k) return;
@@ -1607,6 +1607,7 @@ export class PlanEditor {
     const num = (k, label, v, unit = 'cm', step = 1) => `<label>${label}<div class="inp-unit sm"><input type="number" inputmode="decimal" step="${step}" data-k="${k}" value="${v}"><span>${unit}</span></div></label>`;
     let body = '';
     if (this.msel.length) {
+      this.el.classList.add('has-sel');   // telefon / tablette alt panel çoklu seçimde de açılsın
       const arcW = this.arcSelWalls();
       if (arcW) { this.arcInsp(arcW); return; }
       const cnt = k => this.msel.filter(x => x.kind === k).length;
