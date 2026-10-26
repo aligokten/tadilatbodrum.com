@@ -264,6 +264,20 @@ TELEGRAM_BOT_TOKEN=123456789:AA... TELEGRAM_CHAT_ID=123456789 NTFY_TOPIC=tbodrum
 
 ---
 
+**h) Günlük keşif özeti (Telegram)** — aynı bot her akşam **19:00**'da yarınki, her sabah **08:00**'de
+bugünkü keşifleri gönderir (sabah keşif yoksa mesaj gelmez). Her keşif ayrı mesajdır: saat, müşteri,
+telefon, adres, keşfe gidecek kişi ve randevu onayının gönderilip gönderilmediği. Altındaki düğmeler:
+- **💬 Müşteriye hatırlatma** — WhatsApp, saha uygulamasındaki şablonla dolu mesaj (akşam "1 gün önce",
+  sabah "keşif günü"),
+- **👷 Ekibe iş bilgisi** — keşfe gidecek kişiye müşteri, adres ve konum,
+- **🧭 Yol tarifi**.
+
+Ekip ve şablonlar saha uygulamasında *Ayarlar → Keşif ekibi ve randevu hatırlatma*'dan, keşfe gidecek
+kişi iş sayfasından seçilir. Zamanlayıcı (Cloud Scheduler) için (b)'deki komutu **bir kez daha**
+çalıştırın (zararsızdır; zamanlayıcı servisini ve yetkisini ekler), sonra **Actions → Keşif bildirimi
+fonksiyonu → Run workflow**. "Günlük keşif özetini şimdi gönder" işaretliyse yarınki keşiflerin özeti
+hemen Telegram'a gelir.
+
 ## 7) Windows uygulaması (TadilatBodrum Saha .exe)
 
 Windows uygulaması `desktop/` klasöründedir. İçeriği canlı siteden (`kesif.tadilatbodrum.com`)

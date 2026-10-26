@@ -146,7 +146,8 @@ export function renderRemindSettings(el, st, persist) {
       <h4>Mesaj şablonları</h4>
       <p class="muted small">Kullanılabilir alanlar (dokununca imlecin olduğu yere eklenir): ${REMIND_VARS.map(([k, t]) => `<button class="chip xs" data-var="${k}" title="${t}">{${k}}</button>`).join(' ')}. Değeri boş kalan alanların satırı mesajdan çıkarılır.</p>
       ${REMIND_KINDS.map(K => `<label>${K.t} <small class="muted">— ${K.d}</small><textarea class="inp rm-tpl" rows="7" data-tpl="${K.k}">${esc(remindTpl(st, K.k))}</textarea></label>`).join('')}
-      <button class="btn btn-ghost btn-sm" data-treset>Şablonları varsayılana döndür</button>`;
+      <button class="btn btn-ghost btn-sm" data-treset>Şablonları varsayılana döndür</button>
+      <p class="muted small">Telegram günlük özeti: bildirim botu her akşam 19:00'da yarınki, sabah 08:00'de bugünkü keşifleri bu şablonlarla hazırlanmış WhatsApp düğmeleriyle gönderir (bulut modunda).</p>`;
     let last = null;
     $$('[data-tpl]', el).forEach(t => { t.onfocus = () => { last = t; }; t.oninput = () => { st.remind[t.dataset.tpl] = t.value; persist(); }; });
     $$('[data-var]', el).forEach(b => b.onclick = e => {
