@@ -4,6 +4,7 @@
 import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } from './store.js';
 import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, gicon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
+import { LOGO } from './brand.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
@@ -17,7 +18,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.24-6';
+export const APP_VERSION = '2026.10.26-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -153,13 +154,23 @@ function shell() {
     </aside>
     ${S.be.demo ? `<div class="demo-bar">${icon('play')}<b>DEMO</b><span>Örnek verilerle deneme hesabı · kayıtlar yalnızca bu cihazda</span></div>` : ''}
     <main id="view"></main>
-    <nav class="bottom-nav">
-      <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
-      <button data-new class="fab">${icon('plus')}</button>
-      <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
+    <nav class="bottom-nav" aria-label="Ana menü">
+      <a href="#/" class="bn-brand" aria-label="TadilatBodrum — işler"><svg viewBox="52 72 170 150" aria-hidden="true"><path fill="${LOGO.cyan}" d="${LOGO.c}"/><path fill="${LOGO.orange}" d="${LOGO.o}"/></svg></a>
+      <div class="bn-items">
+        <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
+        <button data-search>${gicon('search')}<span>Ara</span></button>
+        <button data-new class="bn-new"><i>${icon('plus')}</i><span>Yeni iş</span></button>
+        <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
+      </div>
     </nav>
   </div>`;
   $$('[data-new]', app).forEach(b => b.onclick = newJobDialog);
+  // Ara: işler listesindeki arama kutusuna git
+  $('[data-search]', app).onclick = () => {
+    const go = () => { const q = $('#q'); if (!q) return false; q.scrollIntoView({ block: 'center', behavior: 'smooth' }); q.focus({ preventScroll: true }); return true; };
+    if (location.hash.replace(/^#\/?/, '') && location.hash !== '#/') { location.hash = '#/'; let n = 0; const t = setInterval(() => { if (go() || ++n > 30) clearInterval(t); }, 100); }
+    else go();
+  };
   $('[data-logout]', app).onclick = async () => {
     await flushSave();
     await S.be.signOut();
