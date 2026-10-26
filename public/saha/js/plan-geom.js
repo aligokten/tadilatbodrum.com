@@ -83,16 +83,16 @@ export function roomMetrics(plan, room) {
   const area = Math.abs(polyArea(room.pts)) / 1e4;
   const perim = polyPerim(room.pts) / 100;
   const h = (room.h || plan.meta.wallH) / 100;
-  let openA = 0;
+  let openA = 0, doorW = 0;
   for (const o of plan.openings) {
     const w = plan.walls.find(x => x.id === o.wallId); if (!w) continue;
     const c = V.add(w.a, V.mul(wallDir(w), o.pos));
     let near = false;
     for (let i = 0; i < room.pts.length && !near; i++)
       near = projSeg(c, room.pts[i], room.pts[(i + 1) % room.pts.length]).d <= (w.t || plan.meta.wallT) * 0.75 + 2;
-    if (near) openA += (o.w / 100) * Math.min(h, (o.h || 0) / 100);
+    if (near) { openA += (o.w / 100) * Math.min(h, (o.h || 0) / 100); if (o.type !== 'window') doorW += o.w / 100; }
   }
-  return { area, perim, h, wallArea: Math.max(0, perim * h - openA), ceil: area };
+  return { area, perim, h, wallArea: Math.max(0, perim * h - openA), ceil: area, doorW };
 }
 
 export function planMetrics(plan) {
