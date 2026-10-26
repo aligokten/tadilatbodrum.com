@@ -166,8 +166,18 @@ export function itemOutline(it) {
 /* duvar uçlarının uzatması: başka bir duvarla ortak uçta köşeyi doldurmak için yarım kalınlık,
  * serbest uçta 0 — duvar işaretlenen noktada biter, taşmaz */
 export function wallExt(plan, w) {
-  const t = (w.t || plan.meta.wallT) / 2, shared = p => plan.walls.some(x => x !== w && (V.eq(x.a, p) || V.eq(x.b, p)));
-  return { a: shared(w.a) ? t : 0, b: shared(w.b) ? t : 0 };
+  const t = (w.t || plan.meta.wallT) / 2;
+  const nb = p => plan.walls.find(x => x !== w && (V.eq(x.a, p) || V.eq(x.b, p)));
+  const ext = (p, away) => {
+    const x = nb(p); if (!x) return 0;
+    if (w.arc && x.arc && x.arc.id === w.arc.id) {   // aynı yayın bitişik parçası: dış kenardaki kama boşluğunu dolduran gönye uzatması
+      const dx = V.eq(x.a, p) ? wallDir(x) : V.mul(wallDir(x), -1), c = Math.max(-1, Math.min(1, V.dot(away, dx)));
+      return Math.min(t, t * Math.tan((Math.PI - Math.acos(c)) / 2));
+    }
+    return t;
+  };
+  const u = wallDir(w);
+  return { a: ext(w.a, u), b: ext(w.b, V.mul(u, -1)) };
 }
 /* duvarın çizim çizgisi: yüzden çizildiyse (w.face = ±1, eksene göre normal yönü) işaretlenen yüz, değilse eksen.
  * plan verilirse köşede, yine yüzden çizilmiş komşu duvarla yüz çizgilerinin kesişimi alınır (çizilen köşe noktası) */
@@ -181,4 +191,46 @@ export function wallRef(w, T, plan = null) {
     r[e] = V.add(L.p, V.mul(L.u, V.cross(V.sub(M.p, L.p), M.u) / den));
   }
   return r;
+}
+
+/* ── yay duvar: 3 noktadan geçen yay (p1 başlangıç, p2 bitiş, p3 yay üzerinde) ── */
+/* { c, r, a1, sweep, len } — sweep işaretli açı (rad); noktalar aynı doğrultudaysa null */
+export function arcThrough(p1, p2, p3) {
+  const ax = p1.x, ay = p1.y, bx = p3.x, by = p3.y, cx = p2.x, cy = p2.y;
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-6) return null;
+  const A = ax * ax + ay * ay, B = bx * bx + by * by, C = cx * cx + cy * cy;
+  const c = { x: (A * (by - cy) + B * (cy - ay) + C * (ay - by)) / d, y: (A * (cx - bx) + B * (ax - cx) + C * (bx - ax)) / d };
+  const r = V.dist(c, p1), TAU = Math.PI * 2, ang = p => Math.atan2(p.y - c.y, p.x - c.x), norm = a => ((a % TAU) + TAU) % TAU;
+  const a1 = ang(p1), d2 = norm(ang(p2) - a1), m = norm(ang(p3) - a1);
+  const sweep = m < d2 ? d2 : d2 - TAU;
+  return { c, r, a1, sweep, len: Math.abs(sweep) * r };
+}
+/* yayı parçalı duvar köşelerine böler (kiriş sapması ~0,2 cm). off: yarıçap ofseti (yüz çizimi için kalınlık / 2) */
+export function arcWallVerts(p1, p2, p3, off = 0) {
+  const chord = V.dist(p1, p2);
+  if (chord < 5 || Math.abs(V.cross(V.sub(p2, p1), V.sub(p3, p1))) / chord < 1) return null;   // çok kısa ya da düz
+  const g = arcThrough(p1, p2, p3); if (!g) return null;
+  const r2 = g.r + off; if (r2 < 5) return null;
+  const step = 2 * Math.acos(Math.max(0, 1 - 0.2 / r2));
+  const n = Math.max(2, Math.min(120, Math.ceil(Math.abs(g.sweep) / (step || 0.05))));
+  const rd = q => ({ x: +q.x.toFixed(2), y: +q.y.toFixed(2) });
+  const pts = Array.from({ length: n + 1 }, (_, i) => { const a = g.a1 + g.sweep * i / n; return rd({ x: g.c.x + r2 * Math.cos(a), y: g.c.y + r2 * Math.sin(a) }); });
+  if (!off) { pts[0] = rd(p1); pts[n] = rd(p2); }
+  return { ...g, pts, n, off };
+}
+/* chord ortası + kirişe dik ok yüksekliği h (işaret s: tarafı seçer) → yay üzerindeki nokta */
+export function arcApex(p1, p2, h, s = 1) {
+  const u = V.norm(V.sub(p2, p1)), n = { x: -u.y, y: u.x }, m = V.lerp(p1, p2, 0.5);
+  return V.add(m, V.mul(n, h * (s < 0 ? -1 : 1)));
+}
+/* aynı yaya ait duvarlar (arc.i sırasıyla) → köşe dizisi ve ölçüler */
+export const arcChain = walls => { const ws = [...walls].sort((x, y) => (x.arc?.i || 0) - (y.arc?.i || 0)); return { ws, v: [ws[0].a, ...ws.map(w => w.b)] }; };
+export function arcStats(walls) {
+  if (!walls.length) return null;
+  const { v } = arcChain(walls); if (v.length < 3) return null;
+  const g = arcThrough(v[0], v.at(-1), v[Math.floor(v.length / 2)]); if (!g) return null;
+  const chord = V.dist(v[0], v.at(-1)), u = V.norm(V.sub(v.at(-1), v[0])), nrm = { x: -u.y, y: u.x };
+  return { ...g, v, n: walls.length, chord, len: walls.reduce((s, w) => s + wallLen(w), 0), deg: Math.abs(g.sweep) * 180 / Math.PI,
+    sag: Math.max(...v.map(q => Math.abs(V.dot(V.sub(q, v[0]), nrm)))), mid: v[Math.floor(v.length / 2)] };
 }

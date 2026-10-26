@@ -64,6 +64,7 @@ const P = {
   box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
   award: '<circle cx="12" cy="8" r="6"/><circle cx="12" cy="8" r="2.5"/><path d="M8.2 13 7 22l5-3 5 3-1.2-9"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  arcw: '<path d="M4 20a16 16 0 0 1 16-16" stroke-width="3"/><path d="M3 16v4h4M16 3h4v4"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   flash: '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
