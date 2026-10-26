@@ -1522,6 +1522,7 @@ export class PlanEditor {
     return `<h4>${o.floor === 'seramik' ? 'Seramik' : 'Karo'} döşeme hesabı</h4>
       <label>Karo boyutu<select class="inp sm" data-k="tile.s">${TILE_SIZES.map(z => opt(`${z[0]}x${z[1]}`, t.s, `${z[0]} × ${z[1]} cm`)).join('')}${opt('ozel', isStd ? '' : 'ozel', 'Özel ölçü…')}</select></label>
       ${isStd ? '' : `<div class="grid2"><label>En<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.w" value="${t.w}"><span>cm</span></div></label><label>Boy<div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="tile.l" value="${t.l}"><span>cm</span></div></label></div>`}
+      <label>Ürün / seri adı<input class="inp sm" data-k="tile.name" value="${esc(t.name || '')}" placeholder="sipariş listesinde gruplanır"></label>
       <label>Döşeme şekli<select class="inp sm" data-k="tile.pat">${TILE_PATTERNS.filter(p => !p.rect || !sq).map(p => opt(p.k, L.t.pat, p.t)).join('')}</select></label>
       <div class="grid2"><label>Derz boşluğu<select class="inp sm" data-k="tile.g">${TILE_JOINTS.map(g => opt(g, t.g, fmtNum(g, 1) + ' mm')).join('')}</select></label>
       <label>Başlangıç<select class="inp sm" data-k="tile.start">${opt('orta', t.start, 'Odanın ortası')}${opt('kose', t.start, 'Köşeden')}</select></label></div>

@@ -18,7 +18,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.26-2';
+export const APP_VERSION = '2026.10.26-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -817,6 +817,7 @@ function tabRolove(tb) {
           ${has ? `<a class="btn btn-ghost btn-sm" href="${url}&v=3d">${icon('cube')}3D</a><a class="btn btn-ghost btn-sm" href="${url}&v=3d&r=1">${icon('sparkle')}Render</a>` : ''}
           ${d.main && !has ? `<a class="btn btn-ghost btn-sm" href="${url}&import=1">${icon('upload')}DXF / PDF aktar</a><button class="btn btn-ghost btn-sm" data-tpl>${icon('layers')}Örnek plan</button>` : ''}
           ${d.plan?.openings?.length ? `<button class="btn btn-ghost btn-sm" data-dwa="jn" title="Kapı / pencere listesi, ölçülü (PDF)">${icon('print')}Doğrama listesi</button>` : ''}
+          ${d.plan?.rooms?.length ? `<button class="btn btn-ghost btn-sm" data-dwa="fl" title="Zemin kaplaması malzemelerine göre sipariş listesi (PDF)">${icon('layers')}Zemin sipariş listesi</button>` : ''}
           ${has ? `<button class="btn btn-ghost btn-sm" data-dwa="copy" title="Kopyasını oluştur">${icon('copy')}</button>` : ''}
           ${d.main ? '' : `<button class="btn btn-ghost btn-sm" data-dwa="ren" title="Yeniden adlandır">${icon('edit')}</button><button class="btn btn-ghost btn-sm danger-t" data-dwa="del" title="Sil">${icon('trash')}</button>`}
         </div>
@@ -840,6 +841,7 @@ function tabRolove(tb) {
   $$('[data-dwa]', tb).forEach(b => b.onclick = async () => {
     const id = b.closest('[data-dw]').dataset.dw, d = drawingOf(j, id), a = b.dataset.dwa;
     if (a === 'jn') return printJoinery(j, d, d.plan);
+    if (a === 'fl') return printFloorOrder(j, d, d.plan);
     if (a === 'del') {
       if (!await confirmDlg(`"${d.name}" çizimi silinecek.`)) return;
       j.drawings = j.drawings.filter(x => x.id !== id); logEvt(`Çizim silindi: ${d.name}`);
@@ -1078,6 +1080,7 @@ function planScreen() {
       ['etiket', 'Etiket', 'Parça etiketleri (10 × 6 cm PDF)', 'Dolap parçaları ve kapı / pencereler için QR kodlu, barkodlu etiketler — her sayfa bir etiket'],
       ['cnc', 'Mutfak / dolap', 'CNC kesim şablonu (DXF)', 'Çizimdeki tüm mutfak ve dolapların parçaları levhalara yerleşik; menteşe ve raf pimi delikleri, kenar bandı işaretli'],
       ['dograma', 'Liste', 'Doğrama listesi (PDF)', 'Kapı ve pencereler: poz numaraları, ölçülü görünüşler, imalat ölçüleri, adet ve m²'],
+      ['zemin', 'Liste', 'Zemin sipariş listesi (PDF)', 'Zemin kaplamaları malzemeye göre: karo adedi ve kutu, parke / laminat paketi, yapıştırıcı, derz dolgu, şilte, süpürgelik'],
       ['dae', '3D model', 'SketchUp (.dae)', 'SketchUp: Dosya → İçe aktar → Collada; malzeme renkleriyle'],
       ['3ds', '3D model', '3DS', '3ds Max, SketchUp Pro, Rhino, Blender (cm)'],
       ['stl', '3D model', 'STL', '3D yazıcı / CAD (mm)'],
@@ -1091,6 +1094,7 @@ function planScreen() {
     try {
       if (k === 'png') return savePng();
       if (k === 'dograma') return printJoinery(j, dw, S.editor.plan);
+      if (k === 'zemin') return printFloorOrder(j, dw, S.editor.plan);
       if (k === 'etiket') {
         const cabs = S.editor.plan.items.filter(it => it.type === 'cabinet' && it.cab).map((it, i) => ({ cab: it.cab, label: it.label || `Dolap ${i + 1}` }));
         const off = new Set(j.jnOff?.[dw.id] || []), jnOnly = off.size ? new Set(S.editor.plan.openings.map(o => o.id).filter(id => !off.has(id))) : null;
@@ -1466,6 +1470,53 @@ async function printJoinery(j, dw, plan) {
   const name = dw.main ? 'Rölöve (mevcut durum)' : dw.name;
   const body = joineryHtml(plan, { gap, only: sel, keyPlan: key ? ov => planImageUrl(plan, 900, 560, ov) : null });
   printDoc(`<div class="pdoc">${docHeader(S.settings, 'Doğrama Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Doğrama Listesi ${j.code}`);
+}
+
+/* zemin sipariş listesi: mahaller malzemeye göre gruplanır (PDF / metin) */
+async function printFloorOrder(j, dw, plan) {
+  if (!plan?.rooms?.length) return toast('Çizimde oda / mahal yok', 'err');
+  const F = await import('./floororder.js'), { floorOf } = await import('./catalog.js');
+  const off = new Set(j.flOff?.[dw.id] || []), sel = new Set(plan.rooms.map(r => r.id).filter(id => !off.has(id)));
+  const cfg = JSON.parse(JSON.stringify(j.floorCfg || {}));
+  const mats = [...new Set(plan.rooms.map(r => r.floor || 'parke'))];
+  const other = mats.filter(k => F.FLOOR_MAT[k]);
+  const numIn = (k, f, v, u, st = 'any') => `<label>${f}<div class="inp-unit sm"><input type="number" inputmode="decimal" step="${st}" min="0" data-c="${k}" value="${v}"><span>${u}</span></div></label>`;
+  const matBox = k => { const c = F.matCfg(k, cfg); return `<div class="fo-mat" data-m="${k}"><b>${esc(floorOf(k).t)}</b>
+    <label>Ürün / seri<input class="inp sm" data-c="name" value="${esc(c.name)}" placeholder="isteğe bağlı"></label>
+    <div class="grid3">${numIn('fire', 'Fire', c.fire, '%', 1)}${c.packT === 'paket' ? numIn('pack', 'Paket', c.pack, 'm²') : ''}${c.kgm2 ? numIn('kgm2', 'Sarfiyat', c.kgm2, 'kg/m²') + numIn('bag', 'Torba', c.bag, 'kg', 1) : ''}</div></div>`; };
+  const row = r => `<label class="jn-row"><input type="checkbox" data-r="${r.id}" ${sel.has(r.id) ? 'checked' : ''}><span><b>${esc(r.name)}</b> <small>${fmtNum(Math.abs(planMetrics({ ...plan, rooms: [r] }).floor))} m²</small><br><small class="muted">${esc(floorOf(r.floor).t)}${r.tile ? ` · ${fmtNum(r.tile.w, 1)} × ${fmtNum(r.tile.l, 1)}${r.tile.name ? ' · ' + esc(r.tile.name) : ''}` : ''}</small></span></label>`;
+  const read = el => { $$('.fo-mat', el).forEach(b => { const k = b.dataset.m, c = (cfg[k] ||= {}); $$('[data-c]', b).forEach(i => { c[i.dataset.c] = i.type === 'number' ? Math.max(0, +i.value || 0) : i.value.trim(); }); }); };
+  const summary = el => { read(el); const g = F.floorOrderData(plan, { only: sel, cfg }); $('.fo-sum', el).innerHTML = g.length ? `<table class="p-table sm"><tbody>${F.orderLines(g).map(([c, t, n, q, o]) => `<tr${c ? '' : ' class="sub"'}><td><b>${c}</b></td><td>${esc(t)}${n ? `<br><small class="muted">${esc(n)}</small>` : ''}</td><td class="r">${o}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Mahal seçin.</p>'; };
+  const r = await modal({ title: 'Zemin sipariş listesi', wide: true, body: `
+    <p class="muted small">${esc(dw.main ? 'Rölöve (mevcut durum)' : dw.name)} — listeye girecek mahalleri seçin. Seramik / karo mahallerinde boyut, döşeme şekli ve derz, odanın "döşeme hesabı" bölümünden alınır; aynı malzeme ve ürün tek kalemde toplanır.</p>
+    <div class="jn-pick">
+      <div class="jn-side"><div class="row wrap jn-quick"><button class="btn btn-xs btn-ghost" data-q="all">Tümü</button><button class="btn btn-xs btn-ghost" data-q="none">Hiçbiri</button>${mats.length > 1 ? mats.map(k => `<button class="btn btn-xs btn-ghost" data-q="${k}">Yalnız ${esc(floorOf(k).t.toLocaleLowerCase('tr'))}</button>`).join('') : ''}</div>
+        <div class="jn-list">${plan.rooms.map(row).join('')}</div></div>
+      <div class="jn-side">${other.map(matBox).join('')}<div class="fo-sum"></div></div>
+    </div>
+    <label class="check"><input type="checkbox" id="foKey" checked> Anahtar plan (malzeme kodları plan üzerinde)</label>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'txt', t: 'Metni kopyala', icon: 'copy', validate: () => sel.size > 0 || (toast('En az bir mahal seçin', 'err'), false) }, { k: 'ok', t: 'PDF hazırla', cls: 'btn-primary', icon: 'print', validate: () => sel.size > 0 || (toast('En az bir mahal seçin', 'err'), false) }],
+    onOpen: el => {
+      const sync = () => { $$('[data-r]', el).forEach(x => x.checked = sel.has(x.dataset.r)); summary(el); };
+      el.addEventListener('change', e => { const t = e.target; if (t.dataset.r) t.checked ? sel.add(t.dataset.r) : sel.delete(t.dataset.r); sync(); });
+      el.addEventListener('input', e => { if (e.target.dataset.c) summary(el); });
+      el.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (!q) return; sel.clear(); plan.rooms.filter(x => q.dataset.q === 'all' || (x.floor || 'parke') === q.dataset.q).forEach(x => sel.add(x.id)); sync(); });
+      sync();
+    } });
+  if (!r || r.k === 'no') return;
+  read(r.el);
+  const offNow = plan.rooms.map(x => x.id).filter(id => !sel.has(id));
+  (j.flOff ||= {})[dw.id] = offNow; j.floorCfg = cfg; save();
+  const groups = F.floorOrderData(plan, { only: sel, cfg }), name = dw.main ? 'Rölöve (mevcut durum)' : dw.name;
+  if (r.k === 'txt') {
+    const strip = x => String(x).replace(/<[^>]+>/g, '');
+    const txt = [`Zemin sipariş listesi — ${j.code}${j.customer.name ? ' · ' + j.customer.name : ''} (${name})`, ...F.orderLines(groups).map(([c, t, n, q, o]) => `${c ? c + ' ' : '   – '}${t}${n ? ' (' + n + ')' : ''}: ${strip(o)}${c ? ' — ' + q : ''}`)].join('\n');
+    try { await navigator.clipboard.writeText(txt); toast('Sipariş listesi kopyalandı'); } catch { await modal({ title: 'Sipariş listesi', body: `<textarea class="inp" rows="12" style="width:100%">${esc(txt)}</textarea>`, actions: [{ k: 'ok', t: 'Kapat' }] }); }
+    return;
+  }
+  const key = $('#foKey', r.el).checked;
+  const body = F.floorOrderHtml(plan, groups, { keyPlan: key ? ov => planImageUrl(plan, 900, 560, ov) : null });
+  printDoc(`<div class="pdoc">${docHeader(S.settings, 'Zemin Kaplaması Sipariş Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Zemin Siparis ${j.code}`);
 }
 
 async function printReport() {
