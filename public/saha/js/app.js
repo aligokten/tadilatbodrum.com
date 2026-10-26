@@ -5,6 +5,7 @@ import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } 
 import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, gicon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { LOGO } from './brand.js';
+import { renderRemindCard, renderRemindSettings, remindDialog, dueAll, REMIND_KINDS, team as teamOf } from './remind.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
@@ -18,7 +19,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.26-3';
+export const APP_VERSION = '2026.10.26-4';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -296,12 +297,21 @@ addEventListener('beforeunload', () => save.flush());
 function logEvt(text) { S.job.log.unshift({ t: Date.now(), text }); save(); }
 
 /* ═════════ panel (iş listesi) ═════════ */
+/* "yarın 14:30" / "bugün" / "28 Ekim Salı 10:00" */
+function remindWhen(j) {
+  const d = new Date(j.kesifDate.length > 10 ? j.kesifDate : j.kesifDate + 'T00:00'), t = new Date(), k = x => x.toDateString();
+  const tm = new Date(t); tm.setDate(t.getDate() + 1);
+  const day = k(d) === k(t) ? 'Bugün' : k(d) === k(tm) ? 'Yarın' : d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' });
+  return `${day}${j.kesifDate.length > 10 ? ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : ''} · ${j.customer.district || j.code}`;
+}
+
 function dashboard() {
   const st = sessionStorage.getItem('tb-filter') || 'aktif';
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = S.jobs.filter(j => j.kesifDate && j.kesifDate.slice(0, 10) >= today && !['iptal', 'teslim'].includes(j.status))
     .sort((a, b) => a.kesifDate.localeCompare(b.kesifDate)).slice(0, 5);
   const cnt = k => S.jobs.filter(j => j.status === k).length;
+  const due = dueAll(S.jobs, S.settings);
   const pipeline = S.jobs.filter(j => ['teklif', 'onay'].includes(j.status) && j.quote).reduce((s, j) => s + quoteTotals(j.quote).total, 0);
   view().innerHTML = `
     <header class="dash-hero">
@@ -320,6 +330,9 @@ function dashboard() {
       ${(() => { const d = S.jobs.filter(j => j.feedback?.status === 'done'); if (!d.length) return ''; const avg = d.reduce((s, j) => s + fbScore(j.feedback.answers), 0) / d.length;
         return `<button class="stat wide" data-reviews><span class="gi-wrap">${gicon('star', 'lg')}</span><b>${fmtNum(avg, 1)} ★</b><small>Müşteri memnuniyeti · ${d.length} değerlendirme</small></button>`; })()}
     </section>
+    ${due.length ? `<section class="card rm-due"><h3>${gicon('calendar')}Gönderilecek hatırlatmalar <small class="muted">${due.reduce((s, x) => s + x.ks.length, 0)}</small></h3>${due.map(({ j, ks }) => `
+      <div class="rd-row" data-j="${j.id}"><a href="#/is/${j.id}"><b>${esc(j.customer.name || j.code)}</b><small>${esc(remindWhen(j))}</small></a>
+        <div class="rd-ks">${ks.map(k => `<button class="btn btn-xs ${k === 'team' ? 'btn-ghost' : 'btn-primary'}" data-rk="${k}">${icon(k === 'team' ? 'user' : 'bell')}${esc(REMIND_KINDS.find(x => x.k === k).t)}</button>`).join('')}</div></div>`).join('')}</section>` : ''}
     ${upcoming.length ? `<section class="card upcoming"><h3>${gicon('calendar')}Yaklaşan keşifler</h3>${upcoming.map(j => `
       <a href="#/is/${j.id}" class="up-row"><span class="up-date"><b>${new Date(j.kesifDate).getDate()}</b>${new Date(j.kesifDate).toLocaleDateString('tr-TR', { month: 'short' })}</span>
       <span><b>${esc(j.customer.name || 'İsimsiz')}</b><small>${esc(j.customer.district || '')} · ${j.kesifDate.length > 10 ? new Date(j.kesifDate).toLocaleTimeString('tr-TR', { timeStyle: 'short' }) : ''}</small></span>${icon('chevR')}</a>`).join('')}</section>` : ''}
@@ -330,6 +343,15 @@ function dashboard() {
       </div>
     </section>
     <section class="jobs" id="jobs"></section>`;
+  $$('.rd-row [data-rk]').forEach(b => b.onclick = async () => {
+    const j = S.jobs.find(x => x.id === b.closest('.rd-row').dataset.j); if (!j) return;
+    const ok = await remindDialog(j, S.settings, b.dataset.rk, { onSent: t => j.log.unshift({ t: Date.now(), text: t }) });
+    if (!ok) return;
+    j.updatedAt = Date.now();
+    await S.be.saveJob(j).catch(e => toast(e.message, 'err'));
+    if (S.job?.id === j.id) Object.assign(S.job, { remind: structuredClone(j.remind), log: structuredClone(j.log) });
+    dashboard();
+  });
   const draw = () => {
     const q = $('#q').value.toLocaleLowerCase('tr'), f = sessionStorage.getItem('tb-filter') || 'aktif';
     sessionStorage.setItem('tb-q', $('#q').value);
@@ -378,6 +400,7 @@ async function newJobDialog() {
       <label>Telefon<input class="inp" id="nj-p" type="tel" inputmode="tel" placeholder="05xx xxx xx xx"></label>
       <label>Bölge<input class="inp" id="nj-d" list="dl-d"></label>
       <label>Keşif tarihi / saati<input class="inp" id="nj-k" type="datetime-local"></label>
+      ${teamOf(S.settings).length ? `<label>Keşfe gelecek kişi<select class="inp" id="nj-b"><option value="">—</option>${teamOf(S.settings).map(m => `<option value="${m.id}">${esc(m.name)}${m.title ? ' · ' + esc(m.title) : ''}</option>`).join('')}</select></label>` : ''}
     </div>
     <label>Adres<textarea class="inp" id="nj-a" rows="2"></textarea></label>
     <label>Talep özeti<textarea class="inp" id="nj-s" rows="2" placeholder="örn. Banyo ve mutfak komple yenileme, salon boya"></textarea></label>
@@ -388,7 +411,7 @@ async function newJobDialog() {
   const n = S.jobs.filter(j => j.code?.startsWith(pre)).length + 1;
   const j = newJob(`${pre}-${String(n).padStart(3, '0')}`);
   Object.assign(j.customer, { name: $('#nj-n', r.el).value.trim(), phone: $('#nj-p', r.el).value.trim(), district: $('#nj-d', r.el).value.trim(), address: $('#nj-a', r.el).value.trim() });
-  j.kesifDate = $('#nj-k', r.el).value; j.summary = $('#nj-s', r.el).value.trim();
+  j.kesifDate = $('#nj-k', r.el).value; j.summary = $('#nj-s', r.el).value.trim(); j.kesifBy = $('#nj-b', r.el)?.value || '';
   if (j.kesifDate) j.status = 'kesif';
   if (j.summary) j.requests.push({ id: uid('rq'), category: 'diger', room: '', text: j.summary, priority: 'normal', status: 'acik', t: Date.now() });
   await S.be.saveJob(j);
@@ -497,6 +520,7 @@ function tabGenel(tb) {
         <div class="grid2">
           <label>Keşif tarihi / saati<input class="inp" type="datetime-local" data-f="kesifDate"></label>
           <label>Sorumlu / proje yöneticisi<input class="inp" data-f="assigned"></label>
+          <label>Keşfe gelecek kişi<select class="inp" data-f="kesifBy"><option value="">${teamOf(S.settings).length ? '— seçin —' : '— Ayarlar → Keşif ekibi —'}</option>${teamOf(S.settings).map(m => `<option value="${m.id}">${esc(m.name)}${m.title ? ' · ' + esc(m.title) : ''}</option>`).join('')}</select></label>
         </div>
         <label>İş özeti<textarea class="inp" rows="3" data-f="summary"></textarea></label>
         <div class="kpis">
@@ -509,6 +533,7 @@ function tabGenel(tb) {
         </div>
       </div>
     </div>
+    <div class="card rm-card" id="rmCard"></div>
     ${j.exec || ['onay', 'uygulama'].includes(j.status) ? `<a class="card ex-mini" href="#/is/${j.id}/uygulama">
       <div class="row-between"><h3>${gicon('roller')}Uygulama</h3>${j.exec ? `<b>%${execProgress(j.exec)}</b>` : '<span class="btn btn-primary btn-sm">Başlat</span>'}</div>
       ${j.exec ? `<div class="bar ex"><i style="width:${execProgress(j.exec)}%"></i></div><p class="muted small">${(() => { const A = execAlerts(j.exec); return [A.late && `${A.late} adım gecikmede`, A.mats && `${A.mats} malzeme termini yaklaşıyor`, A.nok && `${A.nok} kontrol uygunsuz`].filter(Boolean).join(' · ') || 'Her şey planlandığı gibi'; })()}</p>` : '<p class="muted small">Teklif onaylandı — iş programı, ekip yönlendirme, malzeme ve kontrol föyü için uygulamayı başlatın.</p>'}</a>` : ''}
@@ -523,7 +548,9 @@ function tabGenel(tb) {
       <button class="btn btn-ghost" data-cancel>${j.status === 'iptal' ? 'İptali geri al' : 'İşi iptal et'}</button>
       <button class="btn btn-danger" data-del>${icon('trash')}İşi sil</button>
     </div>`;
-  bindFields(tb, j, p => { save(); if (p === 'customer.name') $('.jh-t h1').textContent = j.customer.name || 'İsimsiz müşteri'; });
+  const rmDraw = () => renderRemindCard($('#rmCard', tb), j, S.settings, { onSent: t => logEvt(t) });
+  bindFields(tb, j, p => { save(); if (p === 'customer.name') $('.jh-t h1').textContent = j.customer.name || 'İsimsiz müşteri'; if (['kesifDate', 'kesifBy', 'customer.phone'].includes(p)) rmDraw(); });
+  rmDraw();
   $$('[data-st]', tb).forEach(b => b.onclick = () => { j.status = b.dataset.st; logEvt(`Durum: ${statusOf(j.status).t}`); jobView('genel'); });
   $('[data-geo]', tb).onclick = async e => {
     e.preventDefault();
@@ -1581,6 +1608,7 @@ function settingsView() {
         <label>Kapanış mesajları — "Süreç bizde, keyfi sizde" sahnesi (her satır bir madde, en çok 5)<textarea class="inp" rows="5" data-f="videoLines"></textarea></label>
         <p class="muted small">Müşterinin çekincelerine (bütçe aşımı, gecikme, dağınıklık, muhatap bulamama…) açıkça yanıt veren kısa cümleler yazın. Yalnızca gerçekten sunduğunuz güvenceleri yazın; garanti süresi gibi taahhütler yazılı teklifle de uyumlu olmalı.</p>
       </div>
+      <div class="card rm-set" id="rmSet"></div>
     </div>
     <div class="card">
       <div class="row-between"><h3>${gicon('list')}Fiyat kütüphanesi</h3><div class="row"><button class="btn btn-ghost btn-sm" data-cadd>${icon('plus')}Kalem ekle</button><button class="btn btn-ghost btn-sm" data-creset>Varsayılana dön</button></div></div>
@@ -1619,6 +1647,7 @@ function settingsView() {
   };
   const persist = debounce(() => S.be.saveSettings(S.settings).then(() => toast('Ayarlar kaydedildi')).catch(e => toast(e.message, 'err')), 900);
   bindFields(view(), st, persist);
+  renderRemindSettings($('#rmSet'), st, persist);
   const drawStamp = () => {
     $('#stPrev').innerHTML = st.company.stamp ? `<img src="${st.company.stamp}" alt="Kaşe">` : '<span class="muted small">Kaşe yüklenmedi</span>';
     $('[data-stamp-del]').hidden = !st.company.stamp;

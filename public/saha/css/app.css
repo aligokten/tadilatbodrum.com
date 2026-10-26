@@ -1043,3 +1043,30 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .fo-mat>b{font-size:13.5px}
 .fo-sum .p-table{margin:0}
 .p-table tr.sub td{color:var(--muted);font-size:.95em}
+/* randevu hatırlatma */
+.rm-card h3 .ic,.rm-set h3 .ic{width:20px;height:20px;color:var(--orange)}
+.rm-when{font-size:13px;font-weight:700;color:var(--teal-d);background:var(--teal-50);padding:4px 10px;border-radius:999px;text-transform:capitalize}
+.rm-person,.rm-to{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--bg)}
+.rm-person>span,.rm-to>span{display:flex;flex-direction:column;line-height:1.3}
+.rm-person small,.rm-to small{color:var(--muted)}
+.rm-list{display:flex;flex-direction:column}
+.rm-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line-2)}
+.rm-row:first-child{border-top:0}
+.rm-ic{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:var(--line-2);color:var(--muted)}
+.rm-ic .ic{width:16px;height:16px}
+.rm-row.sent .rm-ic{background:var(--teal-50);color:var(--teal-d)}
+.rm-row.due .rm-ic{background:var(--orange-50);color:var(--orange)}
+.rm-t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.rm-t small{color:var(--muted);font-size:12px}
+.rm-row.due .rm-t small{color:var(--orange-d);font-weight:600}
+.rm-due{gap:4px;border:1px solid var(--orange-50)}
+.rd-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px;border-top:1px solid var(--line-2);flex-wrap:wrap}
+.rd-row:first-of-type{border-top:0}
+.rd-row>a{display:flex;flex-direction:column;min-width:0}
+.rd-row>a small{color:var(--muted)}
+.rd-ks{display:flex;gap:6px;flex-wrap:wrap}
+.tm-list{display:flex;flex-direction:column;gap:8px}
+.tm-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr auto;gap:8px;align-items:center}
+.rm-set h4{margin:8px 0 0}
+.rm-set .chip.xs{padding:2px 8px;font-size:11.5px;min-height:0;margin:2px 0}
+@media (max-width:600px){.tm-row{grid-template-columns:1fr 1fr}.tm-row [data-t="phone"]{grid-column:1}}
