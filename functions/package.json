@@ -3,7 +3,7 @@
   "description": "TadilatBodrum.com — keşif randevusu bildirim fonksiyonu",
   "main": "index.js",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "firebase-admin": "^12.1.0",
