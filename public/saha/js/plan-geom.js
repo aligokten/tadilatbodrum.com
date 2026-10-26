@@ -97,9 +97,34 @@ export function roomMetrics(plan, room) {
 
 export function planMetrics(plan) {
   if (!plan) return { rooms: [], floor: 0, wall: 0, ceil: 0, perim: 0, elec: 0, light: 0, plumb: 0 };
-  const rooms = plan.rooms.map(r => ({ id: r.id, name: r.name, floor: r.floor, ...roomMetrics(plan, r) }));
-  const sum = k => rooms.reduce((s, r) => s + r[k], 0);
-  return { rooms, floor: sum('area'), wall: sum('wallArea'), ceil: sum('ceil'), perim: sum('perim'), ...fixtureCounts(plan) };
+  // çok katlı: tüm katların mahalleri (ad başına kat adı)
+  const L = planLevels(plan).filter(l => l.kind !== 'roof'), multi = L.length > 1;
+  const rooms = L.flatMap(l => (l.plan.rooms || []).map(r => ({ id: r.id, name: multi ? `${l.name} · ${r.name}` : r.name, floor: r.floor, level: l.idx, ...roomMetrics({ ...l.plan, meta: { ...plan.meta, ...l.plan.meta } }, r) })));
+  const sum = k => rooms.reduce((s, r) => s + r[k], 0), fx = { elec: 0, light: 0, plumb: 0 };
+  L.forEach(l => { const f = fixtureCounts(l.plan); for (const k in fx) fx[k] += f[k]; });
+  return { rooms, floor: sum('area'), wall: sum('wallArea'), ceil: sum('ceil'), perim: sum('perim'), ...fx };
+}
+
+/* ── katlar ──
+ * Kök plan zemin kattır; ek katlar plan.levels[] içinde tam plan olarak durur (kendi duvar, oda, açıklık… ve meta).
+ * Kat kotu: z_k = z_{k-1} + h_{k-1} + döşeme_k   (h: kat duvar yüksekliği, döşeme: o katın taşıyıcı döşeme kalınlığı)
+ * kind: 'floor' | 'roof' (çatı planı katı: duvar yüksekliği 0, döşemesi = üst kat tavan döşemesi) */
+export const levelName = (plan, i) => i ? (plan.levels?.[i - 1]?.name || `${i}. Kat`) : (plan.meta?.levelName || 'Zemin kat');
+export function planLevels(plan) {
+  const all = [plan, ...(plan.levels || [])], out = [];
+  all.forEach((p, i) => {
+    const kind = i ? (p.kind || 'floor') : 'floor', slab = i ? (+p.slab >= 0 ? +p.slab : 15) : (+plan.meta?.slab || 0);
+    const z = i ? out[i - 1].z + out[i - 1].h + slab : 0;
+    out.push({ plan: p, idx: i, name: levelName(plan, i), kind, slab, z, h: kind === 'roof' ? 0 : (p.meta?.wallH || plan.meta?.wallH || 280) });
+  });
+  return out;
+}
+export function newLevel(plan, kind = 'floor') {
+  const n = (plan.levels || []).filter(l => (l.kind || 'floor') === kind).length;
+  const p = emptyPlan();
+  Object.assign(p, { id: uid('lv'), kind, name: kind === 'roof' ? 'Çatı planı' : `${n + 1}. Kat`, slab: 15, roofs: [] });
+  p.meta = { ...p.meta, wallH: plan.meta.wallH, wallT: plan.meta.wallT, wallColor: plan.meta.wallColor, bg: null };
+  return p;
 }
 
 export function planBounds(plan) {
