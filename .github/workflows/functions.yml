@@ -20,10 +20,6 @@ on:
         description: 'Telefona test bildirimi gönder'
         type: boolean
         default: true
-      ozet:
-        description: "Günlük keşif özetini şimdi Telegram'a gönder (yarınki keşifler)"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -139,20 +135,11 @@ jobs:
             echo "- Kayıtlar: Firebase Console → Functions → \`$FUNCTION\` → Logs"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Günlük keşif özetini yayınla
-        id: digest
+      - name: Günlük keşif özeti fonksiyonunu yayınla
         if: steps.check.outputs.tg == 'true' && (github.event_name == 'push' || inputs.deploy)
         continue-on-error: true
         run: |
-          # her akşam 19:00 yarınki, her sabah 08:00 bugünkü keşifler (Cloud Scheduler, İstanbul saati)
-          npx --yes firebase-tools@13.29.1 deploy --only "functions:tbDigestEvening,functions:tbDigestMorning" --project "$PROJECT_ID" --non-interactive --force \
-            || { echo "::warning::Günlük özet yayınlanamadı. Cloud Shell'de scripts/functions-deploy-setup.sh'i bir kez daha çalıştırın (Cloud Scheduler yetkisi), sonra bu iş akışını tekrar çalıştırın (DEPLOY.md → 6h)."; exit 1; }
-          echo "- Günlük keşif özeti: her akşam 19:00 (yarınki keşifler) ve sabah 08:00 (bugünkü keşifler) Telegram'a gelir." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Keşif özetini şimdi gönder (test)
-        if: steps.digest.outcome == 'success' && (github.event_name == 'push' || inputs.ozet)
-        continue-on-error: true
-        run: |
-          gcloud scheduler jobs run firebase-schedule-tbDigestEvening-europe-west1 --location=europe-west1 --project "$PROJECT_ID" --quiet \
-            && echo "✓ Akşam özeti tetiklendi — birkaç saniye içinde Telegram'a gelir." \
-            || echo "::warning::Zamanlayıcı elle tetiklenemedi; özet akşam 19:00'da gelecek."
+          # GitHub Actions (digest.yml) her akşam 19:00 ve sabah 08:00'de çağırır; yalnızca bu hizmet hesabı çağırabilir
+          npx --yes firebase-tools@13.29.1 deploy --only "functions:tbDigest" --project "$PROJECT_ID" --non-interactive --force \
+            || { echo "::warning::Günlük özet fonksiyonu yayınlanamadı (kayıtlara bakın). Keşif bildirimi fonksiyonu etkilenmez."; exit 1; }
+          echo "- Günlük keşif özeti: Actions → *Günlük keşif özeti* — her akşam 19:00 ve sabah 08:00 Telegram'a" >> "$GITHUB_STEP_SUMMARY"

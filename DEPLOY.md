@@ -272,11 +272,11 @@ telefon, adres, keşfe gidecek kişi ve randevu onayının gönderilip gönderil
 - **👷 Ekibe iş bilgisi** — keşfe gidecek kişiye müşteri, adres ve konum,
 - **🧭 Yol tarifi**.
 
-Ekip ve şablonlar saha uygulamasında *Ayarlar → Keşif ekibi ve randevu hatırlatma*'dan, keşfe gidecek
-kişi iş sayfasından seçilir. Zamanlayıcı (Cloud Scheduler) için (b)'deki komutu **bir kez daha**
-çalıştırın (zararsızdır; zamanlayıcı servisini ve yetkisini ekler), sonra **Actions → Keşif bildirimi
-fonksiyonu → Run workflow**. "Günlük keşif özetini şimdi gönder" işaretliyse yarınki keşiflerin özeti
-hemen Telegram'a gelir.
+Ek kurulum gerekmez: `tbDigest` fonksiyonu bu iş akışıyla birlikte yayınlanır, zamanlamayı GitHub
+Actions yapar (**Actions → Günlük keşif özeti**; yoğunlukta birkaç dakika gecikebilir). Hemen denemek
+için o iş akışında **Run workflow** → *tomorrow* / *today*. Fonksiyon herkese açık değildir; yalnızca
+GitHub'ın yayın hizmet hesabı çağırabilir. Ekip ve şablonlar saha uygulamasında
+*Ayarlar → Keşif ekibi ve randevu hatırlatma*'dan, keşfe gidecek kişi iş sayfasından seçilir.
 
 ## 7) Windows uygulaması (TadilatBodrum Saha .exe)
 

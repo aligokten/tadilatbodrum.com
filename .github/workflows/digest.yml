@@ -1,0 +1,70 @@
+# Telegram günlük keşif özeti: Cloud Function'ı (tbDigest) zamanında çağırır.
+#   • 19:00 İstanbul (16:00 UTC) — yarınki keşifler      • 08:00 İstanbul (05:00 UTC) — bugünkü keşifler
+# Fonksiyon herkese açık değildir; GitHub'ın yayın hizmet hesabı kimlik jetonuyla çağırır (ek sır gerekmez).
+# GitHub zamanlanmış iş akışları yoğunlukta birkaç dakika gecikebilir. Actions → Run workflow ile elle de çalışır.
+name: Günlük keşif özeti
+
+on:
+  schedule:
+    - cron: '0 16 * * *'
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      when:
+        description: 'Hangi günün keşifleri'
+        type: choice
+        options: [tomorrow, today]
+        default: tomorrow
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: saggplus
+  REGION: europe-west1
+  WIF_PROVIDER: projects/808666491811/locations/global/workloadIdentityPools/github/providers/github
+  SERVICE_ACCOUNT: github-deploy@saggplus.iam.gserviceaccount.com
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gün
+        id: when
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then w="${{ inputs.when }}"
+          elif [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then w=today; else w=tomorrow; fi
+          echo "when=$w" >> "$GITHUB_OUTPUT"; echo "Özet: $w"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Fonksiyon adresi
+        id: url
+        run: |
+          url=$(gcloud functions describe tbDigest --gen2 --region="$REGION" --project="$PROJECT_ID" --format='value(serviceConfig.uri)') \
+            || { echo "::error::tbDigest fonksiyonu bulunamadı. Önce Actions → 'Keşif bildirimi fonksiyonu' iş akışı yayınlamalı."; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Kimlik jetonu
+        id: tok
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.url.outputs.url }}
+          id_token_include_email: true
+          create_credentials_file: false
+
+      - name: Özeti gönder
+        run: |
+          res=$(curl -sS -w '\n%{http_code}' -H "Authorization: Bearer ${{ steps.tok.outputs.id_token }}" "${{ steps.url.outputs.url }}?when=${{ steps.when.outputs.when }}")
+          code=$(echo "$res" | tail -1); body=$(echo "$res" | sed '$d')
+          echo "HTTP $code $body"
+          [ "$code" = 200 ] || { echo "::error::Özet gönderilemedi: HTTP $code $body"; exit 1; }
+          echo "### Keşif özeti gönderildi ✓ ($body)" >> "$GITHUB_STEP_SUMMARY"

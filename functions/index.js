@@ -19,7 +19,7 @@
  *   firebase deploy --only functions:tbNotifyNewAppointment
  */
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
-const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const https = require("https");
@@ -244,16 +244,29 @@ function sendTelegramRows(botToken, chatId, html, rows) {
 
 async function runDigest(when) {
   const botToken = secretValue(TELEGRAM_BOT_TOKEN), chatId = secretValue(TELEGRAM_CHAT_ID);
-  if (!botToken || !chatId) { console.error("Telegram tanımlı değil (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) — özet atlandı."); return; }
+  if (!botToken || !chatId) throw new Error("Telegram tanımlı değil (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)");
   const msgs = await loadAndBuild(db(), when);
-  if (!msgs.length) { console.log(`Keşif özeti (${when}): keşif yok, mesaj gönderilmedi`); return; }
+  if (!msgs.length) { console.log(`Keşif özeti (${when}): keşif yok, mesaj gönderilmedi`); return 0; }
   for (const m of msgs.slice(0, 25)) {             // sıra korunsun diye tek tek
     await sendTelegramRows(botToken, chatId, m.html, m.rows);
     await sleep(350);
   }
   console.log(`Keşif özeti gönderildi (${when}): ${Math.max(0, msgs.length - 1)} keşif`);
+  return Math.max(0, msgs.length - 1);
 }
 
-const DIGEST_OPTS = { timeZone: "Europe/Istanbul", secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], retryCount: 1 };
-exports.tbDigestEvening = onSchedule({ schedule: "0 19 * * *", ...DIGEST_OPTS }, () => runDigest("tomorrow"));
-exports.tbDigestMorning = onSchedule({ schedule: "0 8 * * *", ...DIGEST_OPTS }, () => runDigest("today"));
+/* GitHub Actions (.github/workflows/digest.yml) her akşam 19:00 ve sabah 08:00'de çağırır.
+ * Herkese açık değildir: yalnızca GitHub'ın yayın hizmet hesabı (kimlik jetonuyla) çağırabilir. */
+exports.tbDigest = onRequest(
+  { secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], invoker: "github-deploy@saggplus.iam.gserviceaccount.com", timeoutSeconds: 60 },
+  async (req, res) => {
+    const when = req.query.when === "today" ? "today" : "tomorrow";
+    try {
+      const count = await runDigest(when);
+      res.json({ ok: true, when, count });
+    } catch (err) {
+      console.error("Keşif özeti gönderilemedi:", err.message);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+);
