@@ -52,11 +52,12 @@ export function surveyFormHtml(job = null, { person = '' } = {}) {
 /* ───────────────────────── çizim altlığı ───────────────────────── */
 export const SKETCH_SCALES = [[10, '1 kare = 10 cm  (1:20)'], [25, '1 kare = 25 cm  (1:50)'], [50, '1 kare = 50 cm  (1:100)'], [0, 'Serbest — elle yazılır']];
 const FONT = 'Inter, Arial, sans-serif';
+const LOGO_H = 18;   // logo yüksekliği (mm)
 const INK = '#16171A', MUTE = '#6A7380', LINE = '#B5BBC2', ORANGE = '#EB591F';
 
 export function sketchGeom(land) {
   const [W, H] = land ? [297, 210] : [210, 297];
-  const m = 8, headH = land ? 22 : 26, footH = land ? 36 : 40, gy = m + headH + 3;
+  const m = 8, headH = land ? 30 : 32, footH = land ? 36 : 40, gy = m + headH + 3;
   const gw = Math.floor((W - 20) / 5) * 5, gh = Math.floor((H - gy - footH - m - 3) / 5) * 5;
   return { W, H, m, headH, footH, gx: (W - gw) / 2, gy, gw, gh, fy: gy + gh + 3, bw: W - 2 * m };
 }
@@ -84,7 +85,7 @@ function drawHeader(g, PX, info, logo) {
   const w = g.bw, h = g.headH, c = mkCanvas(w, h, PX), x = c.getContext('2d'), p = pen(x, PX);
   p.box(0.15, 0.15, w - 0.3, h - 0.3, 0.3, INK, 2.5);
   let lw = 0;
-  if (logo) { lw = Math.min(46, 9 * logo.width / logo.height); x.drawImage(logo, p.M(3), p.M(3), p.M(lw), p.M(lw * logo.height / logo.width)); }
+  if (logo) { lw = Math.min(56, LOGO_H * logo.width / logo.height); x.drawImage(logo, p.M(3), p.M(2.5), p.M(lw), p.M(lw * logo.height / logo.width)); }
   p.t('ROLÖVE ÇİZİM ALTLIĞI', 3, h - 4.2, 3.5, { w: 800 });
   p.t('ölçüler cm · duvarın iç yüzünden', 3, h - 1.1, 2, { w: 500, color: MUTE });
   const x0 = 72, cols = 3, cw = (w - x0 - 3) / cols, rh = (h - 4) / 2;
@@ -163,11 +164,11 @@ function drawTable(W, H, PX, info, logo, rooms = []) {
   const c = mkCanvas(W, H, PX), x = c.getContext('2d'), p = pen(x, PX);
   x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
   const m = 10, bw = W - 2 * m;
-  if (logo) { const lw = Math.min(46, 9 * logo.width / logo.height); x.drawImage(logo, p.M(m), p.M(m - 1), p.M(lw), p.M(lw * logo.height / logo.width)); }
-  p.t('ÖLÇÜ CETVELİ', W - m, m + 4, 5, { w: 900, align: 'right' });
-  p.t([info.code, info.customer, info.date].filter(Boolean).join('  ·  ') || 'İş kodu / müşteri / tarih: ………………………………', W - m, m + 9, 2.6, { w: 600, color: MUTE, align: 'right', max: bw - 60 });
-  p.ln(m, m + 13, W - m, m + 13, 0.5, INK);
-  let y = m + 19;
+  if (logo) { const lw = Math.min(56, LOGO_H * logo.width / logo.height); x.drawImage(logo, p.M(m), p.M(m - 1), p.M(lw), p.M(lw * logo.height / logo.width)); }
+  p.t('ÖLÇÜ CETVELİ', W - m, m + 8, 5, { w: 900, align: 'right' });
+  p.t([info.code, info.customer, info.date].filter(Boolean).join('  ·  ') || 'İş kodu / müşteri / tarih: ………………………………', W - m, m + 14, 2.6, { w: 600, color: MUTE, align: 'right', max: bw - 70 });
+  p.ln(m, m + 21, W - m, m + 21, 0.5, INK);
+  let y = m + 27;
   const table = (title, cols, rows, prefill = []) => {
     p.t(title, m, y, 3.3, { w: 800, color: ORANGE }); y += 2;
     const tw = cols.reduce((s, k) => s + k[1], 0), k = bw / tw, rh = 7.4;
