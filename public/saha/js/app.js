@@ -2,7 +2,7 @@
  * Rota (hash): #/  ·  #/is/:id/:sekme  ·  #/is/:id/plan  ·  #/ayarlar
  */
 import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } from './store.js';
-import { STATUSES, statusOf, CATEGORIES, catOf, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
+import { STATUSES, statusOf, CATEGORIES, catOf, REQ_PRESETS, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, gicon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { LOGO } from './brand.js';
 import { renderRemindCard, renderRemindSettings, remindDialog, dueAll, REMIND_KINDS, team as teamOf } from './remind.js';
@@ -19,7 +19,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.27-3';
+export const APP_VERSION = '2026.10.27-4';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -129,6 +129,13 @@ async function start(be) {
     for (const id of ['c14', 'c15']) { const c = C.find(x => x.id === id); if (c && !c.qty) c.qty = def(id).qty; }
     if (!C.some(c => c.id === 'c40')) C.splice(Math.max(0, C.findIndex(c => c.id === 'c18') + 1), 0, structuredClone(def('c40')));
     S.settings.catV = 2;
+  }
+  // v3: inşaat / kaba imalat kalemleri (duvar örümü, oda ekleme…)
+  if ((S.settings.catV || 1) < 3 && Array.isArray(S.settings.catalog)) {
+    const C = S.settings.catalog;
+    DEFAULT_SETTINGS.catalog.filter(c => c.cat === 'insaat' && !C.some(x => x.id === c.id)).forEach(c => C.push(structuredClone(c)));
+    S.settings.catV = 3;
+    be.saveSettings(S.settings).catch(() => {});
   }
   S.jobs = await be.listJobs().catch(() => []);
   shell();
@@ -589,6 +596,7 @@ function tabTalepler(tb) {
       <form class="card req-form">
         <h3>Müşteri talebi ekle</h3>
         <div class="chips scroll" id="rc">${CATEGORIES.map((c, i) => `<button type="button" class="chip ${i === 0 ? 'on' : ''}" data-v="${c.k}">${icon(c.ic)}${c.t}</button>`).join('')}</div>
+        <div class="req-pre" id="rpre"></div>
         <div class="grid3">
           <label>Mahal<input class="inp" id="rr" list="dl-room" placeholder="örn. Ebeveyn banyosu"></label>
           <label>Öncelik<select class="inp" id="rp">${Object.entries(PRI).map(([k, v]) => `<option value="${k}" ${k === 'normal' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -609,7 +617,11 @@ function tabTalepler(tb) {
             </div></div>`).join('')}</div>`;
       }).join('') : `<div class="empty card"><div class="empty-ic">${icon('list')}</div><h3>Henüz talep yok</h3><p class="muted">Müşterinin istediklerini kategori kategori kaydedin; anketten de aktarabilirsiniz.</p></div>`}</div>`;
     let cat = CATEGORIES[0].k;
-    $('#rc').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; cat = b.dataset.v; $$('#rc .chip').forEach(x => x.classList.toggle('on', x === b)); };
+    // seçili kategorinin hazır talepleri: tıklanınca metne eklenir
+    const pre = () => { const ps = REQ_PRESETS[cat] || []; $('#rpre').innerHTML = ps.length ? `<small class="muted">Hazır talepler</small><div class="chips">${ps.map(t => `<button type="button" class="chip sm" data-pre="${esc(t)}">${icon('plus')}${esc(t)}</button>`).join('')}</div>` : ''; };
+    $('#rc').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; cat = b.dataset.v; $$('#rc .chip').forEach(x => x.classList.toggle('on', x === b)); pre(); };
+    $('#rpre').onclick = e => { const b = e.target.closest('[data-pre]'); if (!b) return; const ta = $('#rt'), v = ta.value.trim(); ta.value = v ? `${v}\n${b.dataset.pre}` : b.dataset.pre; ta.focus(); };
+    pre();
     $('.req-form').onsubmit = e => {
       e.preventDefault();
       j.requests.push({ id: uid('rq'), category: cat, room: $('#rr').value.trim(), text: $('#rt').value.trim(), priority: $('#rp').value, status: 'acik', t: Date.now() });

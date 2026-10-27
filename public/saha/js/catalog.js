@@ -25,6 +25,7 @@ export const CATEGORIES = [
   { k: 'iklim',    t: 'Isıtma / Klima', ic: 'snow' },
   { k: 'yalitim',  t: 'Yalıtım / Çatı', ic: 'roof' },
   { k: 'dis',      t: 'Dış Cephe / Teras / Havuz', ic: 'sun' },
+  { k: 'insaat',   t: 'İnşaat / Kaba imalat', ic: 'wall' },
   { k: 'yikim',    t: 'Yıkım / Moloz',  ic: 'hammer' },
   { k: 'vitrifiye', t: 'Vitrifiye / Armatür', ic: 'bath' },
   { k: 'sabitmob', t: 'Sabit mobilya (dolap, vestiyer)', ic: 'box' },
@@ -36,6 +37,14 @@ export const CATEGORIES = [
   { k: 'temizlik', t: 'Temizlik / Nakliye', ic: 'sparkle' },
   { k: 'diger',    t: 'Diğer',          ic: 'tools' },
 ];
+/* talep formundaki hazır talepler (seçilince metin kutusuna eklenir) */
+export const REQ_PRESETS = {
+  insaat: ['Yeni oda ekleme', 'Duvar örümü (tuğla / gazbeton)', 'Yeni bölme duvar ile oda ayırma', 'Mevcut boşluğu duvar örerek kapatma',
+    'Duvarda yeni kapı / pencere boşluğu açma (lentolu)', 'Betonarme imalat (kolon, kiriş, döşeme)', 'Kat / çatı katı ilavesi',
+    'Balkon / teras kapatma ile alan kazanma', 'Merdiven yapımı', 'Kaba + ince sıva', 'Bahçe / istinat duvarı', 'Kalıcı sundurma / kapalı otopark'],
+  yikim: ['Duvar kaldırma (alan birleştirme)', 'Mevcut seramik / fayans söküm', 'Mutfak / banyo söküm', 'Moloz atımı ve konteyner'],
+  alcipan: ['Alçıpan bölme duvar', 'Asma tavan + gizli ışık', 'Alçıpan niş / TV ünitesi'],
+};
 export const catOf = k => CATEGORIES.find(c => c.k === k) || CATEGORIES[CATEGORIES.length - 1];
 
 export const SEVERITY = [
@@ -173,7 +182,7 @@ export const furnOf = k => FURNITURE.find(f => f.k === k) || FURNITURE.find(f =>
 export const WALL_COLORS = ['#F7F5F0', '#FFFFFF', '#ECE6DA', '#DDE4E4', '#CFE7EA', '#F3E1D3', '#E2DCCF', '#C9D6C3', '#B7C4CF', '#3A3D42'];
 
 /* ── teklif birimleri ve fiyat kütüphanesi (örnek birim fiyatlar, Ayarlar'dan düzenlenir) ── */
-export const UNITS = ['m²', 'm', 'adet', 'takım', 'nokta', 'gün', 'saat', 'kg', 'götürü'];
+export const UNITS = ['m²', 'm', 'm³', 'adet', 'takım', 'nokta', 'gün', 'saat', 'kg', 'götürü'];
 
 /* qty: plandan / keşiften otomatik metraj alınırken kullanılacak ölçü
  * floor = zemin alanı, wall = net duvar alanı, ceil = tavan alanı, perim = çevre */
@@ -214,6 +223,16 @@ export const DEFAULT_CATALOG = [
   { id: 'c24', cat: 'kapi',     desc: 'PVC pencere (ısıcamlı)', unit: 'm²', price: 6500 },
   { id: 'c25', cat: 'iklim',    desc: 'Split klima montajı + bakır boru hattı', unit: 'adet', price: 4500 },
   { id: 'c26', cat: 'dis',      desc: 'Teras / balkon traverten kaplama', unit: 'm²', price: 1800 },
+  { id: 'in-tugla', cat: 'insaat', desc: 'Tuğla duvar örümü (13,5 cm, harç dahil)', unit: 'm²', price: 950 },
+  { id: 'in-gazb', cat: 'insaat', desc: 'Gazbeton duvar örümü (yapıştırıcı harç dahil)', unit: 'm²', price: 1100 },
+  { id: 'in-bims', cat: 'insaat', desc: 'Bims blok duvar örümü', unit: 'm²', price: 1000 },
+  { id: 'in-siva', cat: 'insaat', desc: 'Kaba + ince sıva (iç yüzey)', unit: 'm²', price: 420 },
+  { id: 'in-bosluk', cat: 'insaat', desc: 'Duvarda kapı / pencere boşluğu açma (lento dahil)', unit: 'adet', price: 7500 },
+  { id: 'in-lento', cat: 'insaat', desc: 'Betonarme lento / hatıl', unit: 'm', price: 1200 },
+  { id: 'in-beton', cat: 'insaat', desc: 'Betonarme imalat (kalıp + donatı + beton)', unit: 'm³', price: 14000 },
+  { id: 'in-grobeton', cat: 'insaat', desc: 'Grobeton / zemin betonu', unit: 'm²', price: 650 },
+  { id: 'in-oda', cat: 'insaat', desc: 'Yeni oda ekleme — kaba inşaat (taşıyıcı + duvar + döşeme / çatı)', unit: 'm²', price: 18000 },
+  { id: 'in-statik', cat: 'insaat', desc: 'Statik proje / mühendislik hizmeti', unit: 'götürü', price: 25000 },
   { id: 'c27', cat: 'temizlik',   desc: 'İnşaat sonrası ince temizlik', unit: 'm²', price: 60, qty: 'floor' },
   { id: 'c28', cat: 'temizlik',   desc: 'Nakliye / malzeme taşıma', unit: 'götürü', price: 5000 },
 ];

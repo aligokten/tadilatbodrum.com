@@ -10,6 +10,7 @@ import { roomMetrics } from './plan-geom.js';
 /* ───────────────────────── anket formu ───────────────────────── */
 const WHEN = {
   banyoS: 'banyo yapılacaksa', mutfakS: 'mutfak yapılacaksa', yuzeyS: 'zemin, duvar, boya, alçıpan veya yıkım işi varsa',
+  insaatS: 'inşaat / kaba imalat işi varsa',
   tesisatS: 'elektrik, tesisat veya iklimlendirme işi varsa', cepheS: 'dış cephe veya yalıtım işi varsa', disS: 'kapı, pencere, dış mekan veya yalıtım işi varsa',
 };
 const cb = r => `<i class="fm-cb${r ? ' r' : ''}"></i>`;
