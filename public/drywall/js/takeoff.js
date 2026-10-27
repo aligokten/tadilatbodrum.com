@@ -3,6 +3,7 @@
 import { SYSTEMS, BOARDS, CONSUMABLES } from './catalog.js';
 
 const pad = n => String(n).padStart(2, '0');
+export const barFor = (kind, S) => (kind === 'UD' || kind === 'CD' ? S.barCD : kind === 'U' ? S.barU : S.barC);
 
 /* Poz: aynı tip + sistem + boydaki profiller tek poz; aynı ölçü + çentikteki levhalar tek poz. */
 export function assignPoz(model) {
@@ -13,7 +14,7 @@ export function assignPoz(model) {
     const g = mg.get(k); g.items.push(m); g.roles.add(m.role.replace(/^.* · /, '').replace(/^Niş \d+ /, 'Niş ')); if (m.note) g.notes.add(m.note);
   }
   const groups = [...mg.values()].sort((a, b) => a.kind.localeCompare(b.kind) || b.sys - a.sys || b.len - a.len);
-  const cnt = { C: 0, U: 0 };
+  const cnt = { C: 0, U: 0, CD: 0, UD: 0 };
   for (const g of groups) { g.poz = `${g.kind}${pad(++cnt[g.kind])}`; g.items.forEach(m => (m.poz = g.poz)); }
   model.memberGroups = groups;
 
@@ -120,7 +121,7 @@ export function projectTakeoff(models, S) {
   const bars = {}, sheetNest = {};
   for (const k in prof) {
     const p = prof[k];
-    const L = p.kind === 'U' ? S.barU : S.barC;
+    const L = barFor(p.kind, S);
     bars[k] = { barLen: L, bars: nestBars(p.pieces, L, S.kerfBar, S.spliceLap) };
   }
   for (const t in boards) sheetNest[t] = nestSheets(boards[t], S.sheetW, S.sheetH, S.kerfSheet);
@@ -160,7 +161,42 @@ export function steps(md, S) {
   const pz = arr => arr.map(x => `${x.poz} (${x.len} mm × ${x.items.length})`).join(', ') || '—';
   const out = [];
   const st = (title, items) => out.push({ title, items: items.filter(Boolean) });
-  if (el.type === 'duvar') {
+  if (el.type === 'tavan') {
+    const cove = p.cove && +p.coveW > 100;
+    st('Hazırlık ve aplikasyon', [
+      'Tavandaki elektrik, klima, havalandırma ve yangın tesisatı tamamlanmış; duvar sıvası / boyası bitmiş olmalıdır.',
+      `Lazer ile tavan kotunu (${p.Hc} mm) tüm duvarlara çizin${cove ? `; ışık bandı alt kotu ${p.Hc - p.coveDrop} mm ikinci çizgi olarak işaretlenir` : ''}.`,
+      `Taşıyıcı profil aksları ≤ ${p.car} mm, askı noktaları ≤ ${p.hang} mm aralıkla döşemeye işaretlenir (plan çizimindeki noktalar).`,
+    ]);
+    st('Duvar profilleri (UD28)', [
+      `UD28 profillerini (${pz(find(/Duvar UD28/))}) sızdırmazlık bandı ile kot çizgisine ${S.dowelPitch} mm aralıkla dübelleyin; uçlarda 50 mm'de dübel.`,
+    ]);
+    st('Askılar ve taşıyıcı profiller', [
+      `Askıları (${md.qty.hanger} adet) çelik çivi dübel ile döşemeye sabitleyin; tij / askı teli boyu ≈ ${Math.round((p.Hs - p.Hc - 54))} mm.`,
+      `Taşıyıcı CD60 profilleri (${pz(find(/Taşıyıcı/))}) askılara takın; uzun profillerde CD ek parçası kullanın, ekleri şaşırtın ve ek askı ekleyin.`,
+      'Taşıyıcıları lazer kotuna göre askı ayarından terazileyin.',
+    ]);
+    st('Montaj profilleri', [
+      `Montaj CD60 profillerini (${pz(find(/Montaj profili/))}) ${p.sec} mm aralıkla, uçları UD28 içine oturacak şekilde yerleştirin.`,
+      `Her kesişimde çapraz bağlantı parçası (${md.qty.cross} adet) ile taşıyıcıya bağlayın.`,
+      p.hatch && `Müdahale kapağı çevresine takviye CD profilleri (${pz(find(/Kapak çerçevesi/))}) ekleyin.`,
+    ]);
+    if (cove) st('Gizli ışık bandı iskeleti', [
+      `Bant UD28 profillerini alt kota dübelleyin; konsol CD60 (${pz(find(/konsolu/))}) ile alın alt profiline (${pz(find(/alın alt/))}) bağlayın.`,
+      `Alın dikmeleri (${pz(find(/alın dikmesi/))}) 600 mm aralıkla, üstte alın üst UD28 profili (${pz(find(/alın üst/))}); alın hattı ana tavana askı ile asılır.`,
+      `Işık yarığı ${p.coveSlot} mm: alın üstü ile ana tavan arası; LED şerit alının arkasına, ana tavana bakacak şekilde konur.`,
+    ]);
+    st('Tesisat', [
+      'Spot, LED sürücü ve buat kablolarını levha öncesi çekin; sürücüleri müdahale kapağından erişilebilir yerde bırakın.',
+      'Klima menfezi / armatür gibi ağır yükler profile değil ayrı askıya asılmalıdır.',
+    ]);
+    st(`Levha kaplama (${p.layers} kat)`, [
+      `Levhaları uzun kenarı montaj profillerine dik gelecek şekilde vidalayın; baş derzleri montaj profili üzerinde ve satırlar arasında şaşırtmalı ("Kaplama — Ana tavan" paftası).`,
+      `Vida aralığı ${S.screwPitchCeil} mm, kenardan 10–15 mm; levhayı ortadan kenarlara doğru vidalayın.`,
+      cove && 'Işık bandı alt şeritlerini ve alın şeritlerini kaplayın; alt şeridin kenarı alın levhası ile örtülür.',
+      +p.spotRows > 0 && `Spot deliklerini (Ø${p.spotD} mm) plan ölçülerine göre delin.`,
+    ]);
+  } else if (el.type === 'duvar') {
     const ops = md.openings || [];
     st('Hazırlık ve aplikasyon', [
       'Zemin ve tavan düzlüğünü kontrol edin; şap / seramik bitmiş olmalı, tavanda tesisat geçişleri tamamlanmış olmalıdır.',

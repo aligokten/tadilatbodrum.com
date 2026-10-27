@@ -48,7 +48,15 @@ export class View3D {
     for (const c of [...this.group.children]) { this.group.remove(c); c.geometry?.dispose(); }
     if (!md) return;
     const edge = new THREE.LineBasicMaterial({ color: 0x1b2a33, transparent: true, opacity: 0.35 });
-    if (this.opts.frame) for (const m of md.members) this.addBox(m.box, this.mat('m' + m.kind + m.strong, m.strong ? ROLE_COLORS.K : m.kind === 'U' ? 0xa7b4bf : 0xc8d3dc), edge);
+    if (this.opts.frame) {
+      for (const m of md.members) this.addBox(m.box, this.mat('m' + m.kind + m.strong, m.strong ? ROLE_COLORS.K : m.kind === 'U' || m.kind === 'UD' ? 0xa7b4bf : m.kind === 'CD' ? 0xb9d9c6 : 0xc8d3dc), edge);
+      for (const a of md.aux || []) if (!a.slab) this.addBox(a.box, this.mat('maux', 0x475569));
+    }
+    for (const a of md.aux || []) if (a.slab) this.addBox(a.box, this.mat('slab', 0xd6d3d1, 0.25));
+    for (const k of md.marks || []) {
+      const g = new THREE.CylinderGeometry(k.r, k.r, 8, 24); g.rotateX(Math.PI / 2);
+      const m = new THREE.Mesh(g, this.mat('spot', 0xfacc15)); m.position.set(k.x, k.y, k.z - 16); this.group.add(m);
+    }
     if (this.opts.boards > 0) for (const b of md.boards) for (const bx of b.boxes) this.addBox(bx, this.mat('b' + b.type, BOARDS[b.type].color, this.opts.boards), this.opts.boards >= 1 ? edge : null);
     if (md.countertop && this.opts.boards > 0) {
       const c = md.countertop;

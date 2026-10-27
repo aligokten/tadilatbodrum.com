@@ -33,19 +33,25 @@ export const DEFAULT_SETTINGS = {
   dowelPitch: 600,         // U profil dübel aralığı
   screwPitchOuter: 250,    // dış kat levha vida aralığı
   screwPitchInner: 750,    // iç kat levha vida aralığı
+  screwPitchCeil: 170,     // tavan levha vida aralığı
+  barCD: 3000,             // CD / UD tavan profili boyu
   studToTrackScrew: true,  // dikmeler U'ya LN ile vidalanır
   wastePct: 5,             // genel fire (sarf malzemeler)
   currency: '₺',
   prices: {
     U50: 95, U75: 120, U100: 145,
     C50: 115, C75: 145, C100: 175,
+    UD28: 55, CD60: 85,
     corner: 45,               // köşe profili (boy)
     sheet_std: 260, sheet_h2: 340, sheet_f: 360, sheet_hd: 520,
     TN25: 0.45, TN35: 0.55, LN9: 0.40, dowel: 1.6,
     tape_seal: 6,             // sızdırmazlık bandı (m)
     tape_joint: 1.2,          // derz bandı (m)
     filler: 32,               // derz dolgu alçısı (kg)
-    insul: 95,                // yalıtım (m²)
+    insul: 95,
+    hanger: 14,               // askı takımı (nonius / yaylı askı + tij)
+    cross: 4.5,               // çapraz bağlantı parçası
+    cdjoin: 6,                // CD ek parçası
     labor_m2: 0,              // işçilik (m² kaplama yüzeyi) — isteğe bağlı
   },
   company: 'SAGG Plus · TadilatBodrum.com',
@@ -61,10 +67,16 @@ export const CONSUMABLES = [
   { k: 'tape_joint', name: 'Derz bandı (kağıt / file)', unit: 'm', pack: 90 },
   { k: 'filler', name: 'Derz dolgu alçısı', unit: 'kg', pack: 25 },
   { k: 'insul', name: 'Yalıtım (taşyünü / camyünü)', unit: 'm²' },
+  { k: 'hanger', name: 'Tavan askı takımı (askı + tij / nonius)', unit: 'adet' },
+  { k: 'hangRod', name: 'Askı tiji / teli (toplam boy)', unit: 'm' },
+  { k: 'cross', name: 'Çapraz bağlantı parçası (CD–CD)', unit: 'adet' },
+  { k: 'cdjoin', name: 'CD ek parçası', unit: 'adet' },
 ];
 
 export const ROLE_COLORS = {
   U: '#7a8a99',
   C: '#2d8fa3',
+  UD: '#7a8a99',
+  CD: '#3d9b6e',
   K: '#d4692a', // takviyeli / kasa elemanları
 };
