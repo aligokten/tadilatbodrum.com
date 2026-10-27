@@ -1099,3 +1099,4 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .rf-lay .inp-unit{width:92px;flex:none}
 .rf-lay small{color:var(--muted)}
 .rf-svg svg{display:block;margin:0 auto;max-width:100%;height:auto}
+.req-pre{display:grid;gap:6px}.req-pre:empty{display:none}.req-pre .chip svg{width:14px;height:14px}
