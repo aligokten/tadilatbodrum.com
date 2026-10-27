@@ -10,7 +10,7 @@ import { roomMetrics } from './plan-geom.js';
 /* ───────────────────────── anket formu ───────────────────────── */
 const WHEN = {
   banyoS: 'banyo yapılacaksa', mutfakS: 'mutfak yapılacaksa', yuzeyS: 'zemin, duvar, boya, alçıpan veya yıkım işi varsa',
-  tesisatS: 'elektrik, tesisat veya iklimlendirme işi varsa', disS: 'kapı, pencere, dış mekan veya yalıtım işi varsa',
+  tesisatS: 'elektrik, tesisat veya iklimlendirme işi varsa', cepheS: 'dış cephe veya yalıtım işi varsa', disS: 'kapı, pencere, dış mekan veya yalıtım işi varsa',
 };
 const cb = r => `<i class="fm-cb${r ? ' r' : ''}"></i>`;
 const opt = (t, r) => `<span class="fm-o">${cb(r)}${esc(t)}</span>`;
@@ -45,7 +45,7 @@ export function surveyFormHtml(job = null, { person = '' } = {}) {
   const secs = SURVEY.map(s => `<section class="fm-sec"><h3>${esc(s.t)}${WHEN[s.id] ? ` <small>— ${WHEN[s.id]}</small>` : ''}</h3>
     <table class="fm-t"><tbody>${s.q.map(q => `<tr><th>${esc(q.t)}${q.hint && q.type !== 'text' && q.type !== 'textarea' ? `<small>${esc(q.hint)}</small>` : ''}</th><td>${q.id === 'kapsam' ? CATEGORIES.map(k => opt(k.t, false)).join('') : qInput(q)}</td></tr>`).join('')}</tbody></table></section>`).join('');
   const sign = `<div class="p-sign fm-sign"><div>Keşfi yapan<span></span></div><div>Müşteri<span></span></div></div>
-    <p class="fm-note">Bu form keşif görüşmesi notlarıdır; teklif değildir. Doldurulan bilgiler uygulamadaki ankete aktarılır.</p>`;
+    <p class="fm-note">Bu form keşif görüşmesi notlarıdır; teklif değildir. Doldurulan bilgiler keşif sonrası uygulamadaki ankete işlenir.</p>`;
   return head + secs + sign;
 }
 
