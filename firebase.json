@@ -11,6 +11,10 @@
       "cleanUrls": true,
       "rewrites": [
         {
+          "source": "/drywall",
+          "destination": "/drywall/index.html"
+        },
+        {
           "source": "/p/**",
           "destination": "/saha/goster.html"
         },
@@ -54,13 +58,6 @@
             }
           ]
         }
-      ],
-      "redirects": [
-        {
-          "source": "/drywall",
-          "destination": "/drywall/",
-          "type": 301
-        }
       ]
     },
     {
@@ -80,6 +77,10 @@
         "saha/README.md"
       ],
       "rewrites": [
+        {
+          "source": "/drywall",
+          "destination": "/drywall/index.html"
+        },
         {
           "source": "/p/**",
           "destination": "/saha/goster.html"
@@ -119,13 +120,6 @@
               "value": "public, max-age=3600"
             }
           ]
-        }
-      ],
-      "redirects": [
-        {
-          "source": "/drywall",
-          "destination": "/drywall/",
-          "type": 301
         }
       ]
     }
