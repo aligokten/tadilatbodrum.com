@@ -1,8 +1,8 @@
 /* SAGG Drywall+ — uygulama: proje durumu, arayüz, sekmeler, dışa aktarım ve imalat dosyası. */
 import { SYSTEMS, BOARDS, INSULATION, DEFAULT_SETTINGS } from './catalog.js';
 import { TYPES, defaults, generate } from './generators.js';
-import { assignPoz, projectTakeoff, steps } from './takeoff.js';
-import { frameView, boardView, sheetView, barsView, wallSection, floorDetail, nicheDetail } from './draw.js';
+import { assignPoz, projectTakeoff, steps, barFor } from './takeoff.js';
+import { frameView, boardView, sheetView, barsView, wallSection, floorDetail, nicheDetail, ceilingDetail } from './draw.js';
 import { toDXF } from './dxf.js';
 
 export const APP_VERSION = '1.0.0';
@@ -87,6 +87,14 @@ const FORMS = {
     ...sysF, ...boardF,
     sec('Niş ızgarası'), num('rows', 'Sıra', { u: 'adet' }), num('cols', 'Sütun', { u: 'adet' }), num('margin', 'Kenar payı'), num('gap', 'Niş arası'), num('bottom', 'Alt boşluk'), num('nicheD', 'Niş derinliği'),
   ],
+  tavan: [
+    sec('Oda ve kotlar'), num('L', 'Oda uzunluğu (x)'), num('W', 'Oda genişliği (y)'), num('Hc', 'Tavan kotu (yerden)'), num('Hs', 'Döşeme altı kotu'),
+    sec('Profil sistemi (CD60 / UD28)'), sl('car', 'Taşıyıcı aralığı', [[800, '800 mm'], [900, '900 mm'], [1000, '1000 mm']]), sl('sec', 'Montaj profili aralığı', [[300, '300 mm'], [400, '400 mm'], [500, '500 mm']]), sl('hang', 'Askı aralığı', [[600, '600 mm'], [750, '750 mm'], [900, '900 mm'], [1000, '1000 mm']]),
+    ...boardF,
+    sec('Gizli ışık bandı'), ck('cove', 'Çevre ışık bandı var'), num('coveW', 'Bant genişliği'), num('coveDrop', 'Ana tavandan düşüş'), num('coveSlot', 'Işık yarığı'),
+    sec('Spotlar'), num('spotRows', 'Sıra', { u: 'adet' }), num('spotCols', 'Sütun', { u: 'adet' }), num('spotD', 'Delik çapı'),
+    sec('Müdahale kapağı'), ck('hatch', 'Kapak var'), num('hatchX', 'Duvardan (x)'), num('hatchY', 'Duvardan (y)'), num('hatchS', 'Kapak ölçüsü'),
+  ],
   kutu: [
     sec('Gövde (iskelet) ölçüleri'), num('W', 'Genişlik'), num('D', 'Derinlik'), num('H', 'Yükseklik'),
     ...sysF, ...boardF,
@@ -110,7 +118,12 @@ const curMd = () => models.find(m => m.el.id === sel);
 /* ───────────── çizim yardımcıları ───────────── */
 function elementSheets(md) {
   const S = P.settings, out = [];
-  if (md.el.type === 'duvar') {
+  if (md.el.type === 'tavan') {
+    out.push({ key: 'top', title: 'Tavan planı — iskelet, askı ve spot yerleri (üstten)', S: frameView(md, 'top', { boards: false }) });
+    out.push({ key: 'front', title: 'Kesit A — uzun kenar (x-z)', S: frameView(md, 'front', { boards: true }) });
+    out.push({ key: 'side', title: 'Kesit B — kısa kenar (y-z)', S: frameView(md, 'side', { boards: true }) });
+    out.push({ key: 'ceil', title: 'Detay — asma tavan kesiti', S: ceilingDetail(md.el.params, S.boardT), detail: true });
+  } else if (md.el.type === 'duvar') {
     out.push({ key: 'front', title: 'Ön görünüş — iskelet (A yüzünden)', S: frameView(md, 'front') });
     out.push({ key: 'top', title: 'Plan — duvar yatay kesiti', S: frameView(md, 'top', { boards: true }) });
     out.push({ key: 'sec', title: 'Detay — duvar katmanları', S: wallSection(md.el.params, SYSTEMS[md.el.params.sys], S.boardT), detail: true });
@@ -181,7 +194,7 @@ let currentSheets = [];
 function cutTablesHTML(md) {
   const S = P.settings;
   let h = `<h3>${esc(md.el.code)} · ${esc(md.el.name)} — profil kesim listesi</h3><table class="t"><thead><tr><th>Poz</th><th>Profil</th><th class="n">Kesim boyu</th><th class="n">Adet</th><th class="n">Toplam</th><th>Kullanım yeri</th><th>Not</th></tr></thead><tbody>`;
-  for (const g of md.memberGroups) h += `<tr><td class="pz">${g.poz}</td><td>${g.kind}${g.sys}${g.strong ? '<span class="tag">takviye</span>' : ''}</td><td class="n">${g.len} mm</td><td class="n">${g.items.length}</td><td class="n">${nf(g.len * g.items.length / 1000, 2)} m</td><td>${esc([...g.roles].join(', '))}</td><td>${esc([...g.notes].join('; '))}${g.len > (g.kind === 'U' ? S.barU : S.barC) ? `<span class="tag">ekli (${S.spliceLap} mm bindirme)</span>` : ''}</td></tr>`;
+  for (const g of md.memberGroups) h += `<tr><td class="pz">${g.poz}</td><td>${g.kind}${g.sys}${g.strong ? '<span class="tag">takviye</span>' : ''}</td><td class="n">${g.len} mm</td><td class="n">${g.items.length}</td><td class="n">${nf(g.len * g.items.length / 1000, 2)} m</td><td>${esc([...g.roles].join(', '))}</td><td>${esc([...g.notes].join('; '))}${g.len > barFor(g.kind, S) ? `<span class="tag">ekli (${S.spliceLap} mm bindirme)</span>` : ''}</td></tr>`;
   h += `</tbody></table><h3>Levha kesim listesi (${S.boardT} mm)</h3><table class="t"><thead><tr><th>Poz</th><th>Levha</th><th class="n">En × Boy</th><th class="n">Adet</th><th class="n">Alan</th><th>Yüz / kat</th><th>Çentik (boşluk kesimi)</th></tr></thead><tbody>`;
   for (const g of md.boardGroups) h += `<tr><td class="pz">${g.poz}</td><td>${BOARDS[g.type].short}</td><td class="n">${g.w} × ${g.h}</td><td class="n">${g.items.length}</td><td class="n">${nf(g.items.reduce((s, b) => s + b.area, 0), 2)} m²</td><td>${esc([...g.faces].join(', '))}</td><td>${g.notches.map(n => `${n.w}×${n.h} @ (${n.u}, ${n.v})`).join('<br>') || '—'}</td></tr>`;
   h += '</tbody></table><p class="hint">Çentik konumu: parçanın sol-alt köşesinden (yatay, düşey) mm. Levha ölçüleri kesim ölçüsüdür; ±2 mm tolerans.</p>';
@@ -398,18 +411,19 @@ function openInfo() {
 function openSettings() {
   const S = P.settings;
   const n = (k, l, u = 'mm', st = 1) => `<div class="fld"><label>${l}</label><span class="u" data-u="${u}"><input type="number" step="${st}" data-sk="${k}" value="${getP(S, k)}"></span></div>`;
-  const prices = [['U50', 'U50 profil (boy)'], ['U75', 'U75 profil (boy)'], ['U100', 'U100 profil (boy)'], ['C50', 'C50 profil (boy)'], ['C75', 'C75 profil (boy)'], ['C100', 'C100 profil (boy)'], ['corner', 'Köşe profili (boy)'],
+  const prices = [['U50', 'U50 profil (boy)'], ['U75', 'U75 profil (boy)'], ['U100', 'U100 profil (boy)'], ['C50', 'C50 profil (boy)'], ['C75', 'C75 profil (boy)'], ['C100', 'C100 profil (boy)'], ['UD28', 'UD28 tavan profili (boy)'], ['CD60', 'CD60 tavan profili (boy)'], ['corner', 'Köşe profili (boy)'],
     ...Object.keys(BOARDS).map(k => ['sheet_' + k, BOARDS[k].label + ' (adet)']), ['TN25', 'TN25 vida (adet)'], ['TN35', 'TN35 vida (adet)'], ['LN9', 'LN9,5 vida (adet)'], ['dowel', 'Dübel (adet)'],
-    ['tape_seal', 'Sızdırmazlık bandı (m)'], ['tape_joint', 'Derz bandı (m)'], ['filler', 'Derz dolgu (kg)'], ['insul', 'Yalıtım (m²)'], ['labor_m2', 'İşçilik (m², 0 = hariç)']];
+    ['tape_seal', 'Sızdırmazlık bandı (m)'], ['tape_joint', 'Derz bandı (m)'], ['filler', 'Derz dolgu (kg)'], ['insul', 'Yalıtım (m²)'], ['hanger', 'Askı takımı (adet)'], ['cross', 'Çapraz bağlantı (adet)'], ['cdjoin', 'CD ek parçası (adet)'], ['labor_m2', 'İşçilik (m², 0 = hariç)']];
   modal(`<h2>Ayarlar</h2>
     <div class="sec">Levha ve profil</div>
     ${n('boardT', 'Levha kalınlığı', 'mm', 0.5)}
     <div class="fld"><label>Levha ölçüsü</label><select data-sk="sheetH">${[2000, 2500, 2600, 2800, 3000].map(h => `<option value="${h}" ${h === S.sheetH ? 'selected' : ''}>1200 × ${h}</option>`).join('')}</select></div>
     <div class="fld"><label>U profil boyu</label><select data-sk="barU">${[3000, 4000].map(h => `<option ${h === S.barU ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
+    <div class="fld"><label>CD / UD tavan profili boyu</label><select data-sk="barCD">${[3000, 4000].map(h => `<option ${h === S.barCD ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
     <div class="fld"><label>C profil boyu</label><select data-sk="barC">${[2600, 3000, 4000].map(h => `<option ${h === S.barC ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
     ${n('kerfBar', 'Profil kesim payı')}${n('kerfSheet', 'Levha kesim payı')}${n('spliceLap', 'Profil ek bindirmesi')}
     <div class="sec">Montaj</div>
-    ${n('dowelPitch', 'Dübel aralığı')}${n('screwPitchOuter', 'Dış kat vida aralığı')}${n('screwPitchInner', 'İç kat vida aralığı')}
+    ${n('dowelPitch', 'Dübel aralığı')}${n('screwPitchOuter', 'Dış kat vida aralığı')}${n('screwPitchInner', 'İç kat vida aralığı')}${n('screwPitchCeil', 'Tavan vida aralığı')}
     <div class="fld chk"><label>Dikmeler raylara LN vida ile bağlanır</label><input type="checkbox" data-sk="studToTrackScrew" ${S.studToTrackScrew ? 'checked' : ''}></div>
     ${n('wastePct', 'Sarf malzeme firesi', '%')}
     <div class="sec">Birim fiyatlar (${esc(S.currency)}, KDV hariç)</div>
@@ -478,7 +492,7 @@ async function openReport() {
     }
   }
   for (const t of Object.keys(T.sheetNest)) {
-    const n = T.sheetNest[t], per = 8;
+    const n = T.sheetNest[t], per = 6;
     for (let i = 0; i < n.sheets.length; i += per)
       page('plan', null, 'Levha kesim planı', `<h2>Levha kesim planı — ${esc(BOARDS[t].label)} (${i + 1}–${Math.min(n.sheets.length, i + per)} / ${n.sheets.length})</h2><div class="nest-grid">${n.sheets.slice(i, i + per).map((s, j) => sheetView(s, S.sheetW, S.sheetH, t, i + j + 1, n.sheets.length).svg()).join('')}</div><p class="hint">↻ döndürülmüş parça · ✂ çentikli parça (kesim listesindeki çentik ölçülerine bakın) · kesim payı ${S.kerfSheet} mm</p>`);
   }

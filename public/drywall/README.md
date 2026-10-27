@@ -1,6 +1,7 @@
 # SAGG Drywall+
 
 Alçıpan profil (C / U) ile **bölme duvar** ve **sabit mobilya** (mutfak adası, TV ünitesi, niş raf duvarı, özel kutu / tezgah)
+tasarımı ile **asma tavan** (CD60 / UD28 iki kademeli sistem, gizli ışık bandı, spot, müdahale kapağı)
 tasarımı ve imalat dosyası hazırlama aracı. Tarayıcıda çalışır, kurulum / derleme gerektirmez.
 
 **Adres:** https://tadilatbodrum.com/drywall/ (main dalına her birleştirmede GitHub Actions ile Firebase Hosting'e yayınlanır)
@@ -8,6 +9,7 @@ tasarımı ve imalat dosyası hazırlama aracı. Tarayıcıda çalışır, kurul
 
 ## Akış
 1. Soldan eleman ekleyin, sağdaki parametreleri girin (ölçüler, profil sistemi 50/75/100, dikme aralığı, levha tipi / kat, boşluklar, nişler).
+   Asma tavanda: oda ölçüsü, tavan ve döşeme kotu, taşıyıcı / montaj profili / askı aralıkları, ışık bandı (genişlik, düşüş, yarık), spot ızgarası, müdahale kapağı.
 2. Sekmeler: **3B** önizleme · **Çizimler** (ön / yan / üst iskelet görünüşleri, poz etiketleri, ölçü zincirleri, detaylar) ·
    **Kaplama** (levha yerleşimi, derzler dikme ortasında ve şaşırtmalı) · **Kesim listesi** (profil ve levha pozları, çentikler) ·
    **Kesim planı** (tüm proje için profil boy ve levha yerleşim optimizasyonu) · **Malzeme** (miktar + maliyet, CSV) · **Aşamalar** (imalat adımları).

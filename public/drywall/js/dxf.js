@@ -13,6 +13,7 @@ export function toDXF(sheets) {
       const layer = p.t === 'text' ? (/c2410c/i.test(p.color || '') ? 'OLCU' : 'YAZI') : p.fill === '#2d8fa3' ? 'PROFIL_C' : p.fill === '#7a8a99' ? 'PROFIL_U' : p.fill === '#d4692a' ? 'PROFIL_TAKVIYE' : LAYER_BY_COLOR(p.stroke);
       if (p.t === 'rect') { ln(p.x0 + dx, p.y0, p.x1 + dx, p.y0, layer); ln(p.x1 + dx, p.y0, p.x1 + dx, p.y1, layer); ln(p.x1 + dx, p.y1, p.x0 + dx, p.y1, layer); ln(p.x0 + dx, p.y1, p.x0 + dx, p.y0, layer); }
       else if (p.t === 'line') ln(p.x0 + dx, p.y0, p.x1 + dx, p.y1, layer);
+      else if (p.t === 'circle') ent('CIRCLE', 'SPOT', [[10, p.x + dx], [20, -p.y], [30, 0], [40, p.r]]);
       else if (p.t === 'path') {
         // yalnız M/h/v/z içeren yollar (levha parçaları) çizgiye çevrilir
         let x = 0, y = 0, sx = 0, sy = 0;

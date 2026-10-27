@@ -6,7 +6,7 @@
  *   qty      sarf malzeme miktarları
  *   extras   imalat dışı kalemler (tezgah, kapı kasası…)        */
 import { SYSTEMS, BOARDS } from './catalog.js';
-import { face, faceBox, axisOfVec, shiftBox, studGrid, tileFace, screwCount, jointLength, pieceArea, ov } from './geom.js';
+import { face, faceBox, axisOfVec, shiftBox, studGrid, tileFace, tileRows, screwCount, jointLength, pieceArea, ov } from './geom.js';
 
 export const TYPES = {
   duvar: { label: 'Bölme duvar', code: 'BD', icon: '▥' },
@@ -14,6 +14,7 @@ export const TYPES = {
   tv:    { label: 'TV ünitesi', code: 'TV', icon: '▣' },
   raf:   { label: 'Niş raf duvarı', code: 'NR', icon: '▦' },
   kutu:  { label: 'Özel kutu / tezgah', code: 'OK', icon: '◫' },
+  tavan: { label: 'Asma tavan', code: 'AT', icon: '▤' },
 };
 
 export function defaults(type) {
@@ -42,6 +43,11 @@ export function defaults(type) {
       W: 2400, H: 2700, D: 350, sys: 50, s: 400, board: 'std', layers: 1, toCeiling: true,
       rows: 4, cols: 3, margin: 150, gap: 150, bottom: 300, nicheD: 250,
     };
+    case 'tavan': return {
+      L: 5000, W: 4000, Hc: 2600, Hs: 2900, car: 1000, sec: 400, hang: 900, board: 'std', layers: 1,
+      cove: true, coveW: 350, coveDrop: 150, coveSlot: 80,
+      spotRows: 2, spotCols: 3, spotD: 75, hatch: false, hatchX: 600, hatchY: 600, hatchS: 600,
+    };
     case 'kutu': return {
       W: 1200, D: 600, H: 1000, sys: 50, s: 400, board: 'std', layers: 1,
       cladF: true, cladB: true, cladL: true, cladR: true, cladT: true, wallBack: false, topLoad: false,
@@ -52,7 +58,7 @@ export function defaults(type) {
 
 /* ───────────── ortak yardımcılar ───────────── */
 function ctx(S) {
-  return { members: [], boards: [], faces: [], qty: { dowel: 0, LN9: 0, TN25: 0, TN35: 0, tape_seal: 0, tape_joint: 0, filler: 0, insul: 0, corner: 0 }, extras: [], notes: [], S };
+  return { members: [], boards: [], faces: [], qty: { dowel: 0, LN9: 0, TN25: 0, TN35: 0, tape_seal: 0, tape_joint: 0, filler: 0, insul: 0, corner: 0, hanger: 0, hangRod: 0, cross: 0, cdjoin: 0 }, extras: [], notes: [], S };
 }
 
 function addMember(C, kind, sys, box, axis, role, o = {}) {
@@ -433,8 +439,181 @@ function genFurniture(type, p, S) {
   return C;
 }
 
+/* ───────────── ASMA TAVAN (iki kademeli CD60 / UD28 sistemi) ─────────────
+ * Taşıyıcı CD (üst kademe) x yönünde, askılarla tavana asılır; montaj CD (alt kademe) y yönünde,
+ * çapraz bağlantı ile taşıyıcıların altına bağlanır, uçları duvardaki UD28 içine oturur.
+ * Levha uzun kenarı montaj profillerine diktir (x yönü); baş derzleri montaj profili üzerine gelir.
+ * İsteğe bağlı çevre gizli ışık bandı: ana tavanın coveDrop altında, coveW genişliğinde, iç kenarında alın (fascia). */
+function genCeiling(p, S) {
+  const C = ctx(S);
+  C.aux = []; C.marks = [];
+  const t = S.boardT, L = +p.L, W = +p.W, Hc = +p.Hc, Hs = Math.max(+p.Hs, Hc + 100);
+  const s = +p.sec, cs = +p.car, hs = +p.hang, Lb = +p.layers;
+  const UD = (box, axis, role, o) => addMember(C, 'UD', 28, box, axis, role, o);
+  const CD = (box, axis, role, o) => addMember(C, 'CD', 60, box, axis, role, o);
+  const hanger = (x, y, z0, z1) => {
+    C.aux.push({ box: [x - 4, y - 4, z0, x + 4, y + 4, z1], color: '#334155', label: 'askı' });
+    C.qty.hanger++; C.qty.dowel++; C.qty.hangRod += (z1 - z0) / 1000;
+  };
+  const ring = (z, role) => {
+    for (const [b, ax, len] of [[[0, 0, z, L, 27, z + 28], 'x', L], [[0, W - 27, z, L, W, z + 28], 'x', L], [[0, 27, z, 27, W - 27, z + 28], 'y', W], [[L - 27, 27, z, L, W - 27, z + 28], 'y', W]]) {
+      UD(b, ax, role, { len });
+      C.qty.dowel += Math.ceil(len / S.dowelPitch) + 1;
+      C.qty.tape_seal += len / 1000;
+    }
+  };
+  // ana tavan
+  ring(Hc, 'Duvar UD28 (ana tavan)');
+  const secX = [];
+  for (let x = s; x < L - 100; x += s) secX.push(x);
+  for (const x of secX) CD([x - 30, 5, Hc, x + 30, W - 5, Hc + 27], 'y', 'Montaj profili CD60 (alt kademe)', { len: W - 10 });
+  const nCar = Math.max(2, Math.ceil((W - 300) / cs) + 1);
+  const carY = Array.from({ length: nCar }, (_, i) => 150 + i * (W - 300) / (nCar - 1));
+  for (const y of carY) CD([10, y - 30, Hc + 27, L - 10, y + 30, Hc + 54], 'x', 'Taşıyıcı profil CD60 (üst kademe)', { len: L - 20 });
+  C.qty.cross += nCar * secX.length;
+  const nH = Math.max(2, Math.ceil((L - 300) / hs) + 1);
+  for (const y of carY) for (let j = 0; j < nH; j++) hanger(150 + j * (L - 300) / (nH - 1), y, Hc + 54, Hs);
+  C.aux.push({ box: [-100, -100, Hs, L + 100, W + 100, Hs + 150], color: '#cbd5e1', label: 'döşeme', slab: true });
+
+  // gizli ışık bandı
+  const cove = !!p.cove && +p.coveW > 100;
+  const cw = +p.coveW, Hb = Hc - +p.coveDrop, fH = Math.max(60, +p.coveDrop - +p.coveSlot);
+  if (cove) {
+    ring(Hb, 'Duvar UD28 (ışık bandı)');
+    const sides = [ // [eksen, sabit koordinat, iç yön]
+      ['x', cw, 1], ['x', W - cw, -1], ['y', cw, 1], ['y', L - cw, -1],
+    ];
+    for (const [ax, c, dir] of sides) {
+      const span = ax === 'x' ? [cw, L - cw] : [cw, W - cw];
+      const len = span[1] - span[0];
+      // alın altı CD ve alın üstü UD
+      if (ax === 'x') {
+        CD([span[0], dir > 0 ? c - 60 : c, Hb, span[1], dir > 0 ? c : c + 60, Hb + 27], 'x', 'Işık bandı alın alt profili CD60', { len });
+        UD([span[0], dir > 0 ? c - 27 : c, Hb + fH - 28, span[1], dir > 0 ? c : c + 27, Hb + fH], 'x', 'Işık bandı alın üst profili UD28', { len });
+      } else {
+        CD([dir > 0 ? c - 60 : c, span[0], Hb, dir > 0 ? c : c + 60, span[1], Hb + 27], 'y', 'Işık bandı alın alt profili CD60', { len });
+        UD([dir > 0 ? c - 27 : c, span[0], Hb + fH - 28, dir > 0 ? c : c + 27, span[1], Hb + fH], 'y', 'Işık bandı alın üst profili UD28', { len });
+      }
+      // konsollar (duvardan alına) ve alın dikmeleri, askılar
+      for (let q = span[0] + s / 2; q < span[1] - 20; q += s) {
+        if (ax === 'x') CD([q - 30, dir > 0 ? 27 : W - cw, Hb, q + 30, dir > 0 ? cw - 60 : W - 27, Hb + 27], 'y', 'Işık bandı konsolu CD60', { len: cw - 87 });
+        else CD([dir > 0 ? 27 : L - cw, q - 30, Hb, dir > 0 ? cw - 60 : L - 27, q + 30, Hb + 27], 'x', 'Işık bandı konsolu CD60', { len: cw - 87 });
+        C.qty.LN9 += 4;
+      }
+      for (let q = span[0] + 300; q < span[1] - 100; q += 600) {
+        if (ax === 'x') CD([q - 30, dir > 0 ? c - 27 : c, Hb + 27, q + 30, dir > 0 ? c : c + 27, Hb + fH - 28], 'z', 'Işık bandı alın dikmesi CD60', { len: fH - 55 });
+        else CD([dir > 0 ? c - 27 : c, q - 30, Hb + 27, dir > 0 ? c : c + 27, q + 30, Hb + fH - 28], 'z', 'Işık bandı alın dikmesi CD60', { len: fH - 55 });
+        C.qty.LN9 += 4;
+        const [hx, hy] = ax === 'x' ? [q, c - dir * 30] : [c - dir * 30, q];
+        C.aux.push({ box: [hx - 4, hy - 4, Hb + fH, hx + 4, hy + 4, Hc], color: '#334155', label: 'askı' });
+        C.qty.hanger++;
+      }
+    }
+    const ringLen = 2 * (L - 2 * cw) + 2 * (W - 2 * cw);
+    C.qty.corner += 2 * ringLen / 1000;
+    C.extras.push({ name: 'Gizli ışık: LED şerit + alüminyum profil', qty: Math.ceil(ringLen / 100) / 10, unit: 'm', note: `Işık bandı içinde, alın arkasına (yarık ${p.coveSlot} mm)` });
+    C.extras.push({ name: 'LED trafosu / sürücü', qty: Math.max(1, Math.ceil(ringLen / 1000 / 10)), unit: 'adet', note: '≈ 10 m LED / sürücü; ana tavana erişilebilir yere' });
+  }
+
+  // levhalar
+  const sl = Math.max(s, Math.floor(S.sheetH / s) * s);
+  const holes = [];
+  if (p.hatch) {
+    const hx = +p.hatchX, hy = +p.hatchY, hz = +p.hatchS;
+    holes.push({ u0: hx, u1: hx + hz, v0: hy, v1: hy + hz });
+    C.extras.push({ name: `Müdahale (servis) kapağı ${hz} × ${hz} mm, alçıpan dolgulu`, qty: 1, unit: 'adet' });
+    for (const [x0, x1] of [[hx - 30, hx], [hx + hz, hx + hz + 30]]) CD([x0, hy - 100, Hc, x1, hy + hz + 100, Hc + 27], 'y', 'Kapak çerçevesi CD60', { len: hz + 200, strong: true });
+    C.qty.LN9 += 8;
+  }
+  const main = cove ? { u0: cw - 150, u1: L - cw + 150, v0: cw - 150, v1: W - cw + 150 } : { u0: 0, u1: L, v0: 0, v1: W };
+  const fMain = face('ceil', [0, 0, Hc], [1, 0, 0], [0, 1, 0], [0, 0, -1]);
+  const clad = (f, label, region, hl, uLines, vLines, layers) => {
+    const rec = { name: f.name, label, region, holes: hl, layers: [], uLines, vLines, board: p.board };
+    for (let k = 1; k <= layers; k++) {
+      const outer = k === layers;
+      // 2. kat: baş derzleri yarım levha boyu kaydırılır
+      const pieces = tileRows(region, hl, sl, S.sheetW, s, k % 2 === 0);
+      for (const q of pieces) {
+        const n = screwCount(q, uLines, vLines, outer ? S.screwPitchCeil : S.screwPitchInner);
+        C.qty[layers > 1 && outer ? 'TN35' : 'TN25'] += n;
+        const boxes = rectsMinus(q).map(([a, b, w, h]) => faceBox(f, q.u + a, q.u + a + w, q.v + b, q.v + b + h, -k * t, -(k - 1) * t));
+        C.boards.push({ type: p.board, layer: k, outer, face: label, w: Math.round(q.w), h: Math.round(q.h), notches: q.notches.map(z => ({ u: Math.round(z.u), v: Math.round(z.v), w: Math.round(z.w), h: Math.round(z.h) })), boxes, screws: n, area: pieceArea(q), pos: { u: q.u, v: q.v } });
+      }
+      const area = pieces.reduce((a, q) => a + pieceArea(q), 0);
+      if (outer) { C.qty.tape_joint += jointLength(pieces, region, hl); C.qty.filler += area * 0.35; } else C.qty.filler += area * 0.15;
+      rec.layers.push({ k, pieces });
+    }
+    C.faces.push(rec);
+  };
+  clad(fMain, 'Ana tavan', main, holes, [0, L, ...secX], [14, W - 14], Lb);
+  if (cove) {
+    const fB = face('band', [0, 0, Hb], [1, 0, 0], [0, 1, 0], [0, 0, -1]);
+    // bant alt yüzü: 4 şerit (ön / arka tam boy, yanlar arada)
+    const strips = [
+      ['Işık bandı alt · ön', { u0: 0, u1: L, v0: 0, v1: cw }], ['Işık bandı alt · arka', { u0: 0, u1: L, v0: W - cw, v1: W }],
+      ['Işık bandı alt · sol', { u0: 0, u1: cw, v0: cw, v1: W - cw }], ['Işık bandı alt · sağ', { u0: L - cw, u1: L, v0: cw, v1: W - cw }],
+    ];
+    for (const [lb, r] of strips) {
+      const along = r.u1 - r.u0 >= r.v1 - r.v0;
+      const pcs = [];
+      const len = along ? r.u1 - r.u0 : r.v1 - r.v0;
+      for (let a = 0; a < len - 1; a += sl) {
+        const e = Math.min(len, a + sl);
+        pcs.push(along ? { u: r.u0 + a, v: r.v0, w: e - a, h: r.v1 - r.v0, notches: [] } : { u: r.u0, v: r.v0 + a, w: r.u1 - r.u0, h: e - a, notches: [] });
+      }
+      pushPieces(C, fB, lb, p.board, pcs, Lb, t, S);
+      C.faces.push({ name: 'band', label: lb, region: r, holes: [], layers: [{ k: 1, pieces: pcs }], board: p.board });
+    }
+    // alın (fascia) — iç yüzler, levha düşey şerit
+    const fasc = [
+      ['Işık bandı alın · ön', face('f1', [L - cw, cw, Hb - Lb * t], [-1, 0, 0], [0, 0, 1], [0, 1, 0]), L - 2 * cw],
+      ['Işık bandı alın · arka', face('f2', [cw, W - cw, Hb - Lb * t], [1, 0, 0], [0, 0, 1], [0, -1, 0]), L - 2 * cw],
+      ['Işık bandı alın · sol', face('f3', [cw, cw, Hb - Lb * t], [0, 1, 0], [0, 0, 1], [1, 0, 0]), W - 2 * cw],
+      ['Işık bandı alın · sağ', face('f4', [L - cw, W - cw, Hb - Lb * t], [0, -1, 0], [0, 0, 1], [-1, 0, 0]), W - 2 * cw],
+    ];
+    for (const [lb, f, len] of fasc) {
+      const r = { u0: 0, u1: len, v0: 0, v1: fH + Lb * t };
+      const pcs = [];
+      for (let a = 0; a < len - 1; a += S.sheetH) pcs.push({ u: a, v: 0, w: Math.min(len, a + S.sheetH) - a, h: r.v1, notches: [] });
+      pushPieces(C, f, lb, p.board, pcs, 1, t, S);
+      C.faces.push({ name: f.name, label: lb, region: r, holes: [], layers: [{ k: 1, pieces: pcs }], board: p.board });
+    }
+  }
+  // spotlar
+  const R = cove ? { x0: cw, x1: L - cw, y0: cw, y1: W - cw } : { x0: 0, x1: L, y0: 0, y1: W };
+  const sr = +p.spotRows | 0, sc = +p.spotCols | 0;
+  if (sr > 0 && sc > 0) {
+    for (let i = 0; i < sr; i++) for (let j = 0; j < sc; j++)
+      C.marks.push({ x: R.x0 + (j + 0.5) * (R.x1 - R.x0) / sc, y: R.y0 + (i + 0.5) * (R.y1 - R.y0) / sr, r: +p.spotD / 2, z: Hc });
+    C.extras.push({ name: `Spot armatür Ø${p.spotD} mm (delik: panç / delik testeresi)`, qty: sr * sc, unit: 'adet', note: 'Delik yerleri plan çiziminde; profile denk gelirse 30–50 mm kaydırın' });
+  }
+  for (const m of C.members) if (m.kind === 'CD' && m.len > S.barCD) C.qty.cdjoin += Math.ceil(m.len / S.barCD) - 1;
+  C.bounds = [-100, -100, Math.min(Hb || Hc, Hc) - Lb * t - 20, L + 100, W + 100, Hs + 150];
+  C.dims = { W: L, D: W, H: Hc };
+  const net = (L * W - holes.reduce((a, h) => a + (h.u1 - h.u0) * (h.v1 - h.v0), 0)) / 1e6;
+  C.info = [
+    `Oda: ${L} × ${W} mm (${(L * W / 1e6).toFixed(2)} m²), tavan kotu ${Hc} mm, döşeme altı ${Hs} mm (plenum ${Hs - Hc} mm)`,
+    `Taşıyıcı CD60 ${nCar} sıra (≤ ${cs} mm), montaj CD60 ${secX.length} adet @ ${s} mm, askı aralığı ≤ ${hs} mm`,
+    `Kaplama: ${Lb} kat ${BOARDS[p.board].short}, levha baş derzleri ${sl} mm modülde (montaj profili üzerinde)`,
+    cove ? `Gizli ışık bandı: genişlik ${cw} mm, ana tavandan ${p.coveDrop} mm aşağıda, ışık yarığı ${p.coveSlot} mm, alın yüksekliği ${fH} mm` : 'Gizli ışık bandı yok',
+    `Net tavan alanı ≈ ${net.toFixed(2)} m²`,
+  ];
+  if (Hs - Hc < 100) C.notes.push('Plenum (döşeme ile tavan arası) 100 mm altında: iki kademeli sistem sığmaz, doğrudan askılı tek kademe düşünün.');
+  if (cove && Hs - Hc - 54 < 0) C.notes.push('Işık bandı askıları için yeterli yükseklik yok.');
+  return C;
+}
+
+function pushPieces(C, f, label, board, pcs, layers, t, S) {
+  for (let k = 1; k <= layers; k++) for (const q of pcs) {
+    const n = Math.ceil(q.w * q.h / 1e6 * 25) + 4;
+    C.qty.TN25 += n;
+    C.boards.push({ type: board, layer: k, outer: k === layers, face: label, w: Math.round(q.w), h: Math.round(q.h), notches: [], boxes: [faceBox(f, q.u, q.u + q.w, q.v, q.v + q.h, -k * t, -(k - 1) * t)], screws: n, area: q.w * q.h / 1e6, pos: { u: q.u, v: q.v } });
+    if (k === layers) C.qty.filler += q.w * q.h / 1e6 * 0.35;
+  }
+}
+
 export function generate(el, S) {
-  const model = el.type === 'duvar' ? genWall(el.params, S) : genFurniture(el.type, el.params, S);
+  const model = el.type === 'duvar' ? genWall(el.params, S) : el.type === 'tavan' ? genCeiling(el.params, S) : genFurniture(el.type, el.params, S);
   model.el = el;
   return model;
 }

@@ -137,7 +137,7 @@ table.t tfoot td{font-weight:700;border-top:2px solid var(--ink)}
 .page.flow{padding-bottom:10mm}
 .page.flow .tb{position:static;margin-top:6mm}
 .brandline{height:3mm;background:var(--grad);margin:-10mm -12mm 8mm}
-.page .nest-grid{grid-template-columns:repeat(4,1fr);gap:4mm}
+.page .nest-grid{grid-template-columns:repeat(6,1fr);gap:3mm}
 .page .steps>li{padding:2mm 3mm 2mm 12mm;margin-bottom:2.5mm;break-inside:avoid}
 .page .steps>li::before{left:2mm;top:2mm;width:7mm;height:7mm;font-size:9pt}
 .cols2{columns:2;column-gap:8mm}

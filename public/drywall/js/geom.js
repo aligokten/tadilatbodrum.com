@@ -74,16 +74,47 @@ export function tileFace(region, holes, off, sw, sh, flip = false, step = 0, min
     for (const h of seq) {
       const p = { u: a, v, w: b - a, h, notches: [] };
       v += h;
-      let covered = false;
-      for (const hl of holes) {
-        const ow = ov(p.u, p.u + p.w, hl.u0, hl.u1), oh = ov(p.v, p.v + p.h, hl.v0, hl.v1);
-        if (ow <= 0.5 || oh <= 0.5) continue;
-        if (ow >= p.w - 0.5 && oh >= p.h - 0.5) { covered = true; break; }
-        p.notches.push({ u: Math.max(p.u, hl.u0) - p.u, v: Math.max(p.v, hl.v0) - p.v, w: ow, h: oh });
-      }
-      if (!covered && p.w > 5 && p.h > 5) pieces.push(p);
+      if (cutHoles(p, holes)) pieces.push(p);
     }
   }
+  return pieces;
+}
+
+/* Parçayı boşluklarla keser: çentik ekler; tamamen boşlukta kalırsa false döner. */
+export function cutHoles(p, holes) {
+  for (const hl of holes) {
+    const ow = ov(p.u, p.u + p.w, hl.u0, hl.u1), oh = ov(p.v, p.v + p.h, hl.v0, hl.v1);
+    if (ow <= 0.5 || oh <= 0.5) continue;
+    if (ow >= p.w - 0.5 && oh >= p.h - 0.5) return false;
+    p.notches.push({ u: Math.max(p.u, hl.u0) - p.u, v: Math.max(p.v, hl.v0) - p.v, w: ow, h: oh });
+  }
+  return p.w > 5 && p.h > 5;
+}
+
+/* Tavan döşemesi: levha uzun kenarı u (x) yönünde; satırlar v yönünde levha eni kadar.
+ * Baş derzleri taşıyıcı aralığının (step) katlarına, x = 0 eksenine göre gelir; satırlar arası yarım boy kaydırılır. */
+export function tileRows(region, holes, sl, rowW, step, alt = false) {
+  const { u0, u1, v0, v1 } = region;
+  const half = Math.max(step, Math.round(sl / 2 / step) * step);
+  const rows = [];
+  for (let v = v0; v < v1 - 1; v += rowW) rows.push([v, Math.min(v1, v + rowW)]);
+  if (rows.length > 1 && rows[rows.length - 1][1] - rows[rows.length - 1][0] < 200) {
+    const k = 200 - (rows[rows.length - 1][1] - rows[rows.length - 1][0]);
+    rows[rows.length - 2][1] -= k; rows[rows.length - 1][0] -= k;
+  }
+  const pieces = [];
+  rows.forEach(([a, b], i) => {
+    const off = (i % 2 === 1) !== alt ? half : 0;
+    const cuts = [u0];
+    for (let c = off + Math.ceil((u0 + 1 - off) / sl) * sl; c < u1 - 1; c += sl) cuts.push(c);
+    if (cuts.length > 1 && cuts[1] - u0 < 200) cuts[1] = Math.min(cuts[1] + step, cuts[2] ?? u1);
+    if (cuts.length > 1 && u1 - cuts[cuts.length - 1] < 200) cuts[cuts.length - 1] -= step;
+    cuts.push(u1);
+    for (let j = 0; j < cuts.length - 1; j++) {
+      const p = { u: cuts[j], v: a, w: cuts[j + 1] - cuts[j], h: b - a, notches: [] };
+      if (p.w > 5 && cutHoles(p, holes)) pieces.push(p);
+    }
+  });
   return pieces;
 }
 

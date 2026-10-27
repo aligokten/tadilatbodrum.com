@@ -18,12 +18,13 @@ class Sheet {
   rect(x0, y0, x1, y1, st) { this.prims.push({ t: 'rect', x0: Math.min(x0, x1), y0: Math.min(y0, y1), x1: Math.max(x0, x1), y1: Math.max(y0, y1), ...st }); }
   line(x0, y0, x1, y1, st) { this.prims.push({ t: 'line', x0, y0, x1, y1, ...st }); }
   path(d, st) { this.prims.push({ t: 'path', d, ...st }); }
+  circle(x, y, r, st) { this.prims.push({ t: 'circle', x, y, r, ...st }); }
   text(x, y, s, st) { this.prims.push({ t: 'text', x, y, s, ...st }); }
   bbox() {
     const b = [Infinity, Infinity, -Infinity, -Infinity];
     for (const p of this.prims) {
       const tw = (p.fs || 0) * String(p.s).length * 0.56, ta = p.anchor === 'start' ? 0 : p.anchor === 'end' ? 1 : 0.5;
-      const pts = p.t === 'text' ? (p.rot ? [[p.x - p.fs, p.y - tw * (1 - ta)], [p.x, p.y + tw * ta]] : [[p.x - tw * ta, p.y], [p.x + tw * (1 - ta), p.y - (p.fs || 0)]]) : p.t === 'path' ? (p.pts || []) : [[p.x0, p.y0], [p.x1, p.y1]];
+      const pts = p.t === 'text' ? (p.rot ? [[p.x - p.fs, p.y - tw * (1 - ta)], [p.x, p.y + tw * ta]] : [[p.x - tw * ta, p.y], [p.x + tw * (1 - ta), p.y - (p.fs || 0)]]) : p.t === 'path' ? (p.pts || []) : p.t === 'circle' ? [[p.x - p.r, p.y - p.r], [p.x + p.r, p.y + p.r]] : [[p.x0, p.y0], [p.x1, p.y1]];
       for (const [x, y] of pts) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
     }
     return b;
@@ -37,6 +38,7 @@ class Sheet {
       const sw = p.sw ?? 1, st = `stroke="${p.stroke || '#1b1f24'}" stroke-width="${f1(sw)}"${p.dash ? ` stroke-dasharray="${p.dash}"` : ''}`;
       if (p.t === 'rect') out.push(`<rect x="${f1(p.x0)}" y="${f1(p.y0)}" width="${f1(p.x1 - p.x0)}" height="${f1(p.y1 - p.y0)}" fill="${p.fill || 'none'}"${p.op ? ` fill-opacity="${p.op}"` : ''} ${st}${p.vec ? ' vector-effect="non-scaling-stroke"' : ''}/>`);
       else if (p.t === 'line') out.push(`<line x1="${f1(p.x0)}" y1="${f1(p.y0)}" x2="${f1(p.x1)}" y2="${f1(p.y1)}" ${st}/>`);
+      else if (p.t === 'circle') out.push(`<circle cx="${f1(p.x)}" cy="${f1(p.y)}" r="${f1(p.r)}" fill="${p.fill || 'none'}" ${st}/>`);
       else if (p.t === 'path') out.push(`<path d="${p.d}" fill="${p.fill || 'none'}" fill-rule="evenodd"${p.op ? ` fill-opacity="${p.op}"` : ''} ${st}/>`);
       else {
         const tr = p.rot ? ` transform="rotate(${p.rot} ${f1(p.x)} ${f1(p.y)})"` : '';
@@ -94,10 +96,15 @@ export function frameView(md, view, opt = {}) {
       S.rect(r[0], r[1], r[2], r[3], { stroke: '#9aa3ad', sw: fs / 30, fill: BOARDS[b.type].color, op: 0.35 });
     }
   }
+  // askılar, döşeme vb. yardımcı geometri
+  for (const a of md.aux || []) {
+    const r = V.p(a.box);
+    S.rect(r[0], r[1], r[2], r[3], a.slab ? { fill: 'url(#hatch)', stroke: '#94a3b8', sw: fs / 25 } : { fill: a.color, stroke: a.color, sw: fs / 40 });
+  }
   const items = md.members.map(m => ({ m, r: V.p(m.box), d: V.depth(m.box) })).sort((a, b) => b.d - a.d);
   for (const { m, r } of items) {
     const col = m.strong ? ROLE_COLORS.K : ROLE_COLORS[m.kind];
-    S.rect(r[0], r[1], r[2], r[3], { fill: col, op: m.kind === 'U' ? 0.55 : 0.75, stroke: '#14181d', sw: fs / 22 });
+    S.rect(r[0], r[1], r[2], r[3], { fill: col, op: m.kind === 'U' || m.kind === 'UD' ? 0.55 : 0.75, stroke: '#14181d', sw: fs / 22 });
   }
   if (md.countertop && view !== 'top') {
     const c = md.countertop;
@@ -123,7 +130,26 @@ export function frameView(md, view, opt = {}) {
   const D = [bb[0], bb[1], bb[2], bb[3]];
   dim(S, D[0], D[3], D[2], D[3], fs * 4.2, fs);
   dim(S, D[0], D[1], D[0], D[3], -fs * 3.2, fs);
-  if (view === 'front' || view === 'side') {
+  if (md.marks && view === 'top') for (const k of md.marks) {
+    S.circle(k.x, -k.y, Math.max(k.r, fs * 0.35), { stroke: '#b45309', sw: fs / 12, fill: '#fde68a' });
+    S.line(k.x - k.r * 1.6, -k.y, k.x + k.r * 1.6, -k.y, { stroke: '#b45309', sw: fs / 20 });
+    S.line(k.x, -k.y - k.r * 1.6, k.x, -k.y + k.r * 1.6, { stroke: '#b45309', sw: fs / 20 });
+  }
+  if (md.el?.type === 'tavan') {
+    if (view === 'top') {
+      const sec = md.members.filter(m => m.kind === 'CD' && m.axis === 'y' && /Montaj/.test(m.role)).map(m => (m.box[0] + m.box[3]) / 2);
+      chain(S, [0, md.dims.W, ...sec], D[3], fs * 2, fs * 0.75);
+      const car = md.members.filter(m => /Taşıyıcı/.test(m.role)).map(m => -(m.box[1] + m.box[4]) / 2);
+      chain(S, [0, -md.dims.D, ...car], D[2], fs * 2.2, fs * 0.75, true);
+      if (md.marks?.length) {
+        chain(S, [0, md.dims.W, ...md.marks.map(k => k.x)], D[1], -fs * 2, fs * 0.7);
+        chain(S, [0, -md.dims.D, ...md.marks.map(k => -k.y)], D[0], -fs * 1.2, fs * 0.7, true);
+      }
+    } else {
+      const hz = md.members.filter(m => m.axis !== 'z');
+      chain(S, [D[1], D[3], ...hz.map(m => -m.box[2])], D[2], fs * 2.2, fs * 0.8, true);
+    }
+  } else if (view === 'front' || view === 'side') {
     const ax = view === 'front' ? 0 : 1;
     const verts = md.members.filter(m => m.axis === 'z' && (m.group === '' || !m.group));
     const ref = Math.min(...verts.map(m => view === 'front' ? m.box[1] : -m.box[3]));
@@ -146,7 +172,7 @@ export function frameView(md, view, opt = {}) {
       S.text((x0 + x1) / 2, (y0 + y1) / 2 + fs * 0.7, `${o.w} × ${o.h}`, { fs: fs * 0.8, color: '#475569', halo: true });
     }
   }
-  S.text(D[0], D[1] - fs * 1.4, `${opt.title || V.label}`, { fs: fs * 1.15, anchor: 'start', bold: true });
+  S.text(D[0], D[1] - fs * (md.marks?.length && view === 'top' ? 4.6 : 1.4), `${opt.title || V.label}`, { fs: fs * 1.15, anchor: 'start', bold: true });
   return S;
 }
 
@@ -174,6 +200,7 @@ export function boardView(faceRec, md, opt = {}) {
       S.text(cx, ty - (small ? 0 : fs * 0.3), b?.poz || '', { fs: fs * (small ? 0.6 : 0.95), bold: true, color: '#0b3d48', halo: true, rot: vert ? -90 : 0 });
       if (!small) S.text(cx, ty + fs * 0.9, `${Math.round(p.w)}×${Math.round(p.h)}`, { fs: fs * 0.7, color: '#334155', halo: true });
     }
+    if (faceRec.name === 'ceil') for (const k of md.marks || []) S.circle(ox + k.x, -k.y, Math.max(k.r, fs * 0.3), { stroke: '#b45309', sw: fs / 12, fill: '#fde68a' });
     S.rect(ox + R.u0, -R.v1, ox + R.u1, -R.v0, { stroke: '#0f172a', sw: fs / 8 });
     dim(S, ox + R.u0, -R.v0, ox + R.u1, -R.v0, fs * 2.6, fs * 0.8);
     if (li === 0) dim(S, ox + R.u0, -R.v1, ox + R.u0, -R.v0, -fs * 2.2, fs * 0.8);
@@ -210,7 +237,7 @@ export function barsView(key, data) {
     S.rect(0, y, L, y + rowH, { fill: 'url(#hatch)', stroke: '#0f172a', sw: 3 });
     let x = 0;
     for (const c of b.cuts) {
-      S.rect(x, y, x + c.len, y + rowH, { fill: c.tag.includes('-U') ? '#cbd5e1' : '#a5d8e2', stroke: '#1b1f24', sw: 3 });
+      S.rect(x, y, x + c.len, y + rowH, { fill: c.tag.includes('-U') ? '#cbd5e1' : c.tag.includes('-CD') ? '#b7e2c9' : '#a5d8e2', stroke: '#1b1f24', sw: 3 });
       if (c.len > 160) S.text(x + c.len / 2, y + rowH / 2 - 4, c.tag.replace(/^[A-Z]+\d+-/, ''), { fs: Math.min(fs, c.len / 5), bold: true });
       if (c.len > 160) S.text(x + c.len / 2, y + rowH / 2 + fs * 0.9, c.len, { fs: Math.min(fs * 0.8, c.len / 6), color: '#334155' });
       x += c.len + 2;
@@ -303,5 +330,52 @@ export function nicheDetail(sys, t, layers, d) {
   S.text(nw / 2, (d) / 2, 'NİŞ', { fs: fs * 1.4, bold: true, color: '#64748b' });
   S.text(-80, -L - 22, 'Detay — niş yatay kesiti', { fs: fs * 1.3, anchor: 'start', bold: true });
   S.text(-80, -L - 10, 'Turuncu: kasa dikmesi · Mavi: derinlik bağlantısı / arka çerçeve · Kırmızı: köşe profili', { fs: fs * 0.7, anchor: 'start', color: '#475569' });
+  return S;
+}
+
+// Asma tavan düşey kesiti — döşeme, askı, taşıyıcı, montaj profili, levha (+ ışık bandı)
+export function ceilingDetail(p, t) {
+  const S = new Sheet(), fs = 9;
+  const pl = Math.min(400, Math.max(120, +p.Hs - +p.Hc)), L = +p.layers;
+  const cove = p.cove && +p.coveW > 100, cw = Math.min(+p.coveW, 450), cd = +p.coveDrop, slot = +p.coveSlot;
+  const W0 = 0, W1 = cw + 520;
+  // y: 0 = tavan alt kotu (ana), yukarı negatif
+  S.rect(-60, -pl - 60, W1, -pl, { fill: 'url(#hatch)', stroke: '#57534e', sw: 0.8 });
+  S.text(W1 - 10, -pl - 25, 'Döşeme', { fs, anchor: 'end', halo: true });
+  S.rect(-60, -pl - 60, 0, cove ? cd + 60 : 60, { fill: '#e7e5e4', stroke: '#57534e', sw: 0.8 });
+  S.text(-30, -pl / 2, 'Duvar', { fs, rot: -90 });
+  // ana tavan
+  const x0 = cove ? cw - 150 : 0;
+  S.rect(0, -28, 27, 0, { fill: '#7a8a99', stroke: '#14181d', sw: 0.4 });
+  for (let x = 120; x < W1 - 30; x += 160) S.rect(x, -27, x + 60, 0, { fill: '#3d9b6e', op: 0.85, stroke: '#14181d', sw: 0.4 });
+  S.rect(10, -54, W1 - 10, -27, { fill: '#3d9b6e', op: 0.5, stroke: '#14181d', sw: 0.4 });
+  for (const x of [200, W1 - 120]) S.rect(x - 3, -pl, x + 3, -54, { fill: '#334155', stroke: '#334155', sw: 0.3 });
+  for (let k = 0; k < L; k++) S.rect(x0, k * t, W1 + 30, (k + 1) * t, { fill: '#e9e6df', stroke: '#1b1f24', sw: 0.5 });
+  if (cove) {
+    const fH = Math.max(60, cd - slot);
+    // bant: alt yüz, alın
+    S.rect(0, cd - 28, 27, cd, { fill: '#7a8a99', stroke: '#14181d', sw: 0.4 });
+    S.rect(27, cd - 27, cw - 60, cd, { fill: '#3d9b6e', op: 0.6, stroke: '#14181d', sw: 0.4 });
+    S.rect(cw - 60, cd - 27, cw, cd, { fill: '#3d9b6e', op: 0.9, stroke: '#14181d', sw: 0.4 });
+    S.rect(cw - 27, cd - fH, cw, cd - 27, { fill: '#3d9b6e', op: 0.7, stroke: '#14181d', sw: 0.4 });
+    S.rect(cw - 27, cd - fH, cw, cd - fH + 28, { fill: '#7a8a99', stroke: '#14181d', sw: 0.4 });
+    S.rect(cw - 33, L * t, cw - 27, cd - fH, { fill: '#334155', stroke: '#334155', sw: 0.3 });
+    S.rect(0, cd, cw, cd + L * t, { fill: '#e9e6df', stroke: '#1b1f24', sw: 0.5 });
+    S.rect(cw, cd - fH, cw + L * t, cd + L * t, { fill: '#e9e6df', stroke: '#1b1f24', sw: 0.5 });
+    S.rect(cw - 80, cd - 40, cw - 50, cd - 28, { fill: '#facc15', stroke: '#a16207', sw: 0.5 });
+    S.text(cw - 65, cd - 46, 'LED', { fs: fs * 0.8, color: '#a16207', bold: true });
+    for (let a = 0; a < 3; a++) S.line(cw - 60, cd - 40, cw + 40 + a * 30, L * t + 4, { stroke: '#facc15', sw: 1, dash: '4 3' });
+    dim(S, cw + 60, L * t, cw + 60, cd - fH, 16, fs * 0.8, `yarık ${slot}`);
+    dim(S, W1 + 30, 0, W1 + 30, cd, 16, fs * 0.8, `${cd}`);
+    dim(S, 0, cd + 40, cw, cd + 40, 14, fs * 0.8, `${p.coveW}`);
+  }
+  dim(S, -60, -pl, -60, 0, -26, fs * 0.8, `plenum ${+p.Hs - +p.Hc}`);
+  const lab = (x, y, ly, s) => { S.line(x, y, W1 + 70, ly, { stroke: '#334155', sw: 0.3 }); S.text(W1 + 74, ly + 3, s, { fs, anchor: 'start' }); };
+  lab(200, -pl * 0.6, -pl * 0.75, 'Askı (tij + nonius / yaylı askı), çivili dübel');
+  lab(W1 - 60, -40, -pl * 0.5, 'Taşıyıcı CD60 (üst kademe)');
+  lab(W1 - 80, -12, -pl * 0.3, `Montaj CD60 @ ${p.sec} mm`);
+  lab(13, -14, -pl * 0.12, 'Duvar UD28 + sızdırmazlık bandı');
+  lab(W1 - 10, t / 2, 30, `Alçıpan ${L} × ${t} mm`);
+  S.text(-60, -pl - 80, 'Detay — asma tavan düşey kesiti', { fs: fs * 1.4, anchor: 'start', bold: true });
   return S;
 }
