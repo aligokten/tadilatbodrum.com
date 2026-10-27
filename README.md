@@ -69,6 +69,10 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 - İş sonu **müşteri değerlendirme anketi** (`/d/KİMLİK`): yıldız puanları, tavsiye skoru, yorum, yayın izni; yanıtlar işe kaydedilir, panoda memnuniyet ortalaması ve CSV (kural: DEPLOY.md 5e)
 - Müşteriye WhatsApp'tan gönderilecek **video rapor**: 1080×1920 dikey MP4, en çok 1 dk; logo açılışı, talepler, tespitler ve çözümler, özet, "Süreç bizde" güvence sahnesi ve iletişim (WebCodecs H.264 + mp4-muxer, sentez arka plan müziği); anket (beklentiler) ve mahal bazlı keşif sahneleri
 
+### SAGG Drywall+ (`/drywall`)
+
+Alçıpan profil ile bölme duvar ve sabit mobilya (mutfak adası, TV ünitesi, niş raf) tasarımı; iskelet / kaplama çizimleri, poz numaralı kesim listeleri, profil ve levha kesim optimizasyonu, malzeme + maliyet listesi, imalat aşamaları ve yazdırılabilir imalat dosyası (PDF), DXF dışa aktarım. Ayrıntılar: **[public/drywall/README.md](public/drywall/README.md)**.
+
 ## Dosya yapısı
 
 ```

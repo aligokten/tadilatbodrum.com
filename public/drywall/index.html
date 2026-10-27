@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAGG Drywall+</title>
+<meta name="description" content="Alçıpan profil ile bölme duvar ve sabit mobilya (mutfak adası, TV ünitesi, niş raf) tasarımı; imalat çizimleri, kesim listeleri, malzeme listesi ve imalat aşamaları.">
+<meta name="theme-color" content="#0f2a33">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "../saha/vendor/three/three.module.js",
+    "three/addons/": "../saha/vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><img src="assets/icon.svg" alt=""><span>SAGG <b>Drywall+</b></span></div>
+    <input id="projName" class="proj-name" placeholder="Proje adı" aria-label="Proje adı">
+    <nav class="top-actions">
+      <button data-act="info" title="Proje bilgileri">Proje</button>
+      <button data-act="new" title="Yeni proje">Yeni</button>
+      <button data-act="open" title="Proje dosyası aç (.json)">Aç</button>
+      <button data-act="save" title="Projeyi dosyaya kaydet (.json)">Kaydet</button>
+      <button data-act="settings" title="Malzeme, fiyat ve imalat ayarları">Ayarlar</button>
+      <button data-act="report" class="primary" title="İmalat dosyası: çizimler, kesim listeleri, malzeme, aşamalar">Çıktı al</button>
+    </nav>
+    <input type="file" id="fileIn" accept=".json,application/json" hidden>
+  </header>
+
+  <aside class="side">
+    <h2>Elemanlar</h2>
+    <ul id="elList" class="el-list"></ul>
+    <h3>Ekle</h3>
+    <div id="addBtns" class="add-grid"></div>
+    <div class="side-foot" id="projSum"></div>
+  </aside>
+
+  <main class="main">
+    <div class="tabs" id="tabs" role="tablist">
+      <button data-tab="3d" class="on">3B</button>
+      <button data-tab="draw">Çizimler</button>
+      <button data-tab="clad">Kaplama</button>
+      <button data-tab="cut">Kesim listesi</button>
+      <button data-tab="plan">Kesim planı</button>
+      <button data-tab="bom">Malzeme</button>
+      <button data-tab="steps">Aşamalar</button>
+    </div>
+    <section class="pane on" data-pane="3d">
+      <div id="v3d" class="v3d"></div>
+      <div class="v3d-bar">
+        <label>Kaplama <input type="range" id="boardOp" min="0" max="1" step="0.05" value="0.55"></label>
+        <label><input type="checkbox" id="showFrame" checked> İskelet</label>
+        <button id="fitBtn">Sığdır</button>
+      </div>
+      <div class="legend"><i style="background:#2d8fa3"></i>C dikme <i style="background:#7a8a99"></i>U ray <i style="background:#d4692a"></i>Kasa / takviye</div>
+    </section>
+    <section class="pane" data-pane="draw"><div class="pane-tools"><button data-dl="dxf">DXF indir</button><button data-dl="svg">SVG indir</button><span class="hint">Çizime tıklayın: büyütür (tekerlek / sürükle ile yakınlaş, kaydır)</span></div><div id="drawings" class="drawings"></div></section>
+    <section class="pane" data-pane="clad"><div class="pane-tools"><span class="hint">Levha pozları kesim listesi ile eşleşir · taralı alan: boşluk / niş</span></div><div id="cladViews" class="drawings one"></div></section>
+    <section class="pane" data-pane="cut"><div id="cutList" class="doc"></div></section>
+    <section class="pane" data-pane="plan"><div class="pane-tools"><span class="hint">Tüm proje için optimize edilmiş profil boy ve levha kesim planı</span></div><div id="nestViews" class="doc"></div></section>
+    <section class="pane" data-pane="bom"><div class="pane-tools"><button data-dl="csv">CSV (Excel) indir</button></div><div id="bom" class="doc"></div></section>
+    <section class="pane" data-pane="steps"><div id="steps" class="doc"></div></section>
+  </main>
+
+  <aside class="props">
+    <h2 id="propTitle">Parametreler</h2>
+    <form id="props" autocomplete="off" onsubmit="return false"></form>
+    <div id="elInfo" class="el-info"></div>
+  </aside>
+</div>
+
+<div id="modal" class="modal" hidden><div class="modal-card"><button class="x" data-close aria-label="Kapat">✕</button><div id="modalBody"></div></div></div>
+<div id="zoom" class="zoom" hidden><button class="x" data-close aria-label="Kapat">✕</button><div id="zoomBody"></div></div>
+<div id="report" class="report" hidden>
+  <div class="report-bar"><b>İmalat dosyası</b><span id="repSel"></span><button id="repPrint" class="primary">Yazdır / PDF</button><button id="repClose">Kapat</button></div>
+  <div id="reportBody"></div>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

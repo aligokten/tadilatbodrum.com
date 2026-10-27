@@ -54,6 +54,13 @@
             }
           ]
         }
+      ],
+      "redirects": [
+        {
+          "source": "/drywall",
+          "destination": "/drywall/",
+          "type": 301
+        }
       ]
     },
     {
@@ -112,6 +119,13 @@
               "value": "public, max-age=3600"
             }
           ]
+        }
+      ],
+      "redirects": [
+        {
+          "source": "/drywall",
+          "destination": "/drywall/",
+          "type": 301
         }
       ]
     }
