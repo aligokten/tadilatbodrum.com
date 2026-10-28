@@ -175,9 +175,14 @@ export function stairSvg(st, px, sel = false) {
   // bilgi: rıht sayısı × yükseklik / basamak genişliği
   const P = stairParams(st), mid = W.steps[Math.floor(W.steps.length / 2)], c = polyCentroid(mid.pts);
   o += `<text x="${c.x}" y="${c.y}" font-size="${px(11)}" text-anchor="middle" dominant-baseline="middle" fill="#2B2F35" font-family="Inter,Arial,sans-serif" font-weight="700" paint-order="stroke" stroke="#fff" stroke-width="${px(3)}">${P.N}R ${fmt(P.h)}/${fmt(P.g)}</text>`;
+  if (+st.z0) {   // başlangıç kotu: ilk basamağın önünde
+    const s0 = W.walk[0], s1 = W.walk[1] || s0, u0 = V.norm(V.sub(s0, s1)), tp = V.add(s0, V.mul(u0, 16));
+    o += `<text x="${tp.x}" y="${tp.y}" font-size="${px(10)}" text-anchor="middle" dominant-baseline="middle" fill="#B5480F" font-family="Inter,Arial,sans-serif" font-weight="700" paint-order="stroke" stroke="#fff" stroke-width="${px(3)}">▽ ${kot(st.z0)}</text>`;
+  }
   return o + '</g>';
 }
 const fmt = n => (Math.round(n * 10) / 10).toLocaleString('tr-TR');
+const kot = cm => { const v = (+cm || 0) / 100; return (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 
 /* konfor değerlendirmesi (Blondel: 2h + g ≈ 60–65 cm; rıht 15–19 cm; eğim) */
 export function stairCheck(st) {
