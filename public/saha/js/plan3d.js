@@ -238,7 +238,8 @@ export class Plan3D {
     return m;
   }
   /* merdiven: betonarmede basamaklar dolu, ahşap / metalde basamak plakası + taşıyıcı; döner merdivende orta kolon */
-  stair(st, g) {
+  stair(st, g0) {
+    const g = new THREE.Group(); g.position.y = M(+st.z0 || 0); g.name = 'Merdiven'; g0.add(g);   // başlangıç kotu (çukur döşemeden başlayabilir)
     const W = stairWorld(st), b = stairBuild(st.build), solid = b.k === 'beton' || b.k === 'plak';
     const mat = this.mat('stair' + b.c, () => new THREE.MeshStandardMaterial({ color: b.c, roughness: b.k === 'metal' ? 0.45 : 0.85, metalness: b.k === 'metal' ? 0.4 : 0 }));
     if (solid) {   // betonarme: üst yüz basamak, alt yüz döşeme (dolu) ya da eğik plak

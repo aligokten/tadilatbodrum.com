@@ -723,7 +723,10 @@ export class PlanEditor {
     }
     if (t === 'stair' && p) {
       this.snap();
-      const up = this._root.levels?.[this.lv], st = newStair(uid('st'), p, { H: (this.plan.meta.wallH || 280) + (up && up.kind !== 'roof' ? +up.slab || 15 : 15) });
+      // çıkış: üst kat döşemesi; başlangıç: tıklanan odanın döşeme kotu (çukur odada eksi)
+      const up = this._root.levels?.[this.lv], top = (this.plan.meta.wallH || 280) + (up && up.kind !== 'roof' ? +up.slab || 15 : 15);
+      const z0 = +(this.plan.rooms.find(r => r.fz && pointInPoly(p, r.pts))?.fz) || 0;
+      const st = newStair(uid('st'), p, { H: top - z0, ...(z0 ? { z0 } : {}) });
       (this.plan.stairs ||= []).push(st);
       this.sel = { kind: 'stair', id: st.id };
       this.setTool('select'); this.changed();
@@ -2071,13 +2074,14 @@ export class PlanEditor {
       <div class="stair-types">${STAIR_TYPES.map(x => `<button class="st-ic ${x.k === t ? 'on' : ''}" data-act="stype" data-v="${x.k}" title="${x.t}">${stairSvgIcon(x.k)}</button>`).join('')}</div>
       <label>Yapı<select class="inp sm" data-k="build">${STAIR_BUILD.map(x => opt(x.k, o.build, x.t)).join('')}</select></label>
       ${o.build === 'plak' ? num('slab', 'Plak kalınlığı (eğime dik)', o.slab || 15) : ''}
-      <div class="grid2">${num('H', 'Kat yüksekliği', o.H)}${num('N', 'Rıht sayısı', P.N, 'adet', 1)}
+      <div class="grid2">${num('z0', 'Başlangıç kotu', +o.z0 || 0)}${num('H', 'Toplam yükseklik', o.H)}${num('N', 'Rıht sayısı', P.N, 'adet', 1)}
         ${num('w', t === 'spiral' ? 'Basamak boyu' : 'Kol genişliği', o.w)}${t === 'spiral' ? num('col', 'Orta kolon çapı', o.col || 20) + num('sweep', 'Toplam dönüş', Math.round(L.P.sweep), '°', 15) : num('g', 'Basamak derinliği', P.g, 'cm', 0.5)}
         ${two ? num('n1', '1. kol basamağı', P.n1, 'adet', 1) : ''}${t === 'sahanlik' || t === 'U' ? num('land', 'Sahanlık derinliği', P.land) : ''}${isU(t) ? num('gap', 'Kollar arası boşluk', P.gap) : ''}</div>
       ${turn ? `<label>Dönüş yönü<select class="inp sm" data-k="turn">${opt('R', o.turn || 'R', 'Sağa')}${opt('L', o.turn || 'R', 'Sola')}</select></label>` : ''}
       ${num('rot', 'Plan açısı', o.rot || 0, '°', 15)}
+      <p class="muted small">Başlangıç kotu katın ±0,00 kotuna göredir (çukur döşemeden başlıyorsa eksi). Değiştirince varış kotu sabit kalır; toplam yükseklik ve rıht sayısı yeniden hesaplanır.</p>
       <label class="check"><input type="checkbox" data-k="void" ${o.void !== false ? 'checked' : ''}> Üst kat döşemesinde merdiven boşluğu aç</label>
-      <div class="mtable"><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${winders(t) ? ` (${winders(t)} balanslı)` : two ? ' (sahanlık dahil)' : ''}</b></div>${P.gw ? `<div><span>Balanslı basamak (yürüme çizgisi)</span><b>${fmtNum(P.gw, 1)} cm</b></div>` : ''}
+      <div class="mtable"><div><span>Başlangıç → varış kotu</span><b>${kotTxt(o.z0)} → ${kotTxt((+o.z0 || 0) + o.H)}</b></div><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${winders(t) ? ` (${winders(t)} balanslı)` : two ? ' (sahanlık dahil)' : ''}</b></div>${P.gw ? `<div><span>Balanslı basamak (yürüme çizgisi)</span><b>${fmtNum(P.gw, 1)} cm</b></div>` : ''}
         <div><span>2h + g</span><b>${fmtNum(P.blondel, 1)} cm</b></div><div><span>Eğim</span><b>${fmtNum(P.slope, 1)}°</b></div><div><span>Plan ölçüsü</span><b>${fmtNum(bw, 0)} × ${fmtNum(bl, 0)} cm</b></div>${o.build === 'beton' || o.build === 'plak' ? `<div><span>Beton hacmi (yaklaşık)</span><b>${fmtNum(stairSolid(o).vol, 2)} m³</b></div>` : ''}</div>
       ${stairCheck(o).map(([k, m]) => `<p class="small st-chk ${k}">${esc(m)}</p>`).join('')}
       <div class="row wrap"><button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button>${turn ? `<button class="btn btn-xs btn-ghost" data-act="sturn">Dönüşü çevir</button>` : ''}<button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
@@ -2165,6 +2169,7 @@ export class PlanEditor {
           if (this.sel.kind === 'room') this.syncRoomWalls(x);
         } else if (this.sel.kind === 'stair') {
           if (k === 'H') { x.H = Math.max(50, v); x.N = autoRisers(x.H); }
+          else if (k === 'z0') { const top = (+x.z0 || 0) + x.H; x.z0 = v; x.H = Math.max(50, top - v); x.N = autoRisers(x.H); }   // varış kotu sabit kalır
           else if (k === 'N') x.N = Math.max(3, Math.round(v));
           else if (k === 'n1') x.n1 = Math.max(1, Math.round(v));
           else if (k === 'type') { x.type = v; x.n1 = 0; x.sweep = 0; }
