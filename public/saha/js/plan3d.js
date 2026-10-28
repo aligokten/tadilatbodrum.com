@@ -338,7 +338,7 @@ export class Plan3D {
         const sill = o.type === 'window' ? o.sill : 0, top = Math.min(H0, sill + o.h);
         piece(o0, o1, 0, Math.min(sill, H));
         if (top < H) piece(o0, o1, top, H);
-        this.opening(o, w, u, ang, t, Math.min(top, H));
+        this.opening(o, w, u, ang, t, Math.min(top, H), g);
         s = o1;
       }
       piece(s, L + ex.b, 0, H);
@@ -354,7 +354,7 @@ export class Plan3D {
     for (const st of P.stairs || []) this.stair(st, g);
   }
 
-  opening(o, w, u, ang, t, topClip) {
+  opening(o, w, u, ang, t, topClip, parent = this.root) {
     if (o.type === 'gap') return;
     const g = new THREE.Group(); g.name = o.type === 'window' ? 'Pencere' : 'Kapi';
     const c = V.add(w.a, V.mul(u, o.pos));
@@ -429,7 +429,7 @@ export class Plan3D {
         }
       }
     }
-    this.root.add(g);
+    parent.add(g);   // katın grubuna: üst katların kapı / pencereleri kendi kotunda
   }
 
   /* çizilen korkuluk: dikmeler + küpeşte; dolgu türe göre (dikey / yatay çubuk, cam panel, dolu parapet) */
