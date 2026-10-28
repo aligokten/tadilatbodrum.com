@@ -202,3 +202,38 @@ export function stairSvgIcon(k) {
   const T = p => `${p.x},${-p.y}`;
   return `<svg viewBox="${x0 - pad} ${-(y0 + H) - pad} ${W + 2 * pad} ${H + 2 * pad}" width="44" height="44">${L.steps.map(s => `<polygon points="${s.pts.map(T).join(' ')}" fill="${s.land ? '#E6E1D8' : '#fff'}" stroke="currentColor" stroke-width="${sw}"/>`).join('')}<polyline points="${L.walk.map(T).join(' ')}" fill="none" stroke="#EB591F" stroke-width="${sw * 1.6}"/></svg>`;
 }
+
+/* merdivenin plandaki dış hattı (dünya): basamak çokgenlerinin birleşimi.
+   Ortak kenarlar (T birleşimleri bölünerek) birbirini götürür; kalan kenarlar halka(lar) oluşturur, en büyüğü döner. */
+export function stairOutline(st) {
+  const polys = stairWorld(st).steps.map(s => s.pts.map(p => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 })));
+  const verts = polys.flat(), key = p => `${p.x},${p.y}`, cnt = new Map(), edges = [];
+  for (const P of polys) for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], L = V.dist(a, b); if (L < 0.05) continue;
+    const u = V.mul(V.sub(b, a), 1 / L);
+    const cut = verts.map(p => ({ p, t: V.dot(V.sub(p, a), u) })).filter(({ p, t }) => t > 0.05 && t < L - 0.05 && Math.abs(V.cross(u, V.sub(p, a))) < 0.05).sort((m, n) => m.t - n.t);
+    const seq = [a, ...cut.map(c => c.p), b];
+    for (let j = 0; j < seq.length - 1; j++) {
+      const p = seq[j], q = seq[j + 1]; if (key(p) === key(q)) continue;
+      const k = [key(p), key(q)].sort().join('|'); cnt.set(k, (cnt.get(k) || 0) + 1); edges.push([p, q, k]);
+    }
+  }
+  const adj = new Map(), seen = new Set();
+  for (const [p, q, k] of edges) {
+    if (cnt.get(k) !== 1 || seen.has(k)) continue; seen.add(k);
+    for (const [x, y] of [[p, q], [q, p]]) { if (!adj.has(key(x))) adj.set(key(x), { p: x, n: [] }); adj.get(key(x)).n.push(y); }
+  }
+  const used = new Set(), loops = [];
+  for (const [k0, v0] of adj) {
+    if (used.has(k0)) continue;
+    const loop = []; let cur = v0, prev = null;
+    while (cur && !used.has(key(cur.p))) {
+      used.add(key(cur.p)); loop.push(cur.p);
+      const nx = cur.n.find(q => (!prev || key(q) !== key(prev)) && !used.has(key(q)));
+      prev = cur.p; cur = nx ? adj.get(key(nx)) : null;
+    }
+    if (loop.length >= 3) loops.push(loop);
+  }
+  loops.sort((a, b) => Math.abs(polyArea(b)) - Math.abs(polyArea(a)));
+  return loops[0] || null;
+}

@@ -7,7 +7,7 @@
 import { V, wallLen, wallDir, polyCentroid, pointInPoly, polyArea, wallExt, planLevels } from './plan-geom.js';
 import { roofFaces, coverOf, outlineOf } from './roof.js';
 import { floorTexture } from './textures.js';
-import { stairWorld, stairBuild, stairXf, stairSolid } from './stairs.js';
+import { stairWorld, stairBuild, stairXf, stairSolid, stairOutline } from './stairs.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
 import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
@@ -163,8 +163,11 @@ export class Plan3D {
       if (this.opt.cut && lv.idx > act) continue;
       const lg = new THREE.Group(); lg.position.y = M(lv.z); lg.name = lv.name; this.root.add(lg);
       const meta = { ...ROOT.meta, ...(lv.plan.meta || {}) };
-      if (lv.idx > 0 && lv.slab > 0) this.slab(lv.kind === 'roof' ? L[lv.idx - 1].plan : lv.plan, meta, lv.slab, lg);
-      if (lv.kind !== 'roof') this.buildLevel(lv.plan, lg, meta, this.opt.cut && lv.idx === act, lv.idx === 0);
+      // alt kattaki merdivenlerin üst kat döşemesinde açtığı boşluklar
+      const below = lv.idx > 0 && lv.kind !== 'roof' ? L[lv.idx - 1] : null;
+      const voids = below && below.kind !== 'roof' ? (below.plan.stairs || []).filter(st => st.void !== false).map(stairOutline).filter(Boolean) : [];
+      if (lv.idx > 0 && lv.slab > 0) this.slab(lv.kind === 'roof' ? L[lv.idx - 1].plan : lv.plan, meta, lv.slab, lg, voids);
+      if (lv.kind !== 'roof') this.buildLevel(lv.plan, lg, meta, this.opt.cut && lv.idx === act, lv.idx === 0, voids);
       // çatı: kesitte yalnızca çatı planı katı etkinken (alt katın içi görünsün diye)
       if (!this.opt.cut || (lv.kind === 'roof' && lv.idx === act)) for (const rf of lv.plan.roofs || []) this.roof(rf, (lv.kind === 'roof' ? 0 : lv.h) + (+rf.base || 0), meta, lg);
     }
@@ -172,10 +175,16 @@ export class Plan3D {
     this.dirty = true;
   }
 
+  /* çokgen şekil + içinde kalan boşluklar (merdiven boşluğu); plan y'si -y olarak (döşeme / zemin ile aynı) */
+  shapeWithHoles(pts, holes = []) {
+    const sh = new THREE.Shape(pts.map(p => new THREE.Vector2(M(p.x), -M(p.y))));
+    for (const h of holes) if (h.every(q => pointInPoly(q, pts))) sh.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(M(p.x), -M(p.y)))));
+    return sh;
+  }
   /* kat döşemesi: katın dış hattı, kat kotunun altında */
-  slab(P, meta, t, g) {
+  slab(P, meta, t, g, voids = []) {
     const pts = outlineOf({ ...P, meta }); if (!pts) return;
-    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(M(p.x), -M(p.y)))), { depth: M(t), bevelEnabled: false });
+    const geo = new THREE.ExtrudeGeometry(this.shapeWithHoles(pts, voids), { depth: M(t), bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);
     const m = new THREE.Mesh(geo, this.std('#C9C6C0', 0.95)); m.position.y = -M(t); m.castShadow = m.receiveShadow = true; m.name = 'Döşeme';
     g.add(m);
@@ -277,14 +286,15 @@ export class Plan3D {
     }
   }
 
-  buildLevel(P, g, meta, cut, ground0) {
+  buildLevel(P, g, meta, cut, ground0, voids = []) {
     const cutH = 110;
     this.curMeta = meta;
 
+    const ownVoids = (P.stairs || []).filter(st => st.void !== false).map(stairOutline).filter(Boolean);
     // odalar: zemin + tavan
     for (const r of P.rooms) {
       if (r.pts.length < 3) continue;
-      const shape = new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), -M(p.y))));
+      const shape = this.shapeWithHoles(r.pts, voids);   // merdiven boşluğu odanın zemininde de açılır
       const geo = new THREE.ShapeGeometry(shape);
       geo.rotateX(-Math.PI / 2);
       const tx = floorTexture(THREE, r.floor);
@@ -297,7 +307,9 @@ export class Plan3D {
       if (this.opt.ceiling && !cut) {
         // tavan aşağı bakmalı: +90° döndürmede şeklin y'si doğrudan z olur, bu yüzden plan y'si ters çevrilmeden verilir
         // (zemindeki -y şekliyle döndürülünce tavan plan üzerinde aynalanıp kayıyordu)
-        const cg = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), M(p.y))))); cg.rotateX(Math.PI / 2);
+        const csh = new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), M(p.y))));
+        for (const h of ownVoids) if (h.every(q => pointInPoly(q, r.pts))) csh.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(M(p.x), M(p.y)))));   // merdivenin tavanda açtığı boşluk
+        const cg = new THREE.ShapeGeometry(csh); cg.rotateX(Math.PI / 2);
         const c = new THREE.Mesh(cg, this.std('#FAFAF8', 0.95));
         c.position.y = M(fz + (r.h || meta.wallH)); c.receiveShadow = true; c.name = 'Tavan';
         g.add(c);
@@ -318,6 +330,7 @@ export class Plan3D {
     for (const w of P.walls) {
       const L = wallLen(w); if (L < 1) continue;
       const t = w.t || meta.wallT, H0 = w.h || meta.wallH, H = cut ? Math.min(cutH, H0) : H0;
+      const B = Math.min(+w.z0 || 0, H - 1);   // duvarın alt kotu (çukur döşemeden başlayabilir: −); açıklıklar bu kottan ölçülür
       const color = w.color || roomColorOf(w) || meta.wallColor || '#F7F5F0';
       const mw = this.std(color, 0.92);
       const u = wallDir(w), ang = -Math.atan2(u.y, u.x);
@@ -334,14 +347,14 @@ export class Plan3D {
       let s = -ex.a;
       for (const o of ops) {
         const o0 = o.pos - o.w / 2, o1 = o.pos + o.w / 2;
-        piece(s, o0, 0, H);
-        const sill = o.type === 'window' ? o.sill : 0, top = Math.min(H0, sill + o.h);
-        piece(o0, o1, 0, Math.min(sill, H));
+        piece(s, o0, B, H);
+        const sill = B + (o.type === 'window' ? o.sill : 0), top = Math.min(H0, sill + o.h);
+        piece(o0, o1, B, Math.min(sill, H));
         if (top < H) piece(o0, o1, top, H);
-        this.opening(o, w, u, ang, t, Math.min(top, H), g);
+        this.opening(o, w, u, ang, t, Math.min(top, H) - B, g, B);
         s = o1;
       }
-      piece(s, L + ex.b, 0, H);
+      piece(s, L + ex.b, B, H);
     }
 
     // korkuluklar
@@ -354,11 +367,11 @@ export class Plan3D {
     for (const st of P.stairs || []) this.stair(st, g);
   }
 
-  opening(o, w, u, ang, t, topClip, parent = this.root) {
+  opening(o, w, u, ang, t, topClip, parent = this.root, base = 0) {
     if (o.type === 'gap') return;
     const g = new THREE.Group(); g.name = o.type === 'window' ? 'Pencere' : 'Kapi';
     const c = V.add(w.a, V.mul(u, o.pos));
-    g.position.set(M(c.x), 0, M(c.y)); g.rotation.y = ang;
+    g.position.set(M(c.x), M(base), M(c.y)); g.rotation.y = ang;   // base: duvarın alt kotu (denizlik / eşik bu kottan)
     const fr = this.std(frameColor(o), 0.5), W = M(o.w), T = M(t), f = 0.05, sd = o.side || 1;
     const box = (sx, sy, sz, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(Math.max(sx, 0.002), Math.max(sy, 0.002), Math.max(sz, 0.002)), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
     const glassM = (frost) => this.mat(frost ? 'frost' : 'glass', () => frost
