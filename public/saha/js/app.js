@@ -19,7 +19,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.28-4';
+export const APP_VERSION = '2026.10.28-5';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -641,7 +641,7 @@ function tabTalepler(tb) {
 }
 function roomNames() {
   const j = S.job;
-  return [...new Set([...(j.inspection.rooms || []).map(r => r.name), ...(j.plan?.rooms || []).map(r => r.name), ...ROOM_TYPES])].filter(Boolean);
+  return [...new Set([...(j.inspection.rooms || []).map(r => r.name), ...(j.plan ? planMetrics(j.plan).rooms : []).map(r => r.name), ...ROOM_TYPES])].filter(Boolean);
 }
 
 /* ── Anket ── */
@@ -669,7 +669,7 @@ function tabKesif(tb) {
     tb.innerHTML = `
       <div class="card">
         <div class="row-between"><h3>${gicon('scan')}Mahal bazlı keşif</h3>
-          <div class="row"><button class="btn btn-ghost btn-sm" data-imp ${j.plan?.rooms?.length ? '' : 'disabled title="Önce rölöve planında oda çizin"'}>${icon('ruler')}Plandan aktar</button>
+          <div class="row"><button class="btn btn-ghost btn-sm" data-imp ${anyLv(j.plan, 'rooms') ? '' : 'disabled title="Önce rölöve planında oda çizin"'}>${icon('ruler')}Plandan aktar</button>
           <button class="btn btn-primary btn-sm" data-add>${icon('plus')}Mahal ekle</button></div></div>
         <p class="muted small">Her mahal için ölçüleri girin, kontrol listesini sistematik olarak işaretleyin, fotoğrafları mahale bağlayın.</p>
       </div>
@@ -729,8 +729,10 @@ function tabKesif(tb) {
     }
     if (t.matches('[data-imp]')) {
       let n = 0;
+      // tüm katların (çatı hariç) odaları; birden çok katta adlar kat adıyla gelir
+      const all = new Map([j.plan, ...(j.plan.levels || []).filter(l => l.kind !== 'roof')].flatMap(p => (p.rooms || []).map(r => [r.id, r])));
       for (const pr of planMetrics(j.plan).rooms) {
-        const src = j.plan.rooms.find(x => x.id === pr.id);
+        const src = all.get(pr.id); if (!src?.pts?.length) continue;
         const xs = src.pts.map(p => p.x), ys = src.pts.map(p => p.y);
         let r = rooms.find(x => x.planId === pr.id || x.name === pr.name);
         if (!r) { r = { id: uid('m'), name: pr.name, checks: {}, notes: '' }; rooms.push(r); n++; }
