@@ -6,7 +6,7 @@ import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
 import { ROOF_TYPES, COVERS, newRoof, roofModel, roofSvg, roofFrame, roofTakeoff, roofLayers, roofSheetSvg, roofSectionSvg, roofLayersSvg, outlineOf, coverOf } from './roof.js';
-import { STAIR_TYPES, STAIR_BUILD, newStair, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds } from './stairs.js';
+import { STAIR_TYPES, STAIR_BUILD, newStair, isU, winders, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds } from './stairs.js';
 import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
 import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
@@ -2046,7 +2046,7 @@ export class PlanEditor {
 
   /* merdiven paneli */
   stairInsp(o, num) {
-    const P = stairParams(o), L = stairLocal(o), t = o.type, two = ['sahanlik', 'L', 'Lbal', 'U'].includes(t), turn = !['duz', 'sahanlik'].includes(t);
+    const P = stairParams(o), L = stairLocal(o), t = o.type, two = ['sahanlik', 'L', 'Lbal', 'U', 'Ubal', 'Uyuv'].includes(t), turn = !['duz', 'sahanlik'].includes(t);
     const xs = L.steps.flatMap(s => s.pts.map(p => p.x)), ys = L.steps.flatMap(s => s.pts.map(p => p.y));
     const bw = Math.max(...xs) - Math.min(...xs), bl = Math.max(...ys) - Math.min(...ys);
     const opt = (v, cur, txt) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${txt}</option>`;
@@ -2056,10 +2056,10 @@ export class PlanEditor {
       <label>Yapı<select class="inp sm" data-k="build">${STAIR_BUILD.map(x => opt(x.k, o.build, x.t)).join('')}</select></label>
       <div class="grid2">${num('H', 'Kat yüksekliği', o.H)}${num('N', 'Rıht sayısı', P.N, 'adet', 1)}
         ${num('w', t === 'spiral' ? 'Basamak boyu' : 'Kol genişliği', o.w)}${t === 'spiral' ? num('col', 'Orta kolon çapı', o.col || 20) + num('sweep', 'Toplam dönüş', Math.round(L.P.sweep), '°', 15) : num('g', 'Basamak derinliği', P.g, 'cm', 0.5)}
-        ${two ? num('n1', '1. kol basamağı', P.n1, 'adet', 1) : ''}${t === 'sahanlik' || t === 'U' ? num('land', 'Sahanlık derinliği', P.land) : ''}</div>
+        ${two ? num('n1', '1. kol basamağı', P.n1, 'adet', 1) : ''}${t === 'sahanlik' || t === 'U' ? num('land', 'Sahanlık derinliği', P.land) : ''}${isU(t) ? num('gap', 'Kollar arası boşluk', P.gap) : ''}</div>
       ${turn ? `<label>Dönüş yönü<select class="inp sm" data-k="turn">${opt('R', o.turn || 'R', 'Sağa')}${opt('L', o.turn || 'R', 'Sola')}</select></label>` : ''}
       ${num('rot', 'Plan açısı', o.rot || 0, '°', 15)}
-      <div class="mtable"><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${two && t !== 'Lbal' ? ' (sahanlık dahil)' : t === 'Lbal' ? ' (3 balanslı)' : ''}</b></div>
+      <div class="mtable"><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${winders(t) ? ` (${winders(t)} balanslı)` : two ? ' (sahanlık dahil)' : ''}</b></div>${P.gw ? `<div><span>Balanslı basamak (yürüme çizgisi)</span><b>${fmtNum(P.gw, 1)} cm</b></div>` : ''}
         <div><span>2h + g</span><b>${fmtNum(P.blondel, 1)} cm</b></div><div><span>Eğim</span><b>${fmtNum(P.slope, 1)}°</b></div><div><span>Plan ölçüsü</span><b>${fmtNum(bw, 0)} × ${fmtNum(bl, 0)} cm</b></div></div>
       ${stairCheck(o).map(([k, m]) => `<p class="small st-chk ${k}">${esc(m)}</p>`).join('')}
       <div class="row wrap"><button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button>${turn ? `<button class="btn btn-xs btn-ghost" data-act="sturn">Dönüşü çevir</button>` : ''}<button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
