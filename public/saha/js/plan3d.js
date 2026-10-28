@@ -4,10 +4,10 @@
  *   • hızlı   — rasterize + yumuşak gölge + GTAO ortam kapatma + IBL
  *   • gerçekçi — GPU path tracing (three-gpu-pathtracer), ilerlemeli örnekleme
  */
-import { V, wallLen, wallDir, polyCentroid, pointInPoly, wallExt, planLevels } from './plan-geom.js';
+import { V, wallLen, wallDir, polyCentroid, pointInPoly, polyArea, wallExt, planLevels } from './plan-geom.js';
 import { roofFaces, coverOf, outlineOf } from './roof.js';
 import { floorTexture } from './textures.js';
-import { stairWorld, stairBuild, stairXf } from './stairs.js';
+import { stairWorld, stairBuild, stairXf, stairSolid } from './stairs.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
 import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
@@ -212,12 +212,30 @@ export class Plan3D {
     // düz çatı yüzeyi parapetin içinde biraz yukarıda değil; eğimli çatıya saçak kalınlığı: alın tahtası çizgisi yok sayılır
   }
 
+  /* düz üst yüz (zt) ve köşe başına alt kot (zb) olan prizma */
+  prismVar(pts, zt, zb, mat) {
+    const n = pts.length; if (n < 3) return null;
+    const tris = THREE.ShapeUtils.triangulateShape(pts.map(p => new THREE.Vector2(p.x, p.y)), []); if (!tris.length) return null;
+    const pos = [], idx = [];
+    pts.forEach(p => pos.push(M(p.x), M(zt), M(p.y)));
+    pts.forEach((p, i) => pos.push(M(p.x), M(Math.min(zt - 0.5, zb[i])), M(p.y)));
+    const ccw = polyArea(pts) > 0;
+    tris.forEach(([a, b, c]) => { if (ccw) idx.push(a, c, b, n + a, n + b, n + c); else idx.push(a, b, c, n + a, n + c, n + b); });
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; if (ccw) idx.push(i, j, n + j, i, n + j, n + i); else idx.push(i, n + j, j, i, n + i, n + j); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx);
+    const g2 = geo.toNonIndexed(); g2.computeVertexNormals();
+    const m = new THREE.Mesh(g2, mat); m.castShadow = m.receiveShadow = true;
+    return m;
+  }
   /* merdiven: betonarmede basamaklar dolu, ahşap / metalde basamak plakası + taşıyıcı; döner merdivende orta kolon */
   stair(st, g) {
-    const W = stairWorld(st), b = stairBuild(st.build), solid = b.k === 'beton';
+    const W = stairWorld(st), b = stairBuild(st.build), solid = b.k === 'beton' || b.k === 'plak';
     const mat = this.mat('stair' + b.c, () => new THREE.MeshStandardMaterial({ color: b.c, roughness: b.k === 'metal' ? 0.45 : 0.85, metalness: b.k === 'metal' ? 0.4 : 0 }));
-    for (const s of W.steps) {
-      const th = solid ? s.z : s.land ? 10 : 5;
+    if (solid) {   // betonarme: üst yüz basamak, alt yüz döşeme (dolu) ya da eğik plak
+      const cm = this.mat('stairC' + b.c, () => new THREE.MeshStandardMaterial({ color: b.c, roughness: 0.85, side: THREE.DoubleSide }));
+      for (const s of stairSolid(st).steps) { const m = this.prismVar(s.pts, s.z, s.bot, cm); if (m) { m.name = 'Merdiven'; g.add(m); } }
+    } else for (const s of W.steps) {
+      const th = s.land ? 10 : 5;
       const geo = new THREE.ExtrudeGeometry(new THREE.Shape(s.pts.map(p => new THREE.Vector2(M(p.x), -M(p.y)))), { depth: M(th), bevelEnabled: false });
       geo.rotateX(-Math.PI / 2);
       const m = new THREE.Mesh(geo, mat); m.position.y = M(s.z - th); m.castShadow = m.receiveShadow = true; m.name = 'Merdiven';

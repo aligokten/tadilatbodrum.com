@@ -1,7 +1,7 @@
 /* ═══ Merdiven modülü: tipler, basamak geometrisi (plan + 3D), konfor hesabı ═══
    Yerel eksen: başlangıç kenarı (0,0)–(w,0), çıkış yönü +y. Dünya = döndür(rot) + öteleme(x, y).
    N rıht → N−1 basamak (son rıhtla üst kata çıkılır); sahanlık bir basamak sayılır. */
-import { V, polyCentroid, pointInPoly } from './plan-geom.js';
+import { V, polyCentroid, pointInPoly, polyArea } from './plan-geom.js';
 
 export const STAIR_TYPES = [
   { k: 'duz', t: 'Düz (tek kollu)' },
@@ -15,6 +15,7 @@ export const STAIR_TYPES = [
 ];
 export const STAIR_BUILD = [
   { k: 'beton', t: 'Betonarme (dolu)', c: '#CFCAC0' },
+  { k: 'plak', t: 'Betonarme plak (kalınlık girilir)', c: '#CFCAC0' },
   { k: 'ahsap', t: 'Ahşap basamak', c: '#B98B5E' },
   { k: 'metal', t: 'Metal / açık basamak', c: '#8C9196' },
 ];
@@ -124,6 +125,28 @@ export function stairLocal(st) {
   return { steps, walk, P };
 }
 function rot2(C, r, a, dir) { return { x: C.x - r * Math.cos(a), y: C.y + r * Math.sin(a) * dir }; }
+
+/* betonarme gövde: her basamağın alt yüzü (köşe başına kot) ve beton hacmi.
+   dolu: alt yüz döşemede; plak: alt yüz basamak çizgisine paralel, eğime dik ölçülen kalınlık kadar aşağıda */
+export function stairSolid(st) {
+  const W = stairWorld(st), P = W.P, plak = st.build === 'plak';
+  const t = Math.max(5, +st.slab || 15), tv = t / Math.cos(Math.atan2(P.h, P.g));   // düşey kalınlık
+  let k = 1, vol = 0;
+  const steps = W.steps.map(s => {
+    const n = s.wk?.length || 1, prev = W.walk[k - 1], next = W.walk[Math.min(W.walk.length - 1, k + n)]; k += n;
+    let bot;
+    if (!plak) bot = s.pts.map(() => 0);
+    else if (s.land) bot = s.pts.map(() => Math.max(0, s.z - tv));
+    else {   // giriş kenarında bir önceki basamak kotundan, çıkışta bu basamak kotundan tv aşağıda
+      const u = V.norm(V.sub(next, prev)), d = s.pts.map(p => V.dot(p, u)), d0 = Math.min(...d), d1 = Math.max(...d);
+      bot = d.map(x => Math.max(0, s.z - P.h - tv + P.h * (d1 > d0 ? (x - d0) / (d1 - d0) : 1)));
+    }
+    const area = Math.abs(polyArea(s.pts));
+    vol += area * (s.z - bot.reduce((a, b) => a + b, 0) / bot.length);
+    return { ...s, bot };
+  });
+  return { steps, vol: vol / 1e6, t };   // m³
+}
 
 /* yerel → dünya */
 export function stairXf(st) {
