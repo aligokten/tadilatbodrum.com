@@ -103,7 +103,7 @@ export function frameView(md, view, opt = {}) {
   }
   const items = md.members.map(m => ({ m, r: V.p(m.box), d: V.depth(m.box) })).sort((a, b) => b.d - a.d);
   for (const { m, r } of items) {
-    const col = m.strong ? ROLE_COLORS.K : ROLE_COLORS[m.kind];
+    const col = m.extra ? ROLE_COLORS.X : m.strong ? ROLE_COLORS.K : ROLE_COLORS[m.kind];
     S.rect(r[0], r[1], r[2], r[3], { fill: col, op: m.kind === 'U' || m.kind === 'UD' ? 0.55 : 0.75, stroke: '#14181d', sw: fs / 22 });
   }
   if (md.countertop && view !== 'top') {
@@ -377,5 +377,109 @@ export function ceilingDetail(p, t) {
   lab(13, -14, -pl * 0.12, 'Duvar UD28 + sızdırmazlık bandı');
   lab(W1 - 10, t / 2, 30, `Alçıpan ${L} × ${t} mm`);
   S.text(-60, -pl - 80, 'Detay — asma tavan düşey kesiti', { fs: fs * 1.4, anchor: 'start', bold: true });
+  return S;
+}
+
+/* ───────── Birleşim (montaj) detayları ─────────
+ * j: birleşim kaydı (importer.findJoints), c: { sysA, sysB, t, la, lb } — plan ya da kesit, mm. */
+export function jointDetail(j, c) {
+  const S = new Sheet(), fs = 14, t = c.t;
+  const WA = c.sysA || 75, WB = c.sysB || WA, la = c.la || 1, lb = c.lb || 1;
+  const board = (x0, y0, x1, y1) => S.rect(x0, y0, x1, y1, { fill: '#e9e6df', stroke: '#1b1f24', sw: 0.5 });
+  const stud = (x0, y0, x1, y1, col = '#2d8fa3') => S.rect(x0, y0, x1, y1, { fill: col, op: 0.85, stroke: '#14181d', sw: 0.4 });
+  const tape = (x0, y0, x1, y1) => S.rect(x0, y0, x1, y1, { fill: '#111827', stroke: 'none', sw: 0 });
+  const labels = [];
+  const lab = (x, y, s) => labels.push([x, y, s]);
+  const title = s => S.text(-20, -WA - 90, s, { fs: fs * 1.3, anchor: 'start', bold: true });
+  const TA = WA + t * 2 * la;
+  if (j.type === 'T' || j.type === 'L' || j.type === 'I' || j.type === 'free') {
+    // ana duvar (yatay bant): y = 0 … WA, levhalar iki yüzde
+    const x1 = j.type === 'L' || j.type === 'free' ? 420 : 520;
+    const x0 = j.type === 'L' || j.type === 'free' ? 0 : -120;
+    for (let k = 0; k < la; k++) { board(x0, -t * (k + 1), x1, -t * k); board(x0, WA + t * k, x1, WA + t * (k + 1)); }
+    if (j.type === 'free') {
+      stud(0, 0, 50, WA, '#d4692a');
+      S.rect(-2, -t * la, 0, WA + t * la, { fill: '#7a8a99', stroke: '#14181d', sw: 0.3 });
+      board(-t * la, -t * la, 0, WA + t * la);
+      for (const y of [-t * la, WA + t * la]) S.path(`M${-t * la - 4} ${y}h8`, { stroke: '#b91c1c', sw: 2, pts: [[-t * la - 4, y], [-t * la + 4, y]] });
+      stud(400, 0, 450, WA);
+      lab(25, WA / 2, 'Uç dikmesi (C, gerekirse C+U takviyeli)');
+      lab(-t * la / 2, WA / 2 + 20, 'Uç kapama levhası');
+      lab(-t * la, -t * la, 'Köşe profili (iki köşe)');
+      title('Detay — serbest duvar ucu (plan)');
+    } else {
+      for (const x of [x0 + 20, x1 - 70]) stud(x, 0, x + 50, WA);
+      if (j.type === 'I') {
+        stud(195, 0, 245, WA, '#d4692a'); stud(245, 0, 295, WA, '#d4692a');
+        S.line(245, -t * la - 6, 245, WA + t * la + 6, { stroke: '#b91c1c', sw: 0.6, dash: '4 3' });
+        lab(220, WA / 2, 'Uç dikmeleri sırt sırta, 300 mm aralıkla LN vida');
+        lab(245, -t * la, 'Levha derzi uç dikmesine gelmez — derzler kaydırılır');
+        title('Detay — aynı doğrultuda duvar eki (plan)');
+      } else {
+        // dik gelen duvar: y = WA + t·la … aşağı
+        const bx = j.type === 'L' ? 0 : 200, yb = WA + t * la;
+        const TB = WB + t * 2 * lb;
+        for (let k = 0; k < lb; k++) { board(bx - t * (k + 1), yb, bx - t * k, yb + 380); board(bx + WB + t * k, yb, bx + WB + t * (k + 1), yb + 380); }
+        tape(bx, yb, bx + WB, yb + 1.5);
+        stud(bx, yb + 1.5, bx + WB, yb + 51.5, '#2d8fa3');
+        stud(bx, yb + 300, bx + WB, yb + 350);
+        if (j.type === 'T') {
+          stud(bx + WB / 2 - 25, 0, bx + WB / 2 + 25, WA, '#7c3aed');
+          lab(bx + WB / 2, WA / 2, 'Bağlantı dikmesi (ilave C) — birleşim aksında');
+          lab(bx + WB / 2, yb + 26, 'Bitiş dikmesi, levhadan geçen TN 3,5×35 vida ile bağlantı dikmesine');
+          lab(bx + WB * 0.8, yb + 1, 'Sızdırmazlık bandı');
+          title(`Detay — T birleşimi (plan)${j.pos != null ? ` · aks ${j.pos} mm` : ''}`);
+        } else {
+          stud(0, 0, 50, WA, '#d4692a');
+          stud(bx + WB + t * lb + 10, 0, bx + WB + t * lb + 60, WA, '#7c3aed');
+          S.path(`M${-t * lb - 4} ${-t * la}h8`, { stroke: '#b91c1c', sw: 2, pts: [[-t * lb - 4, -t * la], [-t * lb + 4, -t * la]] });
+          board(-t * lb, -t * la, 0, WA + t * la);
+          lab(25, WA / 2, 'Köşe dikmesi');
+          lab(bx + WB + t * lb + 35, WA / 2, 'İlave dikme (iç köşe levha tespiti)');
+          lab(-t * lb, -t * la, 'Köşe profili (dış köşe)');
+          lab(bx + WB / 2, yb + 26, 'Bitiş dikmesi, köşe dikmesine LN / TN vida');
+          title('Detay — L köşe birleşimi (plan)');
+        }
+        dim(S, bx - t * lb, yb + 400, bx + WB + t * lb, yb + 400, 14, fs * 0.8, `${Math.round(TB)}`);
+      }
+    }
+    dim(S, x1 + 10, -t * la, x1 + 10, WA + t * la, 16, fs * 0.8, `${Math.round(TA)}`);
+  } else if (j.type === 'ceiling') {
+    // düşey kesit: duvar (düşey), asma tavan iki yanda
+    const zc = 0, H = 420;
+    for (let k = 0; k < la; k++) { board(-t * (k + 1), -H, -t * k, 160); board(WA + t * k, -H, WA + t * (k + 1), 160); }
+    stud(0, -H, WA, 160);
+    S.rect(-160, -H - 40, WA + 220, -H, { fill: 'url(#hatch)', stroke: '#57534e', sw: 0.8 });
+    stud(5, zc - 40, WA - 5, zc, '#7c3aed');
+    for (const sgn of [-1, 1]) {
+      const xw = sgn < 0 ? -t * la : WA + t * la;
+      S.rect(sgn < 0 ? xw - 28 : xw, zc - 28, sgn < 0 ? xw : xw + 28, zc, { fill: '#7a8a99', stroke: '#14181d', sw: 0.3 });
+      S.rect(sgn < 0 ? xw - 170 : xw + 28, zc - 27, sgn < 0 ? xw - 28 : xw + 170, zc, { fill: '#3d9b6e', op: 0.7, stroke: '#14181d', sw: 0.3 });
+      board(sgn < 0 ? xw - 170 : xw, zc, sgn < 0 ? xw : xw + 170, zc + t);
+    }
+    lab(WA / 2, zc - 20, 'İlave U kuşak (duvar içinde, tavan kotunda)');
+    lab(WA + t * la + 14, zc - 14, 'UD28 + sızdırmazlık bandı, kuşağa vida 600 mm');
+    lab(WA / 2, -H + 20, j.through === false ? 'Duvar tavanda biter: üst ray tavan karkasına' : 'Duvar döşemeye kadar devam eder');
+    lab(WA + t * la + 100, zc + t, 'Tavan levhası — duvar levhasına akrilik derz');
+    title('Detay — duvar / asma tavan birleşimi (kesit)');
+  } else if (j.type === 'wallfix') {
+    S.rect(-80, -60, 520, 0, { fill: 'url(#hatch)', stroke: '#57534e', sw: 0.8 });
+    tape(0, 0, 420, 2);
+    for (const x of [0, 180, 370]) stud(x, 2, x + 50, 2 + WB, x === 0 ? '#d4692a' : '#2d8fa3');
+    for (let k = 0; k < lb; k++) board(-t, 2 + WB + t * k, 420 + t, 2 + WB + t * (k + 1));
+    board(-t * lb, 2, 0, 2 + WB + t * lb);
+    for (const x of [205, 395]) S.line(x, -50, x, 2 + WB, { stroke: '#b91c1c', sw: 1.2 });
+    lab(205, -30, 'Arka çerçeve: dübel 600 mm (duvara / mevcut karkasa)');
+    lab(300, 1, 'Sızdırmazlık bandı');
+    lab(25, WB / 2, 'Köşe dikmesi');
+    title('Detay — mobilya / duvar bağlantısı (plan)');
+  }
+  // açıklama satırları
+  const bb = S.bbox(), lx = bb[2] + 40;
+  labels.forEach(([x, y, s], i) => {
+    const ly = bb[1] + 40 + i * fs * 1.9;
+    S.line(x, y, lx - 4, ly - 3, { stroke: '#334155', sw: 0.3 });
+    S.text(lx, ly, s, { fs, anchor: 'start' });
+  });
   return S;
 }

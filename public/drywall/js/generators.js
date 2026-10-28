@@ -66,7 +66,7 @@ function addMember(C, kind, sys, box, axis, role, o = {}) {
   const raw = box[i + 3] - box[i];
   const len = Math.round(o.len ?? raw);
   if (len < 30) return null;
-  const m = { kind, sys, box, axis, len, role, strong: !!o.strong, note: o.note || '', group: o.group || '' };
+  const m = { kind, sys, box, axis, len, role, strong: !!o.strong, extra: !!o.extra, note: o.note || '', group: o.group || '' };
   C.members.push(m);
   return m;
 }
@@ -612,8 +612,37 @@ function pushPieces(C, f, label, board, pcs, layers, t, S) {
   }
 }
 
+/* İlave profiller: otomatik karkasa kullanıcının (ya da birleşim çözümlemesinin) eklediği parçalar.
+ * e = { kind: C | U | CU (C+U takviyeli) | CD | UD, sys, axis: x | y | z, x, y, z (başlangıç köşesi, eleman koordinatı), len, note, auto } */
+export const EXTRA_KINDS = { C: 'C dikme', U: 'U ray / kuşak', CU: 'C+U takviyeli dikme', CD: 'CD60 tavan profili', UD: 'UD28 tavan profili' };
+export function extraBox(e) {
+  const len = Math.max(30, +e.len || 0), x = +e.x || 0, y = +e.y || 0, z = +e.z || 0;
+  const ceil = e.kind === 'CD' || e.kind === 'UD';
+  const web = e.kind === 'CD' ? 60 : e.kind === 'UD' ? 28 : +e.sys || 50;
+  const fl = ceil ? 27 : e.kind === 'U' ? 40 : 50;
+  if (e.axis === 'x') return [x, y, z, x + len, y + web, z + fl];
+  if (e.axis === 'y') return ceil ? [x, y, z, x + web, y + len, z + fl] : [x, y, z, x + fl, y + len, z + web];
+  return [x, y, z, x + fl, y + web, z + len];
+}
+function applyExtras(C, el) {
+  for (const e of el.extra || []) {
+    const box = extraBox(e), role = `İlave${e.auto ? ' (birleşim)' : ''}${e.note ? ' — ' + e.note : ''}`;
+    const sys = e.kind === 'CD' ? 60 : e.kind === 'UD' ? 28 : +e.sys || 50;
+    if (e.kind === 'CU') {
+      addMember(C, 'C', sys, box, e.axis, role, { len: +e.len, extra: true, strong: true });
+      addMember(C, 'U', sys, box, e.axis, role + ' (takviye U)', { len: +e.len, extra: true, strong: true, note: 'C ile kutu yapılır' });
+      C.qty.LN9 += Math.ceil(+e.len / 300) * 2 + 8;
+    } else {
+      addMember(C, e.kind, sys, box, e.axis, role, { len: +e.len, extra: true });
+      C.qty.LN9 += 4;
+    }
+    if (e.anchor) C.qty.dowel += Math.ceil(+e.len / C.S.dowelPitch) + 1; // duvara / döşemeye dübelli
+  }
+}
+
 export function generate(el, S) {
   const model = el.type === 'duvar' ? genWall(el.params, S) : el.type === 'tavan' ? genCeiling(el.params, S) : genFurniture(el.type, el.params, S);
+  applyExtras(model, el);
   model.el = el;
   return model;
 }
