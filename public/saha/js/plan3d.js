@@ -7,6 +7,7 @@
 import { V, wallLen, wallDir, polyCentroid, pointInPoly, wallExt, planLevels } from './plan-geom.js';
 import { roofFaces, coverOf, outlineOf } from './roof.js';
 import { floorTexture } from './textures.js';
+import { stairWorld, stairBuild, stairXf } from './stairs.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
 import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
@@ -211,6 +212,34 @@ export class Plan3D {
     // düz çatı yüzeyi parapetin içinde biraz yukarıda değil; eğimli çatıya saçak kalınlığı: alın tahtası çizgisi yok sayılır
   }
 
+  /* merdiven: betonarmede basamaklar dolu, ahşap / metalde basamak plakası + taşıyıcı; döner merdivende orta kolon */
+  stair(st, g) {
+    const W = stairWorld(st), b = stairBuild(st.build), solid = b.k === 'beton';
+    const mat = this.mat('stair' + b.c, () => new THREE.MeshStandardMaterial({ color: b.c, roughness: b.k === 'metal' ? 0.45 : 0.85, metalness: b.k === 'metal' ? 0.4 : 0 }));
+    for (const s of W.steps) {
+      const th = solid ? s.z : s.land ? 10 : 5;
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(s.pts.map(p => new THREE.Vector2(M(p.x), -M(p.y)))), { depth: M(th), bevelEnabled: false });
+      geo.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(geo, mat); m.position.y = M(s.z - th); m.castShadow = m.receiveShadow = true; m.name = 'Merdiven';
+      g.add(m);
+    }
+    if (st.type === 'spiral') {
+      const c = stairXf(st)(W.P.C), r = Math.max(4, W.P.r0);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(M(r), M(r), M(st.H), 20), this.mat('stcol', () => new THREE.MeshStandardMaterial({ color: '#7C8187', roughness: 0.5, metalness: 0.3 })));
+      m.position.set(M(c.x), M(st.H / 2), M(c.y)); m.castShadow = true; m.name = 'Merdiven kolonu';
+      g.add(m);
+    } else if (!solid) {   // açık basamaklarda yürüme çizgisi boyunca orta taşıyıcı (kiriş)
+      const pts = W.steps.map(s => ({ ...polyCentroid(s.pts), z: s.z }));
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], c = pts[i], L3 = Math.hypot(c.x - a.x, c.y - a.y, c.z - a.z); if (L3 < 1) continue;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(M(12), M(16), M(L3)), mat);
+        m.position.set(M((a.x + c.x) / 2), M((a.z + c.z) / 2 - 12), M((a.y + c.y) / 2));
+        m.rotation.order = 'YXZ'; m.rotation.y = Math.atan2(c.x - a.x, c.y - a.y); m.rotation.x = -Math.atan2(c.z - a.z, Math.hypot(c.x - a.x, c.y - a.y));
+        m.castShadow = true; g.add(m);
+      }
+    }
+  }
+
   buildLevel(P, g, meta, cut, ground0) {
     const cutH = 110;
     this.curMeta = meta;
@@ -281,6 +310,7 @@ export class Plan3D {
 
     // mobilya
     for (const it of P.items) g.add(this.furniture(it));
+    for (const st of P.stairs || []) this.stair(st, g);
   }
 
   opening(o, w, u, ang, t, topClip) {

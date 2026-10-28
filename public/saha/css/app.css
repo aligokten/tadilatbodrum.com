@@ -1100,3 +1100,11 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .rf-lay small{color:var(--muted)}
 .rf-svg svg{display:block;margin:0 auto;max-width:100%;height:auto}
 .req-pre{display:grid;gap:6px}.req-pre:empty{display:none}.req-pre .chip svg{width:14px;height:14px}
+.pe .edgelen{fill:#00797B;font-weight:700;font-family:Inter,Arial,sans-serif;paint-order:stroke;stroke:#fff;stroke-width:3px;pointer-events:none}
+.pe .vtxno{fill:#fff;font-weight:800;font-family:Inter,Arial,sans-serif;paint-order:stroke;stroke:#EB591F;stroke-width:4px;pointer-events:none}
+.pe .hdl-mid circle{fill:#fff;stroke:#00989A}.pe .hdl-mid path{stroke:#00989A}
+.edge-list{display:grid;gap:4px}.edge-row{display:grid;grid-template-columns:44px 1fr auto;gap:6px;align-items:center}.edge-row>span{font-size:12px;font-weight:700;color:var(--muted)}
+.vdel{gap:4px;align-items:center;margin-top:6px}.vdel .btn{min-width:30px;padding:0 6px}
+.stair-types{display:flex;flex-wrap:wrap;gap:6px}.st-ic{border:1.5px solid var(--line,#ddd);background:#fff;border-radius:10px;padding:3px;color:#4A4F57;cursor:pointer;line-height:0}.st-ic.on{border-color:#EB591F;box-shadow:0 0 0 2px rgba(235,89,31,.18)}
+.st-chk{margin:4px 0;padding:6px 8px;border-radius:8px;background:#EEF7F1;color:#1E6B3C}.st-chk.warn{background:#FFF5E5;color:#8A5300}.st-chk.err{background:#FDECEC;color:#A3261F}
+.pe .stair.sel polygon{stroke:#EB591F}
