@@ -9,8 +9,8 @@ export const barFor = (kind, S) => (kind === 'UD' || kind === 'CD' ? S.barCD : k
 export function assignPoz(model) {
   const mg = new Map();
   for (const m of model.members) {
-    const k = `${m.kind}|${m.sys}|${m.len}|${m.strong ? 1 : 0}`;
-    if (!mg.has(k)) mg.set(k, { kind: m.kind, sys: m.sys, len: m.len, strong: m.strong, items: [], roles: new Set(), notes: new Set() });
+    const k = `${m.kind}|${m.sys}|${m.len}|${m.strong ? 1 : 0}|${m.extra ? 1 : 0}`;
+    if (!mg.has(k)) mg.set(k, { kind: m.kind, sys: m.sys, len: m.len, strong: m.strong, extra: m.extra, items: [], roles: new Set(), notes: new Set() });
     const g = mg.get(k); g.items.push(m); g.roles.add(m.role.replace(/^.* · /, '').replace(/^Niş \d+ /, 'Niş ')); if (m.note) g.notes.add(m.note);
   }
   const groups = [...mg.values()].sort((a, b) => a.kind.localeCompare(b.kind) || b.sys - a.sys || b.len - a.len);

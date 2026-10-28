@@ -168,3 +168,23 @@ table.t tfoot td{font-weight:700;border-top:2px solid var(--ink)}
   .props{max-height:none}
   .v3d-bar{flex-wrap:wrap;left:10px}
 }
+
+/* içe aktarma, ilave profil, montaj */
+.addmode{display:flex;gap:6px;align-items:center;font-size:13px}
+.addmode select{padding:4px 6px;border:1px solid var(--line);border-radius:7px}
+.drawings.adding .drw-card[data-key="front"],.drawings.adding .drw-card[data-key="top"]{cursor:crosshair;outline:2px dashed #7c3aed;outline-offset:-4px}
+.lst.auto{border-color:#c4b5fd;background:#f5f3ff}
+.lst .row.wide{grid-template-columns:repeat(4,1fr)}
+.lst .row input[type=text]{grid-column:1/-1}
+.imp-drop{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--muted);margin:8px 0}
+.imp-opts{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:13px}
+.imp-opts select{padding:4px 6px;border:1px solid var(--line);border-radius:7px}
+.imp-plan{border:1px solid var(--line);border-radius:10px;background:#fafbfc;margin:8px 0}
+.imp-plan svg{width:100%;height:auto;max-height:260px;display:block}
+.modal-card.wide{max-width:980px}
+.jnt{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+.jnt svg{width:100%;height:auto;max-height:340px}
+.jnt h4{font-size:14px;margin-bottom:6px}
+.jnt ul{padding-left:18px;color:var(--ink2);font-size:13px}
+.kchip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;color:#fff;margin-right:4px}
+@media (max-width:720px){.jnt{grid-template-columns:1fr}}

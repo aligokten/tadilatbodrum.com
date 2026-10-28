@@ -71,7 +71,7 @@ Keşif ekibi için mobil + masaüstü çalışan, kurulabilir (PWA) uygulama. Ay
 
 ### SAGG Drywall+ (`/drywall`)
 
-Alçıpan profil ile bölme duvar, sabit mobilya (mutfak adası, TV ünitesi, niş raf) ve asma tavan (gizli ışık bandı, spot, müdahale kapağı) tasarımı; iskelet / kaplama çizimleri, poz numaralı kesim listeleri, profil ve levha kesim optimizasyonu, malzeme + maliyet listesi, imalat aşamaları ve yazdırılabilir imalat dosyası (PDF), DXF dışa aktarım. Ayrıntılar: **[public/drywall/README.md](public/drywall/README.md)**.
+Alçıpan profil ile bölme duvar, sabit mobilya (mutfak adası, TV ünitesi, niş raf) ve asma tavan (gizli ışık bandı, spot, müdahale kapağı) tasarımı; Shapr3D modelini (STEP / IGES / OBJ / STL) içe aktarıp profil karkasını ve montaj (birleşim) detaylarını otomatik çözümleme, otomatik sonuca ilave profil atama; iskelet / kaplama çizimleri, poz numaralı kesim listeleri, profil ve levha kesim optimizasyonu, malzeme + maliyet listesi, imalat aşamaları ve yazdırılabilir imalat dosyası (PDF), DXF dışa aktarım. Ayrıntılar: **[public/drywall/README.md](public/drywall/README.md)**.
 
 ## Dosya yapısı
 

@@ -1,8 +1,9 @@
 /* SAGG Drywall+ — uygulama: proje durumu, arayüz, sekmeler, dışa aktarım ve imalat dosyası. */
 import { SYSTEMS, BOARDS, INSULATION, DEFAULT_SETTINGS } from './catalog.js';
-import { TYPES, defaults, generate } from './generators.js';
+import { TYPES, defaults, generate, EXTRA_KINDS } from './generators.js';
 import { assignPoz, projectTakeoff, steps, barFor } from './takeoff.js';
-import { frameView, boardView, sheetView, barsView, wallSection, floorDetail, nicheDetail, ceilingDetail } from './draw.js';
+import { frameView, boardView, sheetView, barsView, wallSection, floorDetail, nicheDetail, ceilingDetail, jointDetail } from './draw.js';
+import { readModelFile, prepare, analyzeBody, toElement, findJoints, JOINT_LABEL } from './importer.js';
 import { toDXF } from './dxf.js';
 
 export const APP_VERSION = '1.0.0';
@@ -15,7 +16,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
 /* ───────────── durum ───────────── */
 function blankProject() {
-  return { v: 1, name: 'Yeni proje', client: '', address: '', author: '', date: new Date().toISOString().slice(0, 10), note: '', elements: [], settings: clone(DEFAULT_SETTINGS) };
+  return { v: 1, joints: [], name: 'Yeni proje', client: '', address: '', author: '', date: new Date().toISOString().slice(0, 10), note: '', elements: [], settings: clone(DEFAULT_SETTINGS) };
 }
 function load() {
   try { const p = JSON.parse(localStorage.getItem(LS)); if (p && p.elements) return normalize(p); } catch { /* boş */ }
@@ -27,14 +28,15 @@ function load() {
 function normalize(p) {
   const S = clone(DEFAULT_SETTINGS);
   p.settings = { ...S, ...(p.settings || {}), prices: { ...S.prices, ...(p.settings?.prices || {}) } };
-  for (const e of p.elements) e.params = { ...defaults(e.type), ...e.params };
+  for (const e of p.elements) { e.params = { ...defaults(e.type), ...e.params }; e.extra ||= []; }
+  p.joints ||= [];
   return p;
 }
 function addEl(p, type) {
   const n = p.elements.filter(e => e.type === type).length + 1;
   let code = TYPES[type].code + n;
   while (p.elements.some(e => e.code === code)) code = TYPES[type].code + (+code.replace(/\D/g, '') + 1);
-  const el = { id: uid(), type, code, name: `${TYPES[type].label} ${n}`, params: defaults(type) };
+  const el = { id: uid(), type, code, name: `${TYPES[type].label} ${n}`, params: defaults(type), extra: [] };
   p.elements.push(el);
   return el;
 }
@@ -178,23 +180,49 @@ function renderForm() {
   if (!el) { $('#props').innerHTML = '<p class="hint">Soldan bir eleman seçin ya da ekleyin.</p>'; $('#propTitle').textContent = 'Parametreler'; $('#elInfo').innerHTML = ''; return; }
   $('#propTitle').textContent = `${el.code} · ${TYPES[el.type].label}`;
   $('#props').innerHTML = `<div class="fld"><label for="f_name">Ad</label><input type="text" id="f_name" data-name value="${esc(el.name)}"></div>` +
-    FORMS[el.type].map(f => (f.list ? listHTML(f, el.params) : fieldHTML(f, el.params))).join('');
+    FORMS[el.type].map(f => (f.list ? listHTML(f, el.params) : fieldHTML(f, el.params))).join('') + extraHTML(el);
   renderInfo();
 }
+/* İlave profiller (otomatik karkasa eklenen) */
+const AXES = [['z', 'Düşey (z)'], ['x', 'Yatay — boy (x)'], ['y', 'Derinlik (y)']];
+function extraHTML(el) {
+  const arr = el.extra || [];
+  const opt = (o, v) => o.map(([a, b]) => `<option value="${a}" ${String(a) === String(v) ? 'selected' : ''}>${esc(b)}</option>`).join('');
+  return `<div class="sec">İlave profiller</div><p class="hint" style="margin-bottom:6px">Otomatik karkasa eklenir; koordinatlar eleman iskeletine göre (x boy, y derinlik, z yükseklik). Çizimler sekmesinde tıklayarak da ekleyebilirsiniz.</p>` +
+    arr.map((e, i) => `<div class="lst${e.auto ? ' auto' : ''}"><div class="lst-h">İlave ${i + 1}${e.auto ? ' <span class="tag">birleşim</span>' : ''}<button type="button" data-xrm="${i}" title="Kaldır">✕</button></div>
+      <div class="row"><label>Profil<select data-xi="${i}:kind">${opt(Object.entries(EXTRA_KINDS), e.kind)}</select></label><label>Sistem<select data-xi="${i}:sys">${opt([[50, '50'], [75, '75'], [100, '100']], e.sys)}</select></label><label>Yön<select data-xi="${i}:axis">${opt(AXES, e.axis)}</select></label></div>
+      <div class="row wide">${['x', 'y', 'z', 'len'].map(k => `<label>${k === 'len' ? 'Boy' : k.toUpperCase()}<input type="number" step="10" data-xi="${i}:${k}" value="${e[k]}"></label>`).join('')}</div>
+      <div class="row"><label style="grid-column:1/3">Not<input type="text" data-xi="${i}:note" value="${esc(e.note || '')}"></label><label>Dübelli<input type="checkbox" data-xi="${i}:anchor" ${e.anchor ? 'checked' : ''}></label></div></div>`).join('') +
+    `<button type="button" class="add-row" data-xadd>+ İlave profil ekle</button>`;
+}
+function newExtra(el, mode, at) {
+  const md = curMd(), p = el.params;
+  const zs = md.members.map(m => m.box[5]), xs = md.members.flatMap(m => [m.box[0], m.box[3]]);
+  const H = Math.round(Math.max(...zs)), x0 = Math.round(Math.min(...xs)), x1 = Math.round(Math.max(...xs));
+  const sys = +p.sys || 50;
+  if (el.type === 'tavan') {
+    return mode === 'h' ? { kind: 'CD', sys: 60, axis: 'x', x: 10, y: Math.round((at?.y ?? p.W / 2) - 30), z: +p.Hc + 27, len: +p.L - 20, note: 'İlave taşıyıcı' }
+      : { kind: 'CD', sys: 60, axis: 'y', x: Math.round((at?.x ?? p.L / 2) - 30), y: 5, z: +p.Hc, len: +p.W - 10, note: 'İlave montaj profili' };
+  }
+  return mode === 'h' ? { kind: 'U', sys, axis: 'x', x: x0, y: 0, z: Math.round((at?.z ?? H / 2) - 20), len: x1 - x0, note: 'Yatay kuşak' }
+    : { kind: 'C', sys, axis: 'z', x: Math.round((at?.x ?? (x0 + x1) / 2) - 25), y: 0, z: 0, len: H - 10, note: 'İlave dikme' };
+}
+
 function renderInfo() {
   const md = curMd();
   if (!md) { $('#elInfo').innerHTML = ''; return; }
   $('#elInfo').innerHTML = md.info.map(s => `<div>${esc(s)}</div>`).join('') + md.notes.map(s => `<div class="warn">⚠ ${esc(s)}</div>`).join('') +
-    `<div style="margin-top:6px">${md.members.length} profil parçası · ${md.boards.length} levha parçası</div>`;
+    `<div style="margin-top:6px">${md.members.length} profil parçası (${md.members.filter(m => m.extra).length} ilave) · ${md.boards.length} levha parçası</div>` +
+    (md.el.src ? `<div class="hint" style="margin-top:6px">İçe aktarıldı: ${esc(md.el.src.file || '')} · ${esc(md.el.src.body)}</div>` + (md.el.srcInfo || []).map(s => `<div>${esc(s)}</div>`).join('') : '');
 }
 
-function cardHTML(sh, i) { return `<div class="drw-card" data-zoom="${i}"><h4>${esc(sh.title)}</h4>${sh.S.svg()}</div>`; }
+function cardHTML(sh, i) { return `<div class="drw-card" data-zoom="${i}" data-key="${sh.key}"><h4>${esc(sh.title)}</h4>${sh.S.svg()}</div>`; }
 let currentSheets = [];
 
 function cutTablesHTML(md) {
   const S = P.settings;
   let h = `<h3>${esc(md.el.code)} · ${esc(md.el.name)} — profil kesim listesi</h3><table class="t"><thead><tr><th>Poz</th><th>Profil</th><th class="n">Kesim boyu</th><th class="n">Adet</th><th class="n">Toplam</th><th>Kullanım yeri</th><th>Not</th></tr></thead><tbody>`;
-  for (const g of md.memberGroups) h += `<tr><td class="pz">${g.poz}</td><td>${g.kind}${g.sys}${g.strong ? '<span class="tag">takviye</span>' : ''}</td><td class="n">${g.len} mm</td><td class="n">${g.items.length}</td><td class="n">${nf(g.len * g.items.length / 1000, 2)} m</td><td>${esc([...g.roles].join(', '))}</td><td>${esc([...g.notes].join('; '))}${g.len > barFor(g.kind, S) ? `<span class="tag">ekli (${S.spliceLap} mm bindirme)</span>` : ''}</td></tr>`;
+  for (const g of md.memberGroups) h += `<tr><td class="pz">${g.poz}</td><td>${g.kind}${g.sys}${g.strong ? '<span class="tag">takviye</span>' : ''}${g.extra ? '<span class="tag" style="background:#ede9fe;color:#5b21b6">ilave</span>' : ''}</td><td class="n">${g.len} mm</td><td class="n">${g.items.length}</td><td class="n">${nf(g.len * g.items.length / 1000, 2)} m</td><td>${esc([...g.roles].join(', '))}</td><td>${esc([...g.notes].join('; '))}${g.len > barFor(g.kind, S) ? `<span class="tag">ekli (${S.spliceLap} mm bindirme)</span>` : ''}</td></tr>`;
   h += `</tbody></table><h3>Levha kesim listesi (${S.boardT} mm)</h3><table class="t"><thead><tr><th>Poz</th><th>Levha</th><th class="n">En × Boy</th><th class="n">Adet</th><th class="n">Alan</th><th>Yüz / kat</th><th>Çentik (boşluk kesimi)</th></tr></thead><tbody>`;
   for (const g of md.boardGroups) h += `<tr><td class="pz">${g.poz}</td><td>${BOARDS[g.type].short}</td><td class="n">${g.w} × ${g.h}</td><td class="n">${g.items.length}</td><td class="n">${nf(g.items.reduce((s, b) => s + b.area, 0), 2)} m²</td><td>${esc([...g.faces].join(', '))}</td><td>${g.notches.map(n => `${n.w}×${n.h} @ (${n.u}, ${n.v})`).join('<br>') || '—'}</td></tr>`;
   h += '</tbody></table><p class="hint">Çentik konumu: parçanın sol-alt köşesinden (yatay, düşey) mm. Levha ölçüleri kesim ölçüsüdür; ±2 mm tolerans.</p>';
@@ -237,7 +265,12 @@ async function renderTab() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === tab));
   const md = curMd();
-  if (tab === '3d') { const v = await ensure3D(); v?.resize(); v?.show(md || null); }
+  if (tab === '3d') {
+    const v = await ensure3D(); v?.resize();
+    const all = $('#showAll').checked ? placedList() : [];
+    if (all.length) v?.showAll(all); else v?.show(md || null);
+  }
+  else if (tab === 'joints') $('#joints').innerHTML = md ? jointsHTML(md) : '';
   else if (tab === 'draw') { currentSheets = md ? elementSheets(md) : []; $('#drawings').innerHTML = currentSheets.map(cardHTML).join('') || '<p class="doc hint">Eleman seçin.</p>'; }
   else if (tab === 'clad') { currentSheets = md ? cladSheets(md) : []; $('#cladViews').innerHTML = currentSheets.map(cardHTML).join('') || '<p class="doc hint">Bu elemanda kaplama yok.</p>'; }
   else if (tab === 'cut') $('#cutList').innerHTML = md ? cutTablesHTML(md) : '';
@@ -264,12 +297,13 @@ $('#elList').addEventListener('click', e => {
     const el = P.elements.find(x => x.id === d.dataset.del);
     if (!confirm(`${el.code} · ${el.name} silinsin mi?`)) return;
     P.elements = P.elements.filter(x => x !== el);
+    P.joints = P.joints.filter(j => j.a !== el.id && j.b !== el.id);
     if (sel === el.id) sel = P.elements[0]?.id || null;
     return refresh();
   }
   if (c) {
     const src = P.elements.find(x => x.id === c.dataset.dup);
-    const el = addEl(P, src.type); el.params = clone(src.params); el.name = src.name + ' (kopya)';
+    const el = addEl(P, src.type); el.params = clone(src.params); el.extra = clone(src.extra || []).map(x => ({ ...x, auto: false })); el.name = src.name + ' (kopya)';
     sel = el.id; return refresh();
   }
   if (li) { sel = li.dataset.id; view3d && (view3d.fitted = false); refresh(); }
@@ -289,6 +323,15 @@ $('#props').addEventListener('input', e => {
     if (t.type === 'number' && t.value === '') return;
     return refresh(false);
   }
+  if (t.dataset.xi) {
+    const [i, k] = t.dataset.xi.split(':');
+    const e = el.extra[+i];
+    e[k] = t.type === 'checkbox' ? t.checked : t.type === 'text' ? t.value : cast(t.value, e[k]);
+    if (k === 'note') { save(); return; }
+    if (t.tagName === 'SELECT') return refresh();
+    if (t.value === '') return;
+    return refresh(false);
+  }
   if (t.dataset.li) {
     const [l, i, k] = t.dataset.li.split(':');
     const it = el.params[l][+i];
@@ -302,6 +345,9 @@ $('#props').addEventListener('change', e => { if (e.target.tagName === 'SELECT' 
 $('#props').addEventListener('click', e => {
   const el = curEl(); if (!el) return;
   const rm = e.target.closest('[data-rm]'), ad = e.target.closest('[data-addli]');
+  const xr = e.target.closest('[data-xrm]');
+  if (xr) { el.extra.splice(+xr.dataset.xrm, 1); return refresh(); }
+  if (e.target.closest('[data-xadd]')) { el.extra.push(newExtra(el, 'v')); return refresh(); }
   if (rm) { const [l, i] = rm.dataset.rm.split(':'); el.params[l].splice(+i, 1); refresh(); }
   if (ad) { const L = FORMS[el.type].find(f => f.list === ad.dataset.addli); (el.params[L.list] ||= []).push(L.add()); refresh(); }
 });
@@ -311,9 +357,72 @@ $('#projName').addEventListener('input', e => { P.name = e.target.value; save();
 $('#boardOp').addEventListener('input', e => { if (view3d) { view3d.opts.boards = +e.target.value; view3d.show(curMd()); } });
 $('#showFrame').addEventListener('change', e => { if (view3d) { view3d.opts.frame = e.target.checked; view3d.show(curMd()); } });
 $('#fitBtn').addEventListener('click', () => view3d?.fit());
+$('#showAll').addEventListener('change', () => { if (view3d) view3d.fitted = false; renderTab(); });
+
+/* içe aktarılan konumlarıyla tüm elemanlar: yerel iskelet → gövde köşesi ofseti */
+function placedList() {
+  const t = P.settings.boardT;
+  return models.filter(m => m.el.src?.place).map(m => {
+    const p = m.el.params, pl = m.el.src.place;
+    const off = m.el.type === 'duvar' ? [0, +p.A.layers * t, 0] : m.el.type === 'tavan' ? [0, 0, -pl.z] : [+p.layers * t, +p.layers * t, 0];
+    return { md: m, place: pl, off };
+  });
+}
+
+/* ───────────── montaj (birleşim) detayları ───────────── */
+const JOINT_NOTES = {
+  T: j => [`Ana duvarda birleşim aksına (x = ${j.pos} mm) bağlantı dikmesi konur — ilave profil olarak otomatik eklendi.`, 'Dik gelen duvarın raylarının ucuna ve bitiş dikmesine sızdırmazlık bandı yapıştırılır.', 'Ana duvarın o yüzü önce kaplanır; dik gelen duvarın bitiş dikmesi levhadan geçen TN 3,5×35 vida ile 300 mm aralıkla bağlantı dikmesine vidalanır.', 'İç köşelere derz bandı + dolgu (köşe bandı) uygulanır.'],
+  L: () => ['Köşede bir duvar sürekli devam eder, diğeri onun yüzüne dayanır.', 'Sürekli duvarın köşe dikmesine ek olarak iç köşede levha tespiti için ilave dikme konur (otomatik eklendi).', 'Dayanan duvarın bitiş dikmesi köşe dikmesine LN vida ile bağlanır; dış köşeye köşe profili takılır.'],
+  I: () => ['Aynı doğrultudaki iki duvarın uç dikmeleri sırt sırta getirilip 300 mm aralıkla LN vida ile bağlanır.', 'Levha derzleri ek hattına gelmeyecek şekilde kaydırılır.'],
+  free: () => ['Serbest uçta uç dikmesi (gerekirse C+U takviyeli) kullanılır.', 'Uç, levha şeridi ile kapatılır; iki dış köşeye köşe profili takılır.'],
+  wallfix: j => [`Mobilyanın ${j.side === 'back' ? 'arka' : 'ön'} çerçevesi duvara dayanır: o yüz kaplanmaz.`, 'Çerçeve sızdırmazlık bandı ile duvara ya da duvar karkasına 600 mm aralıkla dübel / vida ile bağlanır.', 'Mevcut duvar alçıpan ise bağlantı noktalarında duvar dikmelerine ya da ilave kuşağa vidalanır.'],
+  ceiling: j => [`Duvarın içine tavan kotunda (z ≈ ${j.z} mm) yatay U kuşak konur — ilave profil olarak otomatik eklendi.`, 'Tavanın UD28 profili levhadan geçen vidalarla bu kuşağa 600 mm aralıkla bağlanır.', j.through === false ? 'Duvar tavanda bitiyorsa üst ray tavan karkasına bağlanır; duvar düzlemi için ek askı / payanda gerekir.' : 'Duvar döşemeye kadar devam eder; tavan duvara iki yandan bağlanır.', 'Tavan–duvar birleşimine akrilik mastik ya da gölge derz profili uygulanır.'],
+};
+function elementJoints(el) {
+  const out = P.joints.filter(j => j.a === el.id || j.b === el.id);
+  if (el.type === 'duvar' && !out.length) for (const e of ['endA', 'endB']) if (el.params[e] === 'free') out.push({ type: 'free', a: el.id, endA: e, derived: true });
+  return out;
+}
+function jointCtx(j) {
+  const A = P.elements.find(e => e.id === j.a), B = P.elements.find(e => e.id === j.b);
+  const sysOf = e => (e ? (e.type === 'tavan' ? 75 : +e.params.sys || 50) : 75);
+  const layOf = e => (e?.type === 'duvar' ? +e.params.A.layers : +e?.params.layers || 1);
+  // çizimde "ana" eleman yatay çizilir: T'de ana duvar B (A ona dik gelir), diğerlerinde A
+  const [main, other] = j.type === 'T' || j.type === 'wallfix' ? [B, A] : [A, B || A];
+  return { sysA: sysOf(main), sysB: sysOf(other), t: P.settings.boardT, la: layOf(main), lb: layOf(other) };
+}
+function jointTitle(j) {
+  const A = P.elements.find(e => e.id === j.a), B = P.elements.find(e => e.id === j.b);
+  const nm = e => (e ? `${e.code}` : '?');
+  const endTr = { endA: 'başlangıç ucu', endB: 'bitiş ucu' };
+  return `${JOINT_LABEL[j.type]} — ${nm(A)}${j.endA ? ` (${endTr[j.endA]})` : ''}${B ? ` ↔ ${nm(B)}` : ''}`;
+}
+function jointsHTML(md) {
+  const js = elementJoints(md.el);
+  const intro = `<h3>${esc(md.el.code)} · ${esc(md.el.name)} — montaj detayları</h3>`;
+  if (!js.length) return intro + '<p class="hint">Bu eleman için birleşim bulunamadı. Shapr3D modelini <b>İçe aktar</b> ile yüklediğinizde gövdeler arası T / L köşe, tavan–duvar ve mobilya–duvar birleşimleri otomatik çıkarılır.</p>';
+  return intro + js.map(j => `<div class="jnt"><div>${jointDetail(j, jointCtx(j)).svg()}</div><div><h4>${esc(jointTitle(j))}</h4><ul>${JOINT_NOTES[j.type](j).map(s => `<li>${esc(s)}</li>`).join('')}</ul></div></div>`).join('');
+}
 
 /* yakınlaştırma */
-['#drawings', '#cladViews'].forEach(s => $(s).addEventListener('click', e => { const c = e.target.closest('[data-zoom]'); if (c) openZoom(currentSheets[+c.dataset.zoom].S.svg()); }));
+['#drawings', '#cladViews'].forEach(s => $(s).addEventListener('click', e => {
+  const c = e.target.closest('[data-zoom]'); if (!c) return;
+  const mode = $('#addMode').value, el = curEl(), key = c.dataset.key;
+  const target = el?.type === 'tavan' ? 'top' : 'front';
+  if (s === '#drawings' && mode && key === target) {
+    const svg = c.querySelector('svg'), pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const at = target === 'top' ? { x: q.x, y: -q.y } : { x: q.x, z: -q.y };
+    el.extra.push(newExtra(el, mode, at));
+    return refresh();
+  }
+  openZoom(currentSheets[+c.dataset.zoom].S.svg());
+}));
+$('#addMode').addEventListener('change', e => {
+  $('#drawings').classList.toggle('adding', !!e.target.value);
+  $('#drawHint').textContent = e.target.value ? (curEl()?.type === 'tavan' ? 'Tavan planına tıklayın: tıklanan konuma CD60 eklenir' : 'Ön görünüşe tıklayın: tıklanan konuma profil eklenir (sağ panelde düzenlenir)') : 'Çizime tıklayın: büyütür (tekerlek / sürükle ile yakınlaş, kaydır)';
+});
 $('#nestViews').addEventListener('click', e => { const s = e.target.closest('svg'); if (s) openZoom(s.outerHTML); });
 function openZoom(svg) {
   const z = $('#zoom'); z.hidden = false;
@@ -383,6 +492,7 @@ $('.top-actions').addEventListener('click', e => {
   }
   if (a === 'save') download(`${fileBase()}.drywall.json`, JSON.stringify({ app: 'SAGG Drywall+', version: APP_VERSION, ...P }, null, 1), 'application/json');
   if (a === 'open') $('#fileIn').click();
+  if (a === 'import') openImport();
   if (a === 'settings') openSettings();
   if (a === 'info') openInfo();
   if (a === 'report') openReport();
@@ -400,6 +510,7 @@ $('#fileIn').addEventListener('change', async e => {
 
 function modal(html, onInput) {
   $('#modalBody').innerHTML = html;
+  $('#modal .modal-card').classList.remove('wide');
   $('#modal').hidden = false;
   $('#modalBody').oninput = onInput;
 }
@@ -440,7 +551,7 @@ function openSettings() {
 }
 
 /* ───────────── imalat dosyası (yazdır / PDF) ───────────── */
-const REP_CATS = [['cover', 'Kapak'], ['draw', 'Çizimler'], ['clad', 'Kaplama'], ['cut', 'Kesim listeleri'], ['plan', 'Kesim planı'], ['bom', 'Malzeme'], ['steps', 'Aşamalar']];
+const REP_CATS = [['cover', 'Kapak'], ['draw', 'Çizimler'], ['clad', 'Kaplama'], ['cut', 'Kesim listeleri'], ['montaj', 'Montaj detayları'], ['plan', 'Kesim planı'], ['bom', 'Malzeme'], ['steps', 'Aşamalar']];
 async function openReport() {
   if (!models.length) return alert('Önce eleman ekleyin.');
   const S = P.settings;
@@ -481,6 +592,9 @@ async function openReport() {
     // kesim listeleri: uzun tablolar sayfalara bölünür
     const cut = cutTablesHTML(m);
     page('cut', m, 'Kesim listesi', `<h2>${esc(nm)} — kesim listesi</h2>${cut.replace(/<h3>[^<]*— profil kesim listesi<\/h3>/, '<h3>Profil kesim listesi</h3>')}`);
+    // her birleşim bir kez: T'de ana duvarın, diğerlerinde A elemanının paftasında
+    for (const j of elementJoints(m.el)) if ((j.type === 'T' ? j.b : j.a) === m.el.id)
+      page('montaj', m, 'Montaj detayı', `<h2>${esc(nm)} — ${esc(jointTitle(j))}</h2><div class="cover"><div class="draw" style="height:140mm">${jointDetail(j, jointCtx(j)).svg()}</div><div><h3>Montaj notları</h3><ul style="padding-left:5mm">${JOINT_NOTES[j.type](j).map(s => `<li>${esc(s)}</li>`).join('')}</ul></div></div>`);
     page('steps', m, 'İmalat aşamaları', `<h2>${esc(nm)} — imalat aşamaları</h2><div class="cols2">${stepsHTML(m, false)}</div>`);
   }
   // kesim planı
@@ -512,3 +626,121 @@ $('#repPrint').addEventListener('click', () => window.print());
 $('#repClose').addEventListener('click', () => { $('#report').hidden = true; $('#reportBody').innerHTML = ''; });
 
 refresh();
+
+/* ───────────── Shapr3D modeli içe aktarma ───────────── */
+const KIND_OPTS = [['duvar', 'Bölme duvar'], ['kutu', 'Mobilya kutusu (özel kutu)'], ['tavan', 'Asma tavan'], ['yoksay', 'Yoksay']];
+const KIND_COL = { duvar: '#2d8fa3', kutu: '#d4692a', tavan: '#3d9b6e', yoksay: '#94a3b8' };
+let IMP = null;
+function openImport() {
+  modal(`<h2>Shapr3D modeli içe aktar</h2>
+    <p class="hint">Shapr3D'de <b>Export</b> ile <b>STEP</b> (önerilen), IGES, OBJ ya da STL alın. Her gövde (body) ayrı eleman olarak çözümlenir:
+    ince düşey gövdeler bölme duvar, kalın / derin gövdeler mobilya kutusu, yüksekteki ince yatay gövdeler asma tavan. Kapı / pencere boşlukları ve nişler
+    gövde yüzeylerinden bulunur; gövdeler arası birleşimlerden montaj detayları ve bağlantı profilleri üretilir.</p>
+    <label class="imp-drop">Dosya seçin<br><input type="file" id="impFile" accept=".step,.stp,.iges,.igs,.obj,.stl"></label>
+    <div class="imp-opts"><label>Birim <select id="impUnit"><option value="auto">Otomatik</option><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></label>
+    <label>Yukarı ekseni <select id="impUp"><option value="auto">Otomatik</option><option value="z">Z</option><option value="y">Y</option></select></label></div>
+    <div id="impOut"></div>`);
+  $('#modal .modal-card').classList.add('wide');
+  IMP = null;
+  $('#impFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    $('#impOut').innerHTML = '<p class="hint">Okunuyor… (STEP dosyalarında okuyucu ilk seferde yüklenir, birkaç saniye sürebilir)</p>';
+    try { const r = await readModelFile(f); IMP = { file: f.name, ...r }; runImport(); }
+    catch (err) { $('#impOut').innerHTML = `<p class="warn">Hata: ${esc(err.message)}</p>`; }
+  };
+  for (const id of ['#impUnit', '#impUp']) $(id).onchange = () => IMP && runImport();
+}
+function runImport() {
+  const up = $('#impUp').value === 'auto' ? IMP.upGuess : $('#impUp').value;
+  const pr = prepare(IMP.meshes, { unit: $('#impUnit').value, up });
+  IMP.bodies = pr.bodies.map((b, i) => { const a = analyzeBody(b); a.idx = i; a.file = IMP.file; a.use = a.kind !== 'yoksay'; return a; });
+  IMP.unitUsed = pr.unitUsed; IMP.up = up;
+  renderImport();
+}
+function impPlanSVG(bodies) {
+  const pts = bodies.flatMap(b => { const a = b.place.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [[0, 0], [b.dims[0], 0], [b.dims[0], b.dims[1]], [0, b.dims[1]]].map(([x, y]) => [b.place.x + c * x - s * y, b.place.y + s * x + c * y]); });
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), m = Math.max(x1 - x0, y1 - y0) * 0.06 + 50;
+  const fs = Math.max(x1 - x0, y1 - y0) / 40;
+  const polys = bodies.map(b => {
+    const a = b.place.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const q = [[0, 0], [b.dims[0], 0], [b.dims[0], b.dims[1]], [0, b.dims[1]]].map(([x, y]) => [b.place.x + c * x - s * y, -(b.place.y + s * x + c * y)]);
+    const cx = q.reduce((t, p) => t + p[0], 0) / 4, cy = q.reduce((t, p) => t + p[1], 0) / 4;
+    const col = KIND_COL[b.use ? b.kind : 'yoksay'];
+    return `<polygon points="${q.map(p => p.join(',')).join(' ')}" fill="${col}" fill-opacity="${b.kind === 'tavan' ? 0.12 : 0.5}" stroke="${col}" stroke-width="${fs / 6}"/><text x="${cx}" y="${cy}" font-size="${fs}" text-anchor="middle" paint-order="stroke" stroke="#fff" stroke-width="${fs / 4}">${b.idx + 1}</text>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0 - m} ${-y1 - m} ${x1 - x0 + 2 * m} ${y1 - y0 + 2 * m}">${polys}</svg>`;
+}
+function renderImport() {
+  const B = IMP.bodies;
+  const tr = b => {
+    const f = b.feat, holes = f.front.holes.length, rec = ['front', 'back', 'left', 'right'].reduce((t, k) => t + f[k].recess.length, 0);
+    return `<tr><td><input type="checkbox" data-iu="${b.idx}" ${b.use ? 'checked' : ''}></td><td class="pz">${b.idx + 1}</td><td>${esc(b.name)}</td>
+      <td class="n">${b.dims.join(' × ')}</td><td class="n">${Math.round(b.place.rot)}°</td>
+      <td><select data-ik="${b.idx}">${KIND_OPTS.map(([k, l]) => `<option value="${k}" ${k === b.kind ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td>${holes ? `${holes} boşluk ` : ''}${rec ? `${rec} niş` : ''}${b.notes.map(n => `<div class="hint">${esc(n)}</div>`).join('')}</td></tr>`;
+  };
+  const n = B.filter(b => b.use && b.kind !== 'yoksay').length;
+  $('#impOut').innerHTML = `<p class="hint">${esc(IMP.file)} · ${B.length} gövde · birim ${IMP.unitUsed} · yukarı ${IMP.up.toUpperCase()} — plan görünüşü (renk: <span class="kchip" style="background:${KIND_COL.duvar}">duvar</span><span class="kchip" style="background:${KIND_COL.kutu}">mobilya</span><span class="kchip" style="background:${KIND_COL.tavan}">tavan</span>)</p>
+    <div class="imp-plan">${impPlanSVG(B)}</div>
+    <table class="t"><thead><tr><th></th><th>#</th><th>Gövde</th><th class="n">Ölçü (mm)</th><th class="n">Açı</th><th>Tür</th><th>Bulunan</th></tr></thead><tbody>${B.map(tr).join('')}</tbody></table>
+    <p style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="primary" id="impGo" ${n ? '' : 'disabled'}>Projeye ekle (${n} eleman)</button><span class="hint">Eklenen elemanların parametreleri ve ilave profilleri sonradan düzenlenebilir.</span></p>`;
+  $('#impOut').onchange = e => {
+    const u = e.target.dataset.iu, k = e.target.dataset.ik;
+    if (u != null) B[+u].use = e.target.checked;
+    if (k != null) { B[+k].kind = e.target.value; B[+k].use = e.target.value !== 'yoksay'; }
+    renderImport();
+  };
+  $('#impGo').onclick = commitImport;
+}
+function commitImport() {
+  const B = IMP.bodies.filter(b => b.use && b.kind !== 'yoksay');
+  const t = P.settings.boardT;
+  const made = [];
+  for (const b of B) {
+    const r = toElement(b, b.kind);
+    const el = addEl(P, r.type);
+    el.name = b.name.slice(0, 40);
+    el.params = { ...defaults(r.type), ...r.params };
+    el.src = r.src; el.srcInfo = r.info;
+    made.push({ el, b });
+  }
+  // birleşimler ve otomatik bağlantı profilleri
+  const items = made.map(({ el, b }) => ({ id: el.id, kind: el.type, dims: b.dims, place: b.place }));
+  const joints = findJoints(items);
+  const E = id => made.find(m => m.el.id === id).el;
+  const lt = el => (el.type === 'duvar' ? 0 : +el.params.layers * t); // gövde yerel x → iskelet x
+  for (const j of joints) {
+    const A = E(j.a), Bel = j.b ? E(j.b) : null;
+    if (j.type === 'T' && Bel && Bel.type !== 'tavan') {
+      Bel.extra.push({ kind: 'C', sys: +Bel.params.sys, axis: 'z', x: Math.round(j.pos - lt(Bel) - 25), y: 0, z: 0, len: Math.round((Bel.type === 'duvar' ? +Bel.params.H : +Bel.params.H) - 10), note: `T bağlantı dikmesi (${A.code})`, auto: true });
+    }
+    if (j.type === 'L' && Bel && Bel.type !== 'tavan') {
+      // iç köşe: dayanan elemanın iç yüzünün hemen yanına ilave dikme (ana elemanın yerel x'i)
+      const Ta = items.find(i => i.id === A.id).dims[1], Lb = items.find(i => i.id === Bel.id).dims[0];
+      const c = j.pos ?? (j.endB === 'endA' ? Ta / 2 : Lb - Ta / 2);
+      const x = j.endB === 'endA' ? c + Ta / 2 + 10 : c - Ta / 2 - 60;
+      Bel.extra.push({ kind: 'C', sys: +Bel.params.sys, axis: 'z', x: Math.round(x - lt(Bel)), y: 0, z: 0, len: Math.round(+Bel.params.H - 10), note: `L köşe ilave dikmesi (${A.code})`, auto: true });
+    }
+    if (j.type === 'ceiling' && A.type === 'duvar') {
+      A.extra.push({ kind: 'U', sys: +A.params.sys, axis: 'x', x: 0, y: 0, z: Math.max(0, j.z - 40), len: +A.params.L, note: `Tavan bağlantı kuşağı (${Bel.code})`, auto: true });
+    }
+    if (j.type === 'wallfix' && A.type === 'kutu') {
+      if (j.side === 'back') { A.params.wallBack = true; A.params.cladB = false; } else A.params.cladF = false;
+    }
+  }
+  for (const { el } of made) if (el.type === 'duvar') {
+    const it = items.find(i => i.id === el.id);
+    el.params.endA = it.contact?.endA != null ? 'wall' : 'free';
+    el.params.endB = it.contact?.endB != null ? 'wall' : 'free';
+  }
+  P.joints.push(...joints);
+  if (!P.name || /^(Yeni|Örnek) proje$/.test(P.name)) { P.name = IMP.file.replace(/\.[^.]+$/, ''); $('#projName').value = P.name; }
+  sel = made[0]?.el.id || sel;
+  $('#modal').hidden = true;
+  $('#showAll').checked = true; tab = '3d';
+  if (view3d) view3d.fitted = false;
+  refresh();
+  alert(`${made.length} eleman eklendi, ${joints.filter(j => j.type !== 'free').length} birleşim bulundu. Montaj sekmesinde detayları, sağ panelde ilave profilleri görebilirsiniz.`);
+}

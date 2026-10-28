@@ -79,4 +79,5 @@ export const ROLE_COLORS = {
   UD: '#7a8a99',
   CD: '#3d9b6e',
   K: '#d4692a', // takviyeli / kasa elemanları
+  X: '#7c3aed', // ilave (kullanıcı / birleşim) profilleri
 };
