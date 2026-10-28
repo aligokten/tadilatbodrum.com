@@ -6,7 +6,7 @@ import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
 import { ROOF_TYPES, COVERS, newRoof, roofModel, roofSvg, roofFrame, roofTakeoff, roofLayers, roofSheetSvg, roofSectionSvg, roofLayersSvg, outlineOf, coverOf } from './roof.js';
-import { STAIR_TYPES, STAIR_BUILD, newStair, isU, winders, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds, stairSolid } from './stairs.js';
+import { STAIR_TYPES, STAIR_BUILD, newStair, isU, winders, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds, stairSolid, stairOutline } from './stairs.js';
 import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
 import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
@@ -307,7 +307,17 @@ export class PlanEditor {
   lowerSvg() {
     if (!this.lv) return '';
     const L = planLevels(this._root), below = [...L.slice(0, this.lv)].reverse().find(l => l.kind !== 'roof'); if (!below) return '';
-    return this.ghostOf(below.plan, '#8E959E', 0.6, false);
+    return this.ghostOf(below.plan, '#8E959E', 0.6, false) + this.voidSvg(below.plan);
+  }
+  /* alt kattaki merdivenlerin bu kattaki döşeme boşluğu: kesik çizgi + çapraz */
+  voidSvg(B) {
+    const px = n => n / this.s;
+    return (B.stairs || []).filter(st => st.void !== false).map(st => {
+      const h = stairOutline(st); if (!h) return '';
+      const xs = h.map(p => p.x), ys = h.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      return `<g class="stvoid"><polygon points="${h.map(p => `${p.x},${p.y}`).join(' ')}" fill="#fff" fill-opacity="0.55" stroke="#4A4F57" stroke-width="${px(1.4)}" stroke-dasharray="${px(7)} ${px(4)}"/>
+        <clipPath id="sv-${st.id}"><polygon points="${h.map(p => `${p.x},${p.y}`).join(' ')}"/></clipPath><path d="M${x0} ${y0}L${x1} ${y1}M${x1} ${y0}L${x0} ${y1}" stroke="#8E959E" stroke-width="${px(1)}" clip-path="url(#sv-${st.id})"/><text x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2}" font-size="${px(11)}" text-anchor="middle" dominant-baseline="middle" fill="#4A4F57" font-weight="700" font-family="Inter,Arial,sans-serif" paint-order="stroke" stroke="#fff" stroke-width="${px(3)}">Merdiven boşluğu</text></g>`;
+    }).join('');
   }
 
   snap() { this.undoS.push(JSON.stringify(this.plan)); if (this.undoS.length > 120) this.undoS.shift(); this.redoS = []; }
@@ -1958,7 +1968,8 @@ export class PlanEditor {
       body = `<h4>Duvar</h4>
         ${o.face ? num('len', 'Uzunluk (çizilen yüz)', +(() => { const r = wallRef(o, P.meta.wallT, P); return V.dist(r.a, r.b); })().toFixed(1), 'cm', 0.5) : num('len', 'Uzunluk (eksen)', +wallLen(o).toFixed(1), 'cm', 0.5)}
         ${num('t', 'Kalınlık', this.T(o))}
-        ${num('h', 'Yükseklik', o.h || P.meta.wallH)}
+        <div class="grid2">${num('z0', 'Alt kot', +o.z0 || 0)}${num('h', 'Üst kot (yükseklik)', o.h || P.meta.wallH)}</div>
+        <p class="muted small">Kotlar katın ±0,00 kotuna göredir. Alt kot eksi girilirse duvar çukur döşemeden başlar (duvar boyu ${fmtNum((o.h || P.meta.wallH) - Math.min(0, +o.z0 || 0), 0)} cm); kapı eşiği ve pencere parapeti duvarın alt kotundan ölçülür.</p>
         <label>Renk (3D)<div class="swatches" data-k="color">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.color || '') === c ? 'on' : ''}" title="${c ? c : 'Varsayılan'}"></button>`).join('')}</div></label>
         <p class="muted small">${ops.length} açıklık. Uç noktaları sürükleyerek uzatın; gövdeyi sürükleyince duvar paralel kayar.</p>
         <div class="row"><button class="btn btn-xs btn-ghost" data-act="split">Ortadan böl</button><button class="btn btn-xs btn-ghost" data-act="addDoor">+ Kapı</button><button class="btn btn-xs btn-ghost" data-act="addWin">+ Pencere</button></div>
@@ -1972,7 +1983,7 @@ export class PlanEditor {
         <label>Model<select class="inp sm" data-k="model">${(o.type === 'door' ? DOOR_MODELS : WIN_MODELS).map(m => `<option value="${m.k}" ${(o.type === 'door' ? doorModel(o) : winModel(o)) === m.k ? 'selected' : ''}>${m.t}</option>`).join('')}</select></label>` : ''}
         ${num('w', 'Genişlik', o.w)}
         ${num('h', 'Yükseklik', o.h)}
-        ${o.type === 'window' ? num('sill', 'Denizlik yüksekliği', o.sill) : ''}
+        ${o.type === 'window' ? num('sill', +w.z0 ? 'Denizlik yüksekliği (duvar alt kotundan)' : 'Denizlik yüksekliği', o.sill) : ''}
         ${num('left', 'Duvar başından mesafe', +(o.pos - o.w / 2).toFixed(1), 'cm', 0.5)}
         <p class="muted small">Duvar uzunluğu ${fmtNum(L, 1)} cm · sağ kalan ${fmtNum(L - o.pos - o.w / 2, 1)} cm</p>
         ${o.type === 'door' ? `<div class="row"><button class="btn btn-xs btn-ghost" data-act="flip">${doorModel(o) === 'surgu' || doorModel(o) === 'gomme' ? 'Kayma yönü' : 'Menteşe yönü'}</button><button class="btn btn-xs btn-ghost" data-act="side">${doorModel(o) === 'surgu' ? 'Taraf' : 'Açılma yönü'}</button></div>` : ''}
@@ -2065,6 +2076,7 @@ export class PlanEditor {
         ${two ? num('n1', '1. kol basamağı', P.n1, 'adet', 1) : ''}${t === 'sahanlik' || t === 'U' ? num('land', 'Sahanlık derinliği', P.land) : ''}${isU(t) ? num('gap', 'Kollar arası boşluk', P.gap) : ''}</div>
       ${turn ? `<label>Dönüş yönü<select class="inp sm" data-k="turn">${opt('R', o.turn || 'R', 'Sağa')}${opt('L', o.turn || 'R', 'Sola')}</select></label>` : ''}
       ${num('rot', 'Plan açısı', o.rot || 0, '°', 15)}
+      <label class="check"><input type="checkbox" data-k="void" ${o.void !== false ? 'checked' : ''}> Üst kat döşemesinde merdiven boşluğu aç</label>
       <div class="mtable"><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${winders(t) ? ` (${winders(t)} balanslı)` : two ? ' (sahanlık dahil)' : ''}</b></div>${P.gw ? `<div><span>Balanslı basamak (yürüme çizgisi)</span><b>${fmtNum(P.gw, 1)} cm</b></div>` : ''}
         <div><span>2h + g</span><b>${fmtNum(P.blondel, 1)} cm</b></div><div><span>Eğim</span><b>${fmtNum(P.slope, 1)}°</b></div><div><span>Plan ölçüsü</span><b>${fmtNum(bw, 0)} × ${fmtNum(bl, 0)} cm</b></div>${o.build === 'beton' || o.build === 'plak' ? `<div><span>Beton hacmi (yaklaşık)</span><b>${fmtNum(stairSolid(o).vol, 2)} m³</b></div>` : ''}</div>
       ${stairCheck(o).map(([k, m]) => `<p class="small st-chk ${k}">${esc(m)}</p>`).join('')}
@@ -2144,6 +2156,10 @@ export class PlanEditor {
           else if (q === 'g' || q === 'w' || q === 'l' || q === 'fire' || q === 'box' || q === 'th' || q === 'skH') t[q] = Math.max(0, +v);
           else t[q] = v;
           if ((q === 'w' || q === 'l') && t.w === t.l && t.pat === 'balik') t.pat = 'duz';
+        } else if (k === 'fz' && this.sel.kind === 'room') {
+          // çukur döşemede odanın kendi duvarları döşeme kotundan başlar; kot kalkınca eski hâline döner
+          const old = +x.fz || 0; x.fz = v;
+          (x.walls || []).forEach(id => { const w = id && this.wall(id); if (!w) return; if (v < 0 && (+w.z0 || 0) >= Math.min(0, old)) w.z0 = v; else if (v >= 0 && (+w.z0 || 0) === Math.min(0, old)) delete w.z0; });
         } else if (k.startsWith('edge.')) {
           this.setEdgeLen(x, +k.slice(5), v);
           if (this.sel.kind === 'room') this.syncRoomWalls(x);
@@ -2152,7 +2168,7 @@ export class PlanEditor {
           else if (k === 'N') x.N = Math.max(3, Math.round(v));
           else if (k === 'n1') x.n1 = Math.max(1, Math.round(v));
           else if (k === 'type') { x.type = v; x.n1 = 0; x.sweep = 0; }
-          else if (k === 'build' || k === 'turn') x[k] = v;
+          else if (k === 'build' || k === 'turn' || k === 'void') x[k] = v;
           else x[k] = Math.max(k === 'rot' ? -360 : 0, v);
         } else if (k === 'len' && this.sel.kind === 'rail') {
           const np = V.add(x.a, V.mul(V.norm(V.sub(x.b, x.a)), Math.max(1, v))); x.b = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) };
