@@ -9,6 +9,8 @@ export const STAIR_TYPES = [
   { k: 'L', t: 'L dönüşlü (sahanlıklı)' },
   { k: 'Lbal', t: 'L dönüşlü, balanslı (sahanlıksız)' },
   { k: 'U', t: 'U dönüşlü (sahanlıklı)' },
+  { k: 'Ubal', t: 'U dönüşlü, balanslı (sahanlıksız)' },
+  { k: 'Uyuv', t: 'U dönüşlü, döner (yarım daire, sahanlıksız)' },
   { k: 'spiral', t: 'Döner (helezon)' },
 ];
 export const STAIR_BUILD = [
@@ -20,6 +22,10 @@ export const stairType = k => STAIR_TYPES.find(t => t.k === k) || STAIR_TYPES[0]
 export const stairBuild = k => STAIR_BUILD.find(t => t.k === k) || STAIR_BUILD[0];
 
 const hasLanding = t => t === 'sahanlik' || t === 'L' || t === 'U';
+/* dönüşteki balanslı basamak sayısı (her biri 30°) */
+const WIND = { Lbal: 3, Ubal: 6, Uyuv: 6 };
+export const isU = t => t === 'U' || t === 'Ubal' || t === 'Uyuv';
+export const winders = t => WIND[t] || 0;
 /* rıht sayısı: kat yüksekliğinden ~17,5 cm rıhtla */
 export const autoRisers = H => Math.max(3, Math.round(H / 17.5));
 
@@ -32,18 +38,21 @@ export function newStair(id, p, o = {}) {
 export function stairParams(st) {
   const N = Math.max(3, Math.round(st.N) || autoRisers(st.H)), T = N - 1, h = st.H / N;
   const w = Math.max(50, +st.w || 100), g = Math.max(15, +st.g || 28);
-  const extra = st.type === 'Lbal' ? 3 : hasLanding(st.type) ? 1 : 0;   // dönüş / sahanlık basamakları
+  const extra = WIND[st.type] || (hasLanding(st.type) ? 1 : 0);   // dönüş / sahanlık basamakları
   const run = Math.max(0, T - extra);
   const n1 = st.type === 'duz' || st.type === 'spiral' ? T : Math.max(1, Math.min(run - 1, Math.round(st.n1) || Math.ceil(run / 2)));
   const n2 = st.type === 'duz' || st.type === 'spiral' ? 0 : run - n1;
   const land = Math.max(w, +st.land || 0);   // sahanlık derinliği (en az kol genişliği)
   const blondel = 2 * h + g;
-  return { N, T, h, w, g, n1, n2, land, blondel, slope: Math.atan2(h, g) * 180 / Math.PI };
+  const gap = Math.max(0, +(st.gap ?? (st.type === 'Uyuv' ? 30 : 10)));   // U: kollar arası boşluk (göz)
+  // balanslı basamağın yürüme çizgisindeki derinliği (30° yay)
+  const gw = st.type === 'Lbal' ? Math.PI / 6 * w / 2 : st.type === 'Ubal' || st.type === 'Uyuv' ? Math.PI / 6 * (gap / 2 + w / 2) : 0;
+  return { N, T, h, w, g, n1, n2, land, gap, gw, blondel, slope: Math.atan2(h, g) * 180 / Math.PI };
 }
 
 /* basamaklar: [{ pts (yerel), z (üst yüz kotu), land? }] + yürüme çizgisi */
 export function stairLocal(st) {
-  const P = stairParams(st), { w, g, h, n1, n2, land } = P, steps = [];
+  const P = stairParams(st), { w, g, h, n1, n2, land, gap } = P, steps = [];
   const R = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   const push = (pts, k, wk) => steps.push({ pts, z: (steps.length + 1) * h, land: !!k, wk });   // wk: yürüme çizgisi noktaları (yoksa ağırlık merkezi)
   const t = st.type;
@@ -77,8 +86,28 @@ export function stairLocal(st) {
     push([C, { x: 0, y: Y0 + k }, { x: 0, y: Y0 + w }, { x: w - k, y: Y0 + w }], 0, on(135));
     push([C, { x: w - k, y: Y0 + w }, { x: w, y: Y0 + w }], 0, on(105));
     for (let i = 0; i < n2; i++) push(R(w + i * g, Y0, w + (i + 1) * g, Y0 + w));
+  } else if (t === 'Ubal' || t === 'Uyuv') {
+    // 180° dönüş, 6 balanslı basamak; merkez kollar arası boşluğun ortasında
+    const ri = gap / 2, C = { x: w + ri, y: Y0 }, X1 = 2 * w + gap, Rw = ri + w / 2;
+    const dir = a => ({ x: Math.cos(a * Math.PI / 180), y: Math.sin(a * Math.PI / 180) });
+    const on = a => V.add(C, V.mul(dir(a), Rw));
+    for (let i = 0; i < 6; i++) {
+      const a0 = 180 - i * 30, a1 = a0 - 30;
+      let pts;
+      if (t === 'Uyuv') {   // yarım daire: iç ve dış yay arası halka dilimi
+        const arc = (r, A, B) => { const k = Math.max(2, Math.ceil(Math.abs(B - A) / 6)), o = []; for (let j = 0; j <= k; j++) o.push(V.add(C, V.mul(dir(A + (B - A) * j / k), r))); return o; };
+        pts = [...arc(ri + w, a0, a1), ...(ri > 0.5 ? arc(ri, a1, a0) : [C])];
+      } else {   // köşeli: merkezden çıkan ışınlar dikdörtgenin dış kenarlarına
+        const hitR = a => { const d = dir(a), ts = []; if (d.x < -1e-9) ts.push(-C.x / d.x); if (d.x > 1e-9) ts.push((X1 - C.x) / d.x); if (d.y > 1e-9) ts.push(w / d.y); return V.add(C, V.mul(d, Math.min(...ts))); };
+        const cornerA = [[Math.atan2(w, -C.x) * 180 / Math.PI, { x: 0, y: Y0 + w }], [Math.atan2(w, X1 - C.x) * 180 / Math.PI, { x: X1, y: Y0 + w }]];
+        const mid = cornerA.filter(([a]) => a < a0 - 1e-6 && a > a1 + 1e-6).sort((p, q) => q[0] - p[0]).map(c => c[1]);
+        const inner = ri > 0.5 ? [V.add(C, V.mul(dir(a1), ri)), V.add(C, V.mul(dir(a0), ri))] : [C];
+        pts = [hitR(a0), ...mid, hitR(a1), ...inner];
+      }
+      push(pts, 0, [on(a0 - 15)]);
+    }
+    for (let i = 0; i < n2; i++) push(R(w + gap, Y0 - (i + 1) * g, 2 * w + gap, Y0 - i * g));
   } else if (t === 'U') {
-    const gap = 10;
     push(R(0, Y0, 2 * w + gap, Y0 + land), 1, [{ x: w / 2, y: Y0 + w / 2 }, { x: 1.5 * w + gap, y: Y0 + w / 2 }]);
     for (let i = 0; i < n2; i++) push(R(w + gap, Y0 - (i + 1) * g, 2 * w + gap, Y0 - i * g));
   } else {
@@ -135,6 +164,7 @@ export function stairCheck(st) {
   if (P.blondel < 59 || P.blondel > 66) out.push(['warn', `2h + g = ${fmt(P.blondel)} cm — rahat adım için 60–65 cm aralığı önerilir.`]);
   if (P.w < 90 && st.type !== 'spiral') out.push(['warn', `Kol genişliği ${fmt(P.w)} cm — konut iç merdiveninde en az 90–100 cm önerilir.`]);
   if (st.type === 'spiral' && P.w < 70) out.push(['warn', 'Döner merdivende basamak boyu en az 70 cm önerilir.']);
+  if (P.gw && P.gw < P.g - 4) out.push(['warn', `Balanslı basamakların yürüme çizgisindeki derinliği ${fmt(P.gw)} cm — düz basamaklardan (${fmt(P.g)} cm) kısa; kol genişliğini${isU(st.type) ? ' ya da kollar arası boşluğu' : ''} artırın.`]);
   if (!out.length) out.push(['ok', 'Ölçüler konforlu aralıkta.']);
   return out;
 }
