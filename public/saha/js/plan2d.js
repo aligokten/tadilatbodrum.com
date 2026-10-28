@@ -20,7 +20,7 @@ import {
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
   .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
-  .rname{font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
+  .rname{font-weight:700}.rkot{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#B5480F;font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
 
 const TOOLS = [
   { k: 'select', t: 'Seç / Taşı', ic: 'pointer', key: 'v' },
@@ -39,6 +39,8 @@ const TOOLS = [
   { k: 'text', t: 'Yazı', ic: 'text', key: 't' },
 ];
 const r2 = p => ({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) });
+/* döşeme kotu yazımı (cm → m): +0,45 / ±0,00 / −0,30 */
+export const kotTxt = cm => { const v = (+cm || 0) / 100; return (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 /* kullanıcının araç seçimleri cihazda hatırlanır */
 function pref(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch { return def; } }
 function setPref(k, v) { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* yok say */ } }
@@ -1703,9 +1705,11 @@ export class PlanEditor {
       o += `<text class="wlen" x="${tp.x}" y="${tp.y}" font-size="${px(11)}" dy="${px(4)}" transform="rotate(${ang} ${tp.x} ${tp.y})">${fmtNum(L, 1)}</text>`;
     }
     // oda etiketleri
+    const kotlu = P.rooms.some(r => +r.fz);   // aynı katta farklı döşeme kotu varsa tüm odalarda kot yazılır
     for (const r of P.rooms) {
       const c = polyCentroid(r.pts), m = roomMetrics(P, r);
       o += `<text class="rname" x="${c.x}" y="${c.y}" font-size="${px(13)}">${esc(r.name)}</text><text class="rarea" x="${c.x}" y="${c.y + px(15)}" font-size="${px(11)}">${fmtNum(m.area)} m²</text>`;
+      if (kotlu) o += `<text class="rkot" x="${c.x}" y="${c.y + px(29)}" font-size="${px(11)}">▽ ${kotTxt(r.fz)}</text>`;
     }
     // yazılar
     for (const l of P.labels) o += `<text class="lbl ${live && this.sel?.id === l.id ? 'sel' : ''}" x="${l.x}" y="${l.y}" font-size="${l.size || 25}">${esc(l.text)}</text>`;
@@ -1983,7 +1987,8 @@ export class PlanEditor {
       body = `<h4>Oda / Mahal</h4>
         <label>Ad<input class="inp sm" list="peRooms" data-k="name" value="${esc(o.name)}"></label><datalist id="peRooms">${ROOM_TYPES.map(t => `<option value="${t}">`).join('')}</datalist>
         ${o.rect ? num('rw', 'Genişlik (iç)', +(Math.max(...xs) - Math.min(...xs)).toFixed(1), 'cm', 0.5) + num('rl', 'Uzunluk (iç)', +(Math.max(...ys) - Math.min(...ys)).toFixed(1), 'cm', 0.5) : ''}
-        ${num('h', 'Tavan yüksekliği', o.h || P.meta.wallH)}
+        <div class="grid2">${num('h', 'Tavan yüksekliği (net)', o.h || P.meta.wallH)}${num('fz', 'Döşeme kotu', +o.fz || 0)}</div>
+        <p class="muted small">Döşeme kotu katın ±0,00 kotuna göredir (yükseltilmiş döşeme +, çukur döşeme −); şu an ▽ ${kotTxt(o.fz)}. Tavan, döşeme kotundan net yükseklik kadar yukarıdadır.</p>
         <label>Zemin kaplaması<select class="inp sm" data-k="floor">${FLOORS.map(f => `<option value="${f.k}" ${o.floor === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
         <label>Duvar rengi (3D)<div class="swatches" data-k="wallColor">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.wallColor || '') === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>
