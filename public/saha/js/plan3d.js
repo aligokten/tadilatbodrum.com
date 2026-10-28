@@ -153,7 +153,8 @@ export class Plan3D {
     // zemin (dış)
     const b = this.bounds();
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), this.std('#D9D2C3', 1));
-    ground.rotation.x = -Math.PI / 2; ground.position.set(b.cx, -0.02, b.cz); ground.receiveShadow = true; ground.userData.noExport = true;
+    const sunk = Math.min(0, ...(ROOT.rooms || []).map(r => +r.fz || 0));   // zemin katta çukur döşeme varsa dış zemin onun altında
+    ground.rotation.x = -Math.PI / 2; ground.position.set(b.cx, M(sunk) - 0.02, b.cz); ground.receiveShadow = true; ground.userData.noExport = true;
     this.root.add(ground);
     // katlar: her kat kendi kotunda; kesitte etkin kata kadar (etkin kat kesik)
     const L = planLevels(ROOT), act = Math.min(this.opt.level ?? 0, L.length - 1);
@@ -258,6 +259,24 @@ export class Plan3D {
     }
   }
 
+  /* kotlu oda: yükseltilmiş döşemede dolgu gövdesi, çukur döşemede çevre yüzleri */
+  floorStep(r, fz, g) {
+    const mat = this.mat('fstep', () => new THREE.MeshStandardMaterial({ color: '#BDB8AE', roughness: 0.95, side: THREE.DoubleSide }));
+    if (fz > 0) {
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), -M(p.y)))), { depth: M(fz), bevelEnabled: false });
+      geo.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.name = 'Döşeme dolgusu';
+      g.add(m); return;
+    }
+    const n = r.pts.length;
+    for (let i = 0; i < n; i++) {
+      const a = r.pts[i], b = r.pts[(i + 1) % n], L = V.dist(a, b); if (L < 1) continue;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(M(L), M(-fz)), mat);
+      m.position.set(M((a.x + b.x) / 2), M(fz / 2), M((a.y + b.y) / 2)); m.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x); m.receiveShadow = true; m.name = 'Döşeme kot farkı';
+      g.add(m);
+    }
+  }
+
   buildLevel(P, g, meta, cut, ground0) {
     const cutH = 110;
     this.curMeta = meta;
@@ -271,22 +290,24 @@ export class Plan3D {
       const tx = floorTexture(THREE, r.floor);
       const fm = this.mat('floor' + r.floor, () => new THREE.MeshStandardMaterial({ map: tx.map, roughness: tx.rough }));
       const fl = new THREE.Mesh(geo, fm);
-      fl.position.y = 0.002; fl.receiveShadow = true; fl.userData.room = r.id; fl.name = 'Zemin ' + (r.name || '');
+      const fz = +r.fz || 0;   // oda döşeme kotu (kat ±0'a göre)
+      fl.position.y = M(fz) + 0.002; fl.receiveShadow = true; fl.userData.room = r.id; fl.name = 'Zemin ' + (r.name || '');
       g.add(fl); if (ground0) this.floors.push(fl);
+      if (Math.abs(fz) >= 0.5) this.floorStep(r, fz, g);
       if (this.opt.ceiling && !cut) {
         // tavan aşağı bakmalı: +90° döndürmede şeklin y'si doğrudan z olur, bu yüzden plan y'si ters çevrilmeden verilir
         // (zemindeki -y şekliyle döndürülünce tavan plan üzerinde aynalanıp kayıyordu)
         const cg = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(M(p.x), M(p.y))))); cg.rotateX(Math.PI / 2);
         const c = new THREE.Mesh(cg, this.std('#FAFAF8', 0.95));
-        c.position.y = M(r.h || meta.wallH); c.receiveShadow = true; c.name = 'Tavan';
+        c.position.y = M(fz + (r.h || meta.wallH)); c.receiveShadow = true; c.name = 'Tavan';
         g.add(c);
         if (this.opt.lights) {
           const ctr = polyCentroid(r.pts);
           const L = new THREE.PointLight('#FFD9A8', 6, 9, 2);
-          L.position.set(M(ctr.x), M(r.h || meta.wallH) - 0.25, M(ctr.y));
+          L.position.set(M(ctr.x), M(fz + (r.h || meta.wallH)) - 0.25, M(ctr.y));
           g.add(L);
           const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.02, 24), new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#FFE7C2', emissiveIntensity: 2.5 }));
-          bulb.position.set(M(ctr.x), M(r.h || meta.wallH) - 0.012, M(ctr.y)); bulb.userData.noExport = true;
+          bulb.position.set(M(ctr.x), M(fz + (r.h || meta.wallH)) - 0.012, M(ctr.y)); bulb.userData.noExport = true;
           g.add(bulb);
         }
       }
@@ -327,7 +348,9 @@ export class Plan3D {
     for (const r of P.rails || []) g.add(this.railing(r));
 
     // mobilya
-    for (const it of P.items) g.add(this.furniture(it));
+    // mobilya / donatı bulunduğu odanın döşeme kotuna oturur
+    const fzAt = p => +(P.rooms.find(r => r.fz && pointInPoly(p, r.pts))?.fz) || 0;
+    for (const it of P.items) { const f = this.furniture(it), dz = fzAt(it); if (dz) f.position.y += M(dz); g.add(f); }
     for (const st of P.stairs || []) this.stair(st, g);
   }
 

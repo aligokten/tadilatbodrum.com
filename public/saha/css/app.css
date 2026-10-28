@@ -1108,3 +1108,4 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .stair-types{display:flex;flex-wrap:wrap;gap:6px}.st-ic{border:1.5px solid var(--line,#ddd);background:#fff;border-radius:10px;padding:3px;color:#4A4F57;cursor:pointer;line-height:0}.st-ic.on{border-color:#EB591F;box-shadow:0 0 0 2px rgba(235,89,31,.18)}
 .st-chk{margin:4px 0;padding:6px 8px;border-radius:8px;background:#EEF7F1;color:#1E6B3C}.st-chk.warn{background:#FFF5E5;color:#8A5300}.st-chk.err{background:#FDECEC;color:#A3261F}
 .pe .stair.sel polygon{stroke:#EB591F}
+.rkot{text-anchor:middle;font-family:var(--f);pointer-events:none;fill:#B5480F;font-weight:700}
