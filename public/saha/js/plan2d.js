@@ -6,6 +6,7 @@ import { icon, esc, h, $, $$, fmtNum, promptDlg, modal, confirmDlg, toast } from
 import { FLOORS, FURNITURE, FURN_GROUPS, furnOf, floorOf, ROOM_TYPES, WALL_COLORS } from './catalog.js';
 import { fixtureOf, fixtureSvg } from './fixtures.js';
 import { ROOF_TYPES, COVERS, newRoof, roofModel, roofSvg, roofFrame, roofTakeoff, roofLayers, roofSheetSvg, roofSectionSvg, roofLayersSvg, outlineOf, coverOf } from './roof.js';
+import { STAIR_TYPES, STAIR_BUILD, newStair, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds } from './stairs.js';
 import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
 import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
@@ -14,7 +15,7 @@ import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as 
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, roomMetrics, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
+  offsetPoly, offsetPolyVar, roomMetrics, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
 } from './plan-geom.js';
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
@@ -32,10 +33,12 @@ const TOOLS = [
   { k: 'window', t: 'Pencere', ic: 'window', key: 'p' },
   { k: 'rail', t: 'Korkuluk', ic: 'rail', key: 'k' },
   { k: 'item', t: 'Mobilya / donatı', ic: 'sofa', key: 'm' },
+  { k: 'stair', t: 'Merdiven', ic: 'stairs', key: 'n' },
   { k: 'roof', t: 'Çatı', ic: 'roof', key: 'c' },
   { k: 'dim', t: 'Ölçü çizgisi', ic: 'dim', key: 'o' },
   { k: 'text', t: 'Yazı', ic: 'text', key: 't' },
 ];
+const r2 = p => ({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) });
 /* kullanıcının araç seçimleri cihazda hatırlanır */
 function pref(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch { return def; } }
 function setPref(k, v) { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* yok say */ } }
@@ -63,6 +66,7 @@ const HINTS = {
   arc: '1. ve 2. nokta yayın başlangıç ve bitişi; 3. nokta yayın açılma noktası (yay bu noktadan geçer). Ya da iki noktadan sonra ok yüksekliğini yazıp Enter\'a basın.',
   rect: 'Köşeden köşeye sürükleyin (iç ölçü). Ya da "Ölçüyle oda" ile en/boy girin.',
   poly: 'Köşeleri sırayla işaretleyin, ilk noktaya dokunarak ya da Bitir ile kapatın.',
+  stair: 'Merdivenin başlangıç (ilk basamak) köşesine dokunun; tipi, ölçüleri ve yönü sağdaki panelden ayarlayın.',
   door: 'Bir duvara dokunun — kapı o konuma yerleşir.',
   window: 'Bir duvara dokunun — pencere o konuma yerleşir.',
   rail: 'Korkuluk hattının noktalarını duvar çizer gibi sırayla işaretleyin; Enter / Bitir ile tamamlayın. Uzunluğu yazıp Enter ile tam ölçü girin.',
@@ -83,7 +87,7 @@ export class PlanEditor {
     const keep = this._root?.levels; this._root = v; if (keep) v.levels = keep;
   }
   get root() { return this._root; }
-  prep(P) { for (const k of ['walls', 'openings', 'rooms', 'items', 'dims', 'labels', 'rails', 'roofs']) P[k] ||= []; P.meta ||= { ...this._root.meta }; return P; }
+  prep(P) { for (const k of ['walls', 'openings', 'rooms', 'items', 'dims', 'labels', 'rails', 'roofs', 'stairs']) P[k] ||= []; P.meta ||= { ...this._root.meta }; return P; }
 
   constructor(host, plan, { onChange, resolvePhoto, pickBackground, addImage, cab, ghost, onLevel } = {}) {
     this.addImage = addImage;
@@ -342,7 +346,7 @@ export class PlanEditor {
   }
 
   /* ───────────── nesne erişimi ───────────── */
-  coll(kind) { return { wall: 'walls', opening: 'openings', room: 'rooms', item: 'items', dim: 'dims', label: 'labels', rail: 'rails', roof: 'roofs' }[kind]; }
+  coll(kind) { return { wall: 'walls', opening: 'openings', room: 'rooms', item: 'items', dim: 'dims', label: 'labels', rail: 'rails', roof: 'roofs', stair: 'stairs' }[kind]; }
   obj(sel) { return sel && this.plan[this.coll(sel.kind)]?.find(o => o.id === sel.id); }
   wall(id) { return this.plan.walls.find(w => w.id === id); }
   T(w) { return w.t || this.plan.meta.wallT; }
@@ -456,13 +460,11 @@ export class PlanEditor {
     if (so && this.sel.kind === 'rail') {
       for (const k of ['a', 'b']) if (V.dist(p, so[k]) < 12 / this.s) return { kind: 'rail', id: so.id, handle: k };
     }
-    if (so && this.sel.kind === 'room') {
+    if (so && (this.sel.kind === 'room' || this.sel.kind === 'roof')) {
       const i = so.pts.findIndex(q => V.dist(p, q) < 12 / this.s);
-      if (i >= 0) return { kind: 'room', id: so.id, handle: i };
-    }
-    if (so && this.sel.kind === 'roof') {
-      const i = so.pts.findIndex(q => V.dist(p, q) < 12 / this.s);
-      if (i >= 0) return { kind: 'roof', id: so.id, handle: i };
+      if (i >= 0) return { kind: this.sel.kind, id: so.id, handle: i };
+      const e = this.polyEdgeHit(so, p);   // kenar ortası (+): yeni köşe; kenar çizgisi: kenarı ötele
+      if (e) return { kind: this.sel.kind, id: so.id, handle: e };
     }
     if (so && this.sel.kind === 'item') {
       const hp = this.itemRotHandle(so);
@@ -474,6 +476,7 @@ export class PlanEditor {
       const pr = projSeg(p, V.sub(c, V.mul(u, o.w / 2)), V.add(c, V.mul(u, o.w / 2)));
       if (pr.d < Math.max(this.T(w) / 2, tol)) return { kind: 'opening', id: o.id };
     }
+    for (const st of [...(this.plan.stairs || [])].reverse()) if (stairHit(st, p)) return { kind: 'stair', id: st.id };
     for (const it of [...this.plan.items].reverse()) {
       const a = -it.rot * Math.PI / 180, d = V.sub(p, it);
       const lx = d.x * Math.cos(a) - d.y * Math.sin(a), ly = d.x * Math.sin(a) + d.y * Math.cos(a);
@@ -612,6 +615,19 @@ export class PlanEditor {
     if (g.type === 'arcdrag') { if (g.moved) { this.undoS.push(g.before); this.redoS = []; this.changed(); this.renderInsp(); } return; }
     if (g.type === 'move') {
       if (g.moved) { this.undoS.push(g.before); this.redoS = []; this.changed(); }
+      else if (typeof g.ht.handle === 'number' && (g.ht.kind === 'room' || g.ht.kind === 'roof')) {
+        // köşeye çift dokunma: köşeyi sil (dokunmatikte dblclick güvenilir değil)
+        const L = this.lastTap, now = Date.now();
+        if (L && L.id === g.ht.id && L.h === g.ht.handle && now - L.t < 450) { this.lastTap = null; this.delVertex(this.obj(g.ht), g.ht.handle, g.ht.kind); }
+        else this.lastTap = { id: g.ht.id, h: g.ht.handle, t: now };
+      }
+      else if (typeof g.ht.handle === 'string' && g.ht.handle[0] === 'm' && (g.ht.kind === 'room' || g.ht.kind === 'roof')) {
+        // kenar ortasındaki +'ya dokunma: o kenarın ortasına yeni köşe
+        const o = this.obj(g.ht), i = +g.ht.handle.slice(1); if (!o) return;
+        this.snap(); this.insertVertex(o, i, V.lerp(o.pts[i], o.pts[(i + 1) % o.pts.length], 0.5));
+        if (g.ht.kind === 'room') this.syncRoomWalls(o);
+        this.changed(); toast('Köşe eklendi — sürükleyerek biçimi değiştirin');
+      }
       return;
     }
     if (g.type === 'mmove') {
@@ -690,6 +706,14 @@ export class PlanEditor {
       if (f.mount === 'wall') Object.assign(it, this.wallMount(p, f.d) || {});
       this.plan.items.push(it);
       this.sel = { kind: 'item', id: it.id };
+      this.setTool('select'); this.changed();
+      return;
+    }
+    if (t === 'stair' && p) {
+      this.snap();
+      const up = this._root.levels?.[this.lv], st = newStair(uid('st'), p, { H: (this.plan.meta.wallH || 280) + (up && up.kind !== 'roof' ? +up.slab || 15 : 15) });
+      (this.plan.stairs ||= []).push(st);
+      this.sel = { kind: 'stair', id: st.id };
       this.setTool('select'); this.changed();
       return;
     }
@@ -989,8 +1013,17 @@ export class PlanEditor {
         const ea = this.endsAt(o.a), eb = this.endsAt(o.b), A = V.add(o.a, sh), B = V.add(o.b, sh);
         ea.forEach(([w, k2]) => { w[k2] = { ...A }; }); eb.forEach(([w, k2]) => { w[k2] = { ...B }; });
       }
-    } else if (ht.kind === 'room') {
-      if (typeof ht.handle === 'number') { o.pts[ht.handle] = this.snapPt(wp); o.rect = false; }
+    } else if ((ht.kind === 'room' || ht.kind === 'roof') && typeof ht.handle === 'string') {
+      const i = +ht.handle.slice(1), n = o.pts.length;
+      if (ht.handle[0] === 'm') this.insertVertex(o, i, this.snapPt(wp));
+      else {   // kenarı kendi normali doğrultusunda ötele (dik açılı odalar dik kalır)
+        const a = o.pts[i], b = o.pts[(i + 1) % n], u = V.norm(V.sub(b, a)), nn = { x: -u.y, y: u.x }, sh = V.mul(nn, this.snapLen(V.dot(dRaw, nn)));
+        o.pts[i] = r2(V.add(a, sh)); o.pts[(i + 1) % n] = r2(V.add(b, sh));
+      }
+      if (ht.kind === 'room') this.syncRoomWalls(o);
+    } else if (ht.kind === 'stair') { o.x = +(o.x + sd.x).toFixed(2); o.y = +(o.y + sd.y).toFixed(2); }
+    else if (ht.kind === 'room') {
+      if (typeof ht.handle === 'number') { o.pts[ht.handle] = this.snapPt(wp); o.rect = false; this.syncRoomWalls(o); }
       else {
         o.pts = o.pts.map(p => V.add(p, sd));
         (o.walls || []).forEach(id => { const w = this.wall(id); if (w) { w.a = V.add(w.a, sd); w.b = V.add(w.b, sd); } });
@@ -1064,7 +1097,7 @@ export class PlanEditor {
   removeObjs(list) {
     const P = this.plan, ids = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
     const W = ids('wall');
-    for (const k of ['wall', 'opening', 'room', 'item', 'dim', 'label', 'rail', 'roof']) { const S = ids(k), c = this.coll(k); if (S.size) P[c] = P[c].filter(o => !S.has(o.id)); }
+    for (const k of ['wall', 'opening', 'room', 'item', 'dim', 'label', 'rail', 'roof', 'stair']) { const S = ids(k), c = this.coll(k); if (S.size && P[c]) P[c] = P[c].filter(o => !S.has(o.id)); }
     if (W.size) {
       P.openings = P.openings.filter(o => !W.has(o.wallId));
       P.rooms.forEach(r => { if (r.walls) r.walls = r.walls.map(id => W.has(id) ? null : id); });
@@ -1088,7 +1121,7 @@ export class PlanEditor {
   }
   selectAll() {
     const P = this.plan, all = [];
-    for (const k of ['wall', 'room', 'item', 'dim', 'label', 'rail']) P[this.coll(k)].forEach(o => all.push({ kind: k, id: o.id }));
+    for (const k of ['wall', 'room', 'item', 'dim', 'label', 'rail', 'stair']) (P[this.coll(k)] || []).forEach(o => all.push({ kind: k, id: o.id }));
     if (this.tool !== 'select') this.setTool('select');
     this.setSel(all);
   }
@@ -1104,6 +1137,7 @@ export class PlanEditor {
     P.labels.forEach(l => { if (inB(l)) found.push({ kind: 'label', id: l.id }); });
     P.dims.forEach(d => { if (inB(d.a) && inB(d.b)) found.push({ kind: 'dim', id: d.id }); });
     P.rails.forEach(r => { if (inB(r.a) && inB(r.b)) found.push({ kind: 'rail', id: r.id }); });
+    (P.stairs || []).forEach(t => { if (stairBounds(t).every(inB)) found.push({ kind: 'stair', id: t.id }); });
     const cur = add ? this.selList().slice() : [];
     for (const f of found) if (!cur.some(s => s.kind === f.kind && s.id === f.id)) cur.push(f);
     this.setSel(cur);
@@ -1123,7 +1157,8 @@ export class PlanEditor {
   translate(list, sd) {
     const P = this.plan, W = this.moveSet(list), has = k => new Set(list.filter(s => s.kind === k).map(s => s.id));
     P.walls.forEach(w => { if (W.has(w.id)) { w.a = V.add(w.a, sd); w.b = V.add(w.b, sd); } });
-    const R = has('room'), I = has('item'), L = has('label'), D = has('dim'), K = has('rail');
+    const R = has('room'), I = has('item'), L = has('label'), D = has('dim'), K = has('rail'), ST = has('stair');
+    (P.stairs || []).forEach(t => { if (ST.has(t.id)) { t.x += sd.x; t.y += sd.y; } });
     P.rails.forEach(r => { if (K.has(r.id)) { r.a = V.add(r.a, sd); r.b = V.add(r.b, sd); } });
     P.rooms.forEach(r => { if (R.has(r.id)) r.pts = r.pts.map(q => V.add(q, sd)); });
     P.items.forEach(i => { if (I.has(i.id)) { i.x += sd.x; i.y += sd.y; } });
@@ -1310,6 +1345,72 @@ export class PlanEditor {
   }
 
   /* dikdörtgen odanın ölçüsünü değiştir (duvarlarıyla birlikte) */
+  /* ── çokgen düzenleme: kenar isabeti, köşe ekle / sil, oda duvarlarını odaya uydur ── */
+  polyEdgeHit(o, p) {
+    const n = o.pts.length, E = i => [o.pts[i], o.pts[(i + 1) % n]];
+    for (let i = 0; i < n; i++) { const [a, b] = E(i); if (V.dist(a, b) * this.s > 44 && V.dist(p, V.lerp(a, b, 0.5)) < 11 / this.s) return 'm' + i; }
+    for (let i = 0; i < n; i++) { const [a, b] = E(i); if (projSeg(p, a, b).d < 7 / this.s) return 'e' + i; }
+    return null;
+  }
+  insertVertex(o, i, q) {
+    const n = o.pts.length;
+    o.pts.splice(i + 1, 0, r2(q)); o.rect = false;
+    if (Array.isArray(o.walls) && o.walls.length === n) {   // odanın kendi duvarı da ikiye bölünür (kapı / pencereler yerinde kalır)
+      const w = o.walls[i] && this.wall(o.walls[i]);
+      if (w) {
+        const L = wallLen(w), t = Math.max(1, Math.min(L - 1, projSeg(q, w.a, w.b).t * L)), m = r2(V.add(w.a, V.mul(wallDir(w), t)));
+        const nw = { ...JSON.parse(JSON.stringify(w)), id: uid('w'), a: { ...m }, b: { ...w.b } };
+        w.b = { ...m }; this.plan.walls.push(nw);
+        this.plan.openings.filter(op => op.wallId === w.id && op.pos > t).forEach(op => { op.wallId = nw.id; op.pos -= t; });
+        o.walls.splice(i + 1, 0, nw.id);
+      } else o.walls.splice(i + 1, 0, null);
+    }
+  }
+  delVertex(o, k, kind = 'room') {
+    if (!o) return;
+    const n = o.pts.length;
+    if (n <= 3) return toast('Çokgende en az 3 köşe kalmalı', 'err');
+    this.snap();
+    o.pts.splice(k, 1); o.rect = false;
+    if (kind === 'room' && Array.isArray(o.walls) && o.walls.length === n) {
+      const ip = (k - 1 + n) % n, wa = o.walls[ip] && this.wall(o.walls[ip]), wb = o.walls[k] && this.wall(o.walls[k]);
+      if (wa && wb) {   // iki kenarın duvarı birleşir: ikinci duvarın açıklıkları ilkine taşınır
+        const La = wallLen(wa);
+        this.plan.openings.filter(op => op.wallId === wb.id).forEach(op => { op.wallId = wa.id; op.pos += La; });
+        this.plan.walls = this.plan.walls.filter(w => w !== wb);
+      } else if (!wa && wb) o.walls[ip] = wb.id;
+      o.walls.splice(k, 1);
+      this.syncRoomWalls(o);
+    }
+    this.changed(); toast('Köşe silindi');
+  }
+  /* oda köşeleri değişince odanın kendi duvarları yeni kenarlara oturur; köşeye bağlı diğer duvarlar ve açıklıklar izler */
+  syncRoomWalls(o) {
+    const ids = o.walls || [], n = o.pts.length;
+    if (ids.length !== n || n < 3) return;
+    const P = this.plan, ws = ids.map(id => (id && this.wall(id)) || null), t0 = P.meta.wallT;
+    if (!ws.some(Boolean)) return;
+    const out = offsetPolyVar(o.pts, ws.map(w => -(w ? this.T(w) : t0) / 2));
+    const moves = [];
+    ws.forEach((w, i) => {
+      if (!w) return;
+      const A = r2(out[i]), B = r2(out[(i + 1) % n]), u0 = wallDir(w);
+      const ops = P.openings.filter(op => op.wallId === w.id).map(op => [op, V.add(w.a, V.mul(u0, op.pos))]);
+      moves.push([w.a, A], [w.b, B]);
+      w.a = A; w.b = B;
+      const L = wallLen(w);
+      ops.forEach(([op, c]) => { op.pos = +Math.max(op.w / 2, Math.min(L - op.w / 2, projSeg(c, w.a, w.b).t * L)).toFixed(2); });
+    });
+    P.walls.forEach(x => { if (ws.includes(x)) return; for (const k of ['a', 'b']) { const m = moves.find(([old]) => V.eq(old, x[k])); if (m) x[k] = { ...m[1] }; } });
+  }
+  /* kenar uzunluğu girildi: sonraki köşe kenar doğrultusunda kayar (sonraki kenar dikse o da ötelenir, dik açılar korunur) */
+  setEdgeLen(o, i, L) {
+    const n = o.pts.length, a = o.pts[i], b = o.pts[(i + 1) % n], c = o.pts[(i + 2) % n];
+    const u = V.norm(V.sub(b, a)), sh = V.mul(u, Math.max(1, L) - V.dist(a, b));
+    const perp = n > 3 && Math.abs(V.dot(u, V.norm(V.sub(c, b)))) < 0.02;
+    o.pts[(i + 1) % n] = r2(V.add(b, sh));
+    if (perp) o.pts[(i + 2) % n] = r2(V.add(c, sh)); else o.rect = false;
+  }
   resizeRect(room, w, l) {
     const xs = room.pts.map(p => p.x), ys = room.pts.map(p => p.y), x0 = Math.min(...xs), y0 = Math.min(...ys);
     room.pts = rectPts(x0, y0, w, l);
@@ -1456,6 +1557,8 @@ export class PlanEditor {
         o += `<clipPath id="${cid}"><polygon points="${r.pts.map(p => `${p.x},${p.y}`).join(' ')}"/></clipPath><path class="tile-j" clip-path="url(#${cid})" d="${tilePlanPath(tileLayout(r))}" fill="none" stroke="#8E8778" stroke-opacity="0.45" stroke-width="${px(0.6)}"/>`;
       }
     }
+    // merdivenler (odaların üstünde, duvarların altında)
+    for (const st of P.stairs || []) o += stairSvg(st, px, live && this.sel?.kind === 'stair' && this.sel.id === st.id);
     // duvarlar
     const arcDone = new Set();
     for (const w of P.walls) {   // uçlar: ortak köşede yarım kalınlık uzar, serbest uçta tam noktada biter
@@ -1622,12 +1725,9 @@ export class PlanEditor {
       } else if (this.sel.kind === 'rail') {
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${px(12)}"/>`;
         o += [so.a, so.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
-      } else if (this.sel.kind === 'room') {
+      } else if (this.sel.kind === 'room' || this.sel.kind === 'roof') {
         o += `<polygon class="selpoly" points="${so.pts.map(p => `${p.x},${p.y}`).join(' ')}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
-        o += so.pts.map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(6)}" stroke-width="${px(2)}"/>`).join('');
-      } else if (this.sel.kind === 'roof') {
-        o += `<polygon class="selpoly" points="${so.pts.map(p => `${p.x},${p.y}`).join(' ')}" stroke-width="${px(2)}" stroke-dasharray="${px(6)} ${px(4)}"/>`;
-        o += so.pts.map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(6)}" stroke-width="${px(2)}"/>`).join('');
+        o += this.polyEditUI(so, px);
       } else if (this.sel.kind === 'item') {
         const hp = this.itemRotHandle(so);
         o += `<line class="rotln" x1="${so.x}" y1="${so.y}" x2="${hp.x}" y2="${hp.y}" stroke-width="${px(1.5)}"/><circle class="hdl rot" cx="${hp.x}" cy="${hp.y}" r="${px(7)}" stroke-width="${px(2)}"/>`;
@@ -1721,6 +1821,25 @@ export class PlanEditor {
     }
     this.gUI.setAttribute('transform', `matrix(${s} 0 0 ${s} ${this.ox} ${this.oy})`);
     this.gUI.innerHTML = o;
+  }
+
+  /* seçili çokgen: kenar ölçüleri, kenar ortasında + (köşe ekle), köşe tutamaçları ve numaraları */
+  polyEditUI(so, px) {
+    const n = so.pts.length, ctr = polyCentroid(so.pts);
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const a = so.pts[i], b = so.pts[(i + 1) % n], L = V.dist(a, b), m = V.lerp(a, b, 0.5);
+      const u = V.norm(V.sub(b, a)); let nn = { x: -u.y, y: u.x }; if (V.dot(nn, V.sub(ctr, m)) < 0) nn = V.mul(nn, -1);
+      const tp = V.add(m, V.mul(nn, px(22))), ang = Math.atan2(u.y, u.x) * 180 / Math.PI, rot = ang > 90 || ang < -90 ? ang + 180 : ang;
+      o += `<text class="edgelen" x="${tp.x}" y="${tp.y}" font-size="${px(11)}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${rot} ${tp.x} ${tp.y})">${fmtNum(L, 1)}</text>`;
+      if (L * this.s > 44) o += `<g class="hdl-mid"><circle cx="${m.x}" cy="${m.y}" r="${px(7)}" stroke-width="${px(1.5)}"/><path d="M${m.x - px(3.5)} ${m.y}H${m.x + px(3.5)}M${m.x} ${m.y - px(3.5)}V${m.y + px(3.5)}" stroke-width="${px(1.5)}"/></g>`;
+    }
+    so.pts.forEach((p, i) => {
+      o += `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(6)}" stroke-width="${px(2)}"/>`;
+      const d = V.norm(V.sub(p, ctr)), tp = V.add(p, V.mul(d, px(15)));
+      o += `<text class="vtxno" x="${tp.x}" y="${tp.y}" font-size="${px(10)}" text-anchor="middle" dominant-baseline="middle">${i + 1}</text>`;
+    });
+    return o;
   }
 
   renderHud() {
@@ -1868,7 +1987,10 @@ export class PlanEditor {
         <label>Zemin kaplaması<select class="inp sm" data-k="floor">${FLOORS.map(f => `<option value="${f.k}" ${o.floor === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
         <label>Duvar rengi (3D)<div class="swatches" data-k="wallColor">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.wallColor || '') === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>
+        ${this.edgeInsp(o)}
         ${tileable(o) ? this.tileInsp(o, m) : ''}`;
+    } else if (s.kind === 'stair') {
+      body = this.stairInsp(o, num);
     } else if (s.kind === 'item' && o.type === 'cabinet' && o.cab) {
       const c = o.cab, isW = c.kind === 'wardrobe';
       const nb = isW ? c.ward.filter(m => !CAB_MT[m.type].empty).length : c.base.filter(m => !CAB_MT[m.type].empty).length, nu = isW ? 0 : c.upper.filter(m => !CAB_MT[m.type].empty).length;
@@ -1909,6 +2031,39 @@ export class PlanEditor {
     this.insp.innerHTML = `<div class="insp-body">${body}</div>${o ? `<button class="btn btn-danger btn-xs del" data-act="del">${icon('trash')}Sil</button>` : ''}`;
     this.el.classList.toggle('has-sel', !!o);
     this.bindInsp(o);
+  }
+
+  /* çokgen kenar ölçüleri: uzunluk girilir, + ile kenara köşe eklenir, köşe silinir */
+  edgeInsp(o) {
+    const n = o.pts.length;
+    return `<h4>Kenar ölçüleri <small class="muted">(iç yüz)</small></h4>
+      <div class="edge-list">${o.pts.map((a, i) => { const b = o.pts[(i + 1) % n]; return `<div class="edge-row"><span>${i + 1}–${(i + 1) % n + 1}</span>
+        <div class="inp-unit sm"><input type="number" inputmode="decimal" step="0.5" data-k="edge.${i}" value="${+V.dist(a, b).toFixed(1)}"><span>cm</span></div>
+        <button class="icon-btn sm" data-act="vins" data-i="${i}" title="Bu kenarın ortasına köşe ekle">${icon('plus')}</button></div>`; }).join('')}</div>
+      ${n > 3 ? `<div class="row wrap vdel"><small class="muted">Köşe sil:</small>${o.pts.map((p, i) => `<button class="btn btn-xs btn-ghost" data-act="vdel" data-i="${i}">${i + 1}</button>`).join('')}</div>` : ''}
+      <p class="muted small">Kenarı sürükleyerek ötelenir, ortasındaki + ile yeni köşe eklenir (dokun ya da sürükle), köşeye çift dokununca silinir. Odanın duvarları biçimi izler.</p>`;
+  }
+
+  /* merdiven paneli */
+  stairInsp(o, num) {
+    const P = stairParams(o), L = stairLocal(o), t = o.type, two = ['sahanlik', 'L', 'Lbal', 'U'].includes(t), turn = !['duz', 'sahanlik'].includes(t);
+    const xs = L.steps.flatMap(s => s.pts.map(p => p.x)), ys = L.steps.flatMap(s => s.pts.map(p => p.y));
+    const bw = Math.max(...xs) - Math.min(...xs), bl = Math.max(...ys) - Math.min(...ys);
+    const opt = (v, cur, txt) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${txt}</option>`;
+    return `<h4>Merdiven</h4>
+      <label>Tip<select class="inp sm" data-k="type">${STAIR_TYPES.map(x => opt(x.k, t, x.t)).join('')}</select></label>
+      <div class="stair-types">${STAIR_TYPES.map(x => `<button class="st-ic ${x.k === t ? 'on' : ''}" data-act="stype" data-v="${x.k}" title="${x.t}">${stairSvgIcon(x.k)}</button>`).join('')}</div>
+      <label>Yapı<select class="inp sm" data-k="build">${STAIR_BUILD.map(x => opt(x.k, o.build, x.t)).join('')}</select></label>
+      <div class="grid2">${num('H', 'Kat yüksekliği', o.H)}${num('N', 'Rıht sayısı', P.N, 'adet', 1)}
+        ${num('w', t === 'spiral' ? 'Basamak boyu' : 'Kol genişliği', o.w)}${t === 'spiral' ? num('col', 'Orta kolon çapı', o.col || 20) + num('sweep', 'Toplam dönüş', Math.round(L.P.sweep), '°', 15) : num('g', 'Basamak derinliği', P.g, 'cm', 0.5)}
+        ${two ? num('n1', '1. kol basamağı', P.n1, 'adet', 1) : ''}${t === 'sahanlik' || t === 'U' ? num('land', 'Sahanlık derinliği', P.land) : ''}</div>
+      ${turn ? `<label>Dönüş yönü<select class="inp sm" data-k="turn">${opt('R', o.turn || 'R', 'Sağa')}${opt('L', o.turn || 'R', 'Sola')}</select></label>` : ''}
+      ${num('rot', 'Plan açısı', o.rot || 0, '°', 15)}
+      <div class="mtable"><div><span>Rıht yüksekliği (h)</span><b>${fmtNum(P.h, 1)} cm</b></div><div><span>Basamak</span><b>${P.T} adet${two && t !== 'Lbal' ? ' (sahanlık dahil)' : t === 'Lbal' ? ' (3 balanslı)' : ''}</b></div>
+        <div><span>2h + g</span><b>${fmtNum(P.blondel, 1)} cm</b></div><div><span>Eğim</span><b>${fmtNum(P.slope, 1)}°</b></div><div><span>Plan ölçüsü</span><b>${fmtNum(bw, 0)} × ${fmtNum(bl, 0)} cm</b></div></div>
+      ${stairCheck(o).map(([k, m]) => `<p class="small st-chk ${k}">${esc(m)}</p>`).join('')}
+      <div class="row wrap"><button class="btn btn-xs btn-ghost" data-act="rot90">${icon('rotate')}90°</button>${turn ? `<button class="btn btn-xs btn-ghost" data-act="sturn">Dönüşü çevir</button>` : ''}<button class="btn btn-xs btn-ghost" data-act="dup">${icon('copy')}Çoğalt</button></div>
+      <p class="muted small">Turuncu yürüme çizgisi çıkış yönünü gösterir (daire: başlangıç, ok: üst kat). Merdiveni sürükleyerek taşıyın.</p>`;
   }
 
   /* seramik / karo döşeme: boyut, döşeme şekli, derz → adet bazlı sarfiyat */
@@ -1983,6 +2138,16 @@ export class PlanEditor {
           else if (q === 'g' || q === 'w' || q === 'l' || q === 'fire' || q === 'box' || q === 'th' || q === 'skH') t[q] = Math.max(0, +v);
           else t[q] = v;
           if ((q === 'w' || q === 'l') && t.w === t.l && t.pat === 'balik') t.pat = 'duz';
+        } else if (k.startsWith('edge.')) {
+          this.setEdgeLen(x, +k.slice(5), v);
+          if (this.sel.kind === 'room') this.syncRoomWalls(x);
+        } else if (this.sel.kind === 'stair') {
+          if (k === 'H') { x.H = Math.max(50, v); x.N = autoRisers(x.H); }
+          else if (k === 'N') x.N = Math.max(3, Math.round(v));
+          else if (k === 'n1') x.n1 = Math.max(1, Math.round(v));
+          else if (k === 'type') { x.type = v; x.n1 = 0; x.sweep = 0; }
+          else if (k === 'build' || k === 'turn') x[k] = v;
+          else x[k] = Math.max(k === 'rot' ? -360 : 0, v);
         } else if (k === 'len' && this.sel.kind === 'rail') {
           const np = V.add(x.a, V.mul(V.norm(V.sub(x.b, x.a)), Math.max(1, v))); x.b = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) };
         } else if (k === 'len') {
@@ -2037,7 +2202,12 @@ export class PlanEditor {
       }
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
       if (a === 'cabV') return this.vestiyerDialog(x);
+      if (a === 'vdel') return this.delVertex(x, +b.dataset.i, this.sel.kind);
       this.snap();
+      if (a === 'vins') { const i = +b.dataset.i; this.insertVertex(x, i, V.lerp(x.pts[i], x.pts[(i + 1) % x.pts.length], 0.5)); if (this.sel.kind === 'room') this.syncRoomWalls(x); }
+      if (a === 'stype') { x.type = b.dataset.v; x.n1 = 0; x.sweep = 0; }
+      if (a === 'sturn') x.turn = x.turn === 'L' ? 'R' : 'L';
+      if (a === 'dup' && this.sel.kind === 'stair') { const c = { ...x, id: uid('st'), x: x.x + 40, y: x.y + 40 }; P.stairs.push(c); this.sel = { kind: 'stair', id: c.id }; this.changed(); return; }
       if (a === 'flip') x.flip = !x.flip;
       if (a === 'side') x.side = -(x.side || 1);
       if (a === 'rot90') x.rot = (x.rot + 90) % 360;

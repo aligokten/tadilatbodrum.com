@@ -1,9 +1,10 @@
 /* ═══ Plan geometrisi — birim: cm, 2D'de y aşağı ═══ */
 import { uid } from './store.js';
 import { fixtureCounts } from './fixtures.js';
+import { stairBounds } from './stairs.js';
 
 export function emptyPlan() {
-  return { v: 1, walls: [], openings: [], rooms: [], items: [], dims: [], labels: [], rails: [],
+  return { v: 1, walls: [], openings: [], rooms: [], items: [], dims: [], labels: [], rails: [], stairs: [],
     meta: { wallH: 280, wallT: 15, wallColor: '#F7F5F0', bg: null } };
 }
 
@@ -62,6 +63,20 @@ export function pointInPoly(p, pts) {
 }
 
 /* çokgeni d kadar içe (d>0) / dışa (d<0) öteler — basit (kendini kesmeyen) çokgenler için */
+/* kenar başına farklı öteleme (ds[i]: i. kenar; d>0 içe) — duvar kalınlıkları farklı odalar için */
+export function offsetPolyVar(pts, ds) {
+  const n = pts.length, ccw = polyArea(pts) > 0 ? 1 : -1;
+  const lines = pts.map((a, i) => {
+    const b = pts[(i + 1) % n], u = V.norm(V.sub(b, a)), nrm = { x: -u.y * ccw, y: u.x * ccw };
+    return { p: V.add(a, V.mul(nrm, ds[i])), u };
+  });
+  return lines.map((L, i) => {
+    const P = lines[(i - 1 + n) % n], den = V.cross(P.u, L.u);
+    if (Math.abs(den) < 1e-9) return L.p;
+    return V.add(P.p, V.mul(P.u, V.cross(V.sub(L.p, P.p), L.u) / den));
+  });
+}
+
 export function offsetPoly(pts, d) {
   const n = pts.length, ccw = polyArea(pts) > 0 ? 1 : -1;
   const lines = pts.map((a, i) => {
@@ -134,6 +149,7 @@ export function planBounds(plan) {
   plan.items.forEach(i => { const R = Math.hypot(i.w, i.d) / 2; pts.push({ x: i.x - R, y: i.y - R }, { x: i.x + R, y: i.y + R }); });
   (plan.rails || []).forEach(r => pts.push(r.a, r.b));
   plan.labels.forEach(l => pts.push({ x: l.x, y: l.y }));
+  (plan.stairs || []).forEach(st => pts.push(...stairBounds(st)));
   if (!pts.length) return null;
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
   return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };

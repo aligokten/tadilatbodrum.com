@@ -83,6 +83,7 @@ const P = {
   wall: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M8 4v5M16 9v6M8 15v5"/>',
   snow: '<path d="M12 2v20M4.9 7l14.2 10M4.9 17 19.1 7"/>',
   roof: '<path d="M2 12 12 3l10 9M5 10v10h14V10"/>',
+  stairs: '<path d="M3 21h5v-5h5v-5h5V6h3"/><path d="M3 21V3"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2"/>',
   hammer: '<path d="m15 12-8.5 8.5a2.1 2.1 0 0 1-3-3L12 9"/><path d="M17.6 15 22 10.6 13.4 2 9 6.4z"/>',
   tools: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.7 2.7-2.4-2.4z"/>',
