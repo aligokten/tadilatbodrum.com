@@ -7,12 +7,35 @@
 
 /* ───────────── okuyucular ───────────── */
 export async function readModelFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
   const buf = new Uint8Array(await file.arrayBuffer());
-  if (ext === 'obj') return { meshes: parseOBJ(new TextDecoder().decode(buf)), upGuess: 'y' };
-  if (ext === 'stl') return { meshes: parseSTL(buf), upGuess: 'z' };
-  if (['step', 'stp', 'iges', 'igs'].includes(ext)) return { meshes: await parseCAD(buf, ext), upGuess: 'z' };
-  throw new Error('Desteklenmeyen dosya türü: .' + ext + ' (STEP, IGES, OBJ ya da STL kullanın)');
+  if (!buf.length) throw new Error('Dosya boş okundu. iPad\'de dosya iCloud\'da ise önce Dosyalar uygulamasında indirin (bulut simgesi), sonra tekrar seçin.');
+  const fmt = sniffFormat(file.name, buf);
+  if (fmt === 'zip') throw new Error('Dosya sıkıştırılmış (.zip). Dosyalar uygulamasında üzerine dokunup açın, içindeki STEP / STL dosyasını seçin.');
+  if (fmt === 'obj') return { meshes: parseOBJ(new TextDecoder().decode(buf)), upGuess: 'y', fmt };
+  if (fmt === 'stl') return { meshes: parseSTL(buf), upGuess: 'z', fmt };
+  if (fmt === 'step' || fmt === 'iges') {
+    try { return { meshes: await parseCAD(buf, fmt), upGuess: 'z', fmt }; }
+    catch (e) {
+      const mem = /memory|bellek|abort|OOM|RangeError/i.test(String(e?.message || e));
+      throw new Error(mem ? 'STEP dosyası bu cihazın tarayıcı belleğine sığmadı. Shapr3D\'den STL olarak dışa aktarıp deneyin ya da bilgisayardan açın.' : (e?.message || String(e)));
+    }
+  }
+  throw new Error(`Dosya türü tanınmadı (${file.name}). Shapr3D'den STEP, IGES, OBJ ya da STL olarak dışa aktarın.`);
+}
+
+/* Uzantıdan, yoksa içerikten biçim: iPad'de dosya adları uzantısız / farklı uzantılı gelebilir. */
+export function sniffFormat(name, buf) {
+  const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
+  const byExt = { obj: 'obj', stl: 'stl', step: 'step', stp: 'step', p21: 'step', iges: 'iges', igs: 'iges' }[ext];
+  if (byExt) return byExt;
+  if (buf[0] === 0x50 && buf[1] === 0x4b) return 'zip';
+  const head = new TextDecoder().decode(buf.slice(0, 2048));
+  if (/^\s*ISO-10303-21/.test(head)) return 'step';
+  if (/^.{72}S\s*\d+\s*$/m.test(head.split(/\r?\n/)[0] || '')) return 'iges';
+  if (buf.length >= 84 && buf.length === 84 + new DataView(buf.buffer, buf.byteOffset).getUint32(80, true) * 50) return 'stl';
+  if (/^\s*solid[\s\S]*facet/.test(head)) return 'stl';
+  if (/^\s*(v|o|g|f|mtllib)\s/m.test(head)) return 'obj';
+  return null;
 }
 
 export function parseOBJ(txt) {
@@ -60,16 +83,16 @@ function loadOCCT() {
   occtP = new Promise((res, rej) => {
     const s = document.createElement('script');
     s.src = base + 'occt-import-js.js';
-    s.onload = () => window.occtimportjs({ locateFile: f => base + f }).then(res, rej);
-    s.onerror = () => rej(new Error('STEP okuyucu yüklenemedi'));
+    s.onload = () => window.occtimportjs({ locateFile: f => base + f }).then(res, e => { occtP = null; rej(new Error('STEP okuyucu başlatılamadı: ' + (e?.message || e))); });
+    s.onerror = () => { occtP = null; rej(new Error('STEP okuyucu indirilemedi — internet bağlantısını kontrol edip tekrar deneyin')); };
     document.head.appendChild(s);
   });
   return occtP;
 }
-async function parseCAD(buf, ext) {
+async function parseCAD(buf, fmt) {
   const occt = await loadOCCT();
-  const r = ext.startsWith('ig') ? occt.ReadIgesFile(buf, null) : occt.ReadStepFile(buf, null);
-  if (!r.success) throw new Error('Dosya okunamadı (STEP / IGES)');
+  const r = fmt === 'iges' ? occt.ReadIgesFile(buf, null) : occt.ReadStepFile(buf, null);
+  if (!r.success || !r.meshes?.length) throw new Error('STEP / IGES dosyası okunamadı ya da içinde katı gövde yok');
   return r.meshes.map((m, i) => {
     const P = m.attributes.position.array, I = m.index.array, pos = new Float32Array(I.length * 3);
     for (let k = 0; k < I.length; k++) { pos[k * 3] = P[I[k] * 3]; pos[k * 3 + 1] = P[I[k] * 3 + 1]; pos[k * 3 + 2] = P[I[k] * 3 + 2]; }
@@ -78,7 +101,7 @@ async function parseCAD(buf, ext) {
 }
 
 /* ───────────── ön işlem: birim, yukarı ekseni, gövdelere ayırma ───────────── */
-export function prepare(meshes, { unit = 'auto', up = 'z' } = {}) {
+export function prepare(meshes, { unit = 'auto', up = 'z', split = false } = {}) {
   let ext = 0;
   const all = meshes.map(m => {
     const p = new Float64Array(m.pos.length);
@@ -95,20 +118,27 @@ export function prepare(meshes, { unit = 'auto', up = 'z' } = {}) {
   for (const m of all) for (let i = 0; i < m.p.length; i++) m.p[i] = (m.p[i] - (i % 3 === 2 ? mn[2] : 0)) * k; // zemin z = 0
   const bodies = [];
   for (const m of all) {
-    const parts = splitComponents(m.p);
+    const parts = split ? splitComponents(m.p) : [m.p]; // STEP / OBJ gövdeleri zaten ayrı gelir
     parts.forEach((p, i) => bodies.push({ name: parts.length > 1 ? `${m.name} (${i + 1})` : m.name, p }));
   }
   return { bodies, scale: k, unitUsed: k === 1000 ? 'm' : k === 10 ? 'cm' : 'mm' };
 }
 
-// birbirine bağlı olmayan üçgen kümelerini ayrı gövde yapar
+/* Tek parça ağı (STL) gövdelere ayırır. Üçgenler yalnızca tam iki üçgenin paylaştığı (manifold) kenar üzerinden
+ * bağlanır: birbirine köşede / yüzeyde değen ayrı gövdeler (L köşedeki duvarlar gibi) birleşmez. */
 function splitComponents(p) {
-  const nt = p.length / 9, key = new Map(), parent = new Int32Array(nt).map((_, i) => i);
+  const nt = p.length / 9, parent = new Int32Array(nt).map((_, i) => i);
   const find = a => { while (parent[a] !== a) a = parent[a] = parent[parent[a]]; return a; };
-  for (let t = 0; t < nt; t++) for (let v = 0; v < 3; v++) {
-    const o = t * 9 + v * 3, k = `${Math.round(p[o] * 100)},${Math.round(p[o + 1] * 100)},${Math.round(p[o + 2] * 100)}`;
-    if (key.has(k)) { const a = find(key.get(k)), b = find(t); if (a !== b) parent[a] = b; } else key.set(k, t);
+  const vk = o => `${Math.round(p[o] * 100)},${Math.round(p[o + 1] * 100)},${Math.round(p[o + 2] * 100)}`;
+  const edges = new Map();
+  for (let t = 0; t < nt; t++) {
+    const k = [vk(t * 9), vk(t * 9 + 3), vk(t * 9 + 6)];
+    for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+      const e = k[a] < k[b] ? k[a] + '|' + k[b] : k[b] + '|' + k[a];
+      const l = edges.get(e); if (l) l.push(t); else edges.set(e, [t]);
+    }
   }
+  for (const l of edges.values()) if (l.length === 2) { const a = find(l[0]), b = find(l[1]); if (a !== b) parent[a] = b; }
   const groups = new Map();
   for (let t = 0; t < nt; t++) { const r = find(t); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(t); }
   const out = [...groups.values()].filter(g => g.length >= 4).map(g => {
