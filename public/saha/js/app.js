@@ -8,6 +8,7 @@ import { LOGO } from './brand.js';
 import { renderRemindCard, renderRemindSettings, remindDialog, dueAll, REMIND_KINDS, team as teamOf } from './remind.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
+import { renderQA, qaOpen } from './qa.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { useName, modelName } from './openings.js';
 import { emptyPlan, planMetrics, rectRoom, roomMetrics } from './plan-geom.js';
@@ -19,7 +20,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.28-8';
+export const APP_VERSION = '2026.10.29-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -452,6 +453,7 @@ async function prepStamp(file) {
 const TABS = [
   { k: 'genel', t: 'Genel', ic: 'user' },
   { k: 'talepler', t: 'Talepler', ic: 'list' },
+  { k: 'sorular', t: 'Soru-Cevap', ic: 'chat' },
   { k: 'anket', t: 'Anket', ic: 'clipboard' },
   { k: 'kesif', t: 'Keşif', ic: 'scan' },
   { k: 'rolove', t: 'Rölöve & 3D', ic: 'ruler' },
@@ -477,11 +479,12 @@ function jobView(tab) {
     <section class="tab-body" id="tb"></section>`;
   $('.tabs .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const tb = $('#tb');
-  ({ genel: tabGenel, talepler: tabTalepler, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
+  ({ genel: tabGenel, talepler: tabTalepler, sorular: tabSorular, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
 }
 function badge(k) {
   const j = S.job;
   const n = { talepler: j.requests.filter(r => r.status !== 'kapsamdisi').length, kesif: j.findings.length, foto: j.photos.length }[k];
+  if (k === 'sorular') { const n = qaOpen(j), all = (j.qa || []).length; return n ? `<i class="tbadge warn">${n}</i>` : all ? `<i class="tbadge">${icon('check')}</i>` : ''; }
   if (k === 'anket') { const p = surveyProgress(j.survey.answers).pct; return p ? `<i class="tbadge">${p}%</i>` : ''; }
   if (k === 'uygulama') { if (!j.exec) return ''; const A = execAlerts(j.exec), w = A.late + A.mats + A.nok; return `<i class="tbadge ${w ? 'warn' : ''}">${w || execProgress(j.exec) + '%'}</i>`; }
   return n ? `<i class="tbadge">${n}</i>` : '';
@@ -642,6 +645,11 @@ function tabTalepler(tb) {
 function roomNames() {
   const j = S.job;
   return [...new Set([...(j.inspection.rooms || []).map(r => r.name), ...(j.plan ? planMetrics(j.plan).rooms : []).map(r => r.name), ...ROOM_TYPES])].filter(Boolean);
+}
+
+/* ── Soru-Cevap: WhatsApp mesajındaki sorular ve yanıtlar ── */
+function tabSorular(tb) {
+  renderQA(tb, S.job, { save: () => { save(); }, logEvt, settings: S.settings, printDoc, docHeader, docFooter });
 }
 
 /* ── Anket ── */
