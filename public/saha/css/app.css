@@ -1133,3 +1133,6 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .p-rev-h{display:flex;justify-content:space-between;align-items:baseline;margin:-2px 0 6px}.p-rev-h span{font-weight:800;color:#EB591F;letter-spacing:.06em}.p-rev-h small{color:#6B7280}
 .p-rev p{margin:0 0 6px}.p-rev ul{margin:0 0 8px 18px;padding:0}.p-rev-l{font-weight:700}
 .p-rev-t{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}.p-rev-t div{background:#F4F2EE;border-radius:8px;padding:6px 10px}.p-rev-t small{display:block;font-size:8.5pt;color:#6B7280}.p-rev-t b.up{color:#B5480F}.p-rev-t b.down{color:#00797B}
+.qa-sign{margin:8px 0 12px;font-size:10.5pt;line-height:1.5;break-inside:avoid;page-break-inside:avoid}.qa-sign div{position:relative;display:inline-block;min-width:240px}
+.qa-sign span{display:block;font-size:8.5pt;color:#6B7280;margin-top:2px}.qa-sign.has-stamp div{padding-bottom:116px}
+.qa-stamp{position:absolute;left:0;top:62px;max-width:230px;max-height:110px;object-fit:contain;transform:rotate(-2deg);opacity:.92}

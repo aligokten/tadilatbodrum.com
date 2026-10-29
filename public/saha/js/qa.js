@@ -91,7 +91,7 @@ export function qaDocHtml(s, job, settings, { docHeader, docFooter }) {
     <section class="qa-intro-p">${introOf(s, job, settings).trim().split(/\n\s*\n/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')}</section>
     <section class="p-cust"><div><small>Konu</small><b>${esc(s.title)}</b>${esc(s.platform || (s.src === 'wa' ? 'WhatsApp' : 'Görüşme'))}</div><div><small>Mesaj tarihi</small><b>${esc(fmtAt(s.at) || '—')}</b>${esc(s.platform ? s.platform + ' mesajı' : '')}</div><div><small>Soru</small><b>${its.length} soru</b>${its.filter(answered).length} yanıtlandı</div></section>
     <section class="qa-doc">${its.map((it, i) => `<div class="qa-p"><div class="qa-pq"><span>${i + 1}</span><p>${esc(it.q.trim()).replace(/\n/g, '<br>')}</p></div><div class="qa-pa">${answered(it) ? esc(it.a.trim()).replace(/\n/g, '<br>') : '<i>Yanıt hazırlanıyor.</i>'}</div></div>`).join('')}</section>
-    <p class="qa-sign">Saygılarımızla,<br><b>${esc(settings?.company?.name || '')}</b></p>
+    ${(() => { const st = s.stamp !== false && settings?.company?.stamp; return `<section class="qa-sign${st ? ' has-stamp' : ''}"><div>Saygılarımızla,<br><b>${esc(settings?.company?.name || '')}</b>${st ? `<span>Kaşe / İmza</span><img class="qa-stamp" src="${st}" alt="Kaşe">` : ''}</div></section>`; })()}
     <p class="muted small" style="font-size:8.5pt">Bu belge, ${esc([fmtAt(s.at) ? fmtAt(s.at) + ' tarihinde' : '', via(s)].filter(Boolean).join(' ') || 'tarafımıza')} iletilen sorularınıza verdiğimiz yanıtları kayıt altına almak için hazırlanmıştır.</p>
     ${docFooter()}</div>`;
 }
@@ -126,6 +126,7 @@ export function renderQA(tb, job, ctx) {
         <button class="btn btn-ghost btn-sm" data-qa="copy">${icon('copy')}Metni kopyala</button>
         <button class="btn btn-ghost btn-sm" data-qa="pdf">${icon('print')}PDF / paylaş</button>
         <button class="btn btn-primary btn-sm" data-qa="wa">${icon('chat')}WhatsApp'ta gönder</button></div>
+      ${ctx.settings?.company?.stamp ? `<label class="check qa-stampc"><input type="checkbox" data-qs="stamp" ${s.stamp !== false ? 'checked' : ''}> PDF'in sonuna kaşe ekle</label>` : `<p class="muted small">PDF'e kaşe basmak için Ayarlar → Firma bilgileri'nden kaşe görseli yükleyin.</p>`}
       <details class="qa-intro"><summary>PDF'in başındaki bilgilendirme metni${(s.intro ?? '').trim() ? ' <small>(düzenlendi)</small>' : ''}</summary>
         <textarea class="inp" rows="8" data-sf="intro">${esc(introOf(s, job, ctx.settings))}</textarea>
         <div class="row"><button class="btn btn-ghost btn-xs" data-qa="introReset">Varsayılan metne dön</button><small class="muted">Değiştirmezseniz müşteri adı, mesaj tarihi ve platform kendiliğinden yazılır.</small></div></details>
@@ -146,6 +147,7 @@ export function renderQA(tb, job, ctx) {
     save();
   };
   tb.onchange = e => {
+    if (e.target.dataset.qs === 'stamp') { const s = sOf(e.target); if (s) { s.stamp = e.target.checked; save(); } return; }
     const k = e.target.dataset.f || e.target.dataset.sf;
     if (k === 'a' || k === 'q' || k === 'at' || k === 'platform') {
       const sc = scrollY, openD = $$('details[open]', tb).map(d => d.closest('[data-s]')?.dataset.s + d.className);
