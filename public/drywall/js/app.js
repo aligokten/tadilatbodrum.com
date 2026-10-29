@@ -636,25 +636,32 @@ function openImport() {
     <p class="hint">Shapr3D'de <b>Export</b> ile <b>STEP</b> (önerilen), IGES, OBJ ya da STL alın. Her gövde (body) ayrı eleman olarak çözümlenir:
     ince düşey gövdeler bölme duvar, kalın / derin gövdeler mobilya kutusu, yüksekteki ince yatay gövdeler asma tavan. Kapı / pencere boşlukları ve nişler
     gövde yüzeylerinden bulunur; gövdeler arası birleşimlerden montaj detayları ve bağlantı profilleri üretilir.</p>
-    <label class="imp-drop">Dosya seçin<br><input type="file" id="impFile" accept=".step,.stp,.iges,.igs,.obj,.stl"></label>
+    <label class="imp-drop" id="impDrop">Dosya seçin ya da buraya sürükleyin<br><input type="file" id="impFile"></label>
     <div class="imp-opts"><label>Birim <select id="impUnit"><option value="auto">Otomatik</option><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></label>
     <label>Yukarı ekseni <select id="impUp"><option value="auto">Otomatik</option><option value="z">Z</option><option value="y">Y</option></select></label></div>
     <div id="impOut"></div>`);
   $('#modal .modal-card').classList.add('wide');
   IMP = null;
-  $('#impFile').onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
-    $('#impOut').innerHTML = '<p class="hint">Okunuyor… (STEP dosyalarında okuyucu ilk seferde yüklenir, birkaç saniye sürebilir)</p>';
+  // not: accept filtresi kullanılmaz — iOS / iPadOS .step / .stl dosyalarını tanımadığı için seçtirmiyor
+  const load = async f => {
+    if (!f) return;
+    $('#impOut').innerHTML = `<p class="hint">${esc(f.name)} (${nf(f.size / 1048576, 1)} MB) okunuyor… STEP dosyalarında okuyucu ilk seferde indirilir (≈ 8 MB), birkaç saniye sürebilir.</p>`;
     try { const r = await readModelFile(f); IMP = { file: f.name, ...r }; runImport(); }
-    catch (err) { $('#impOut').innerHTML = `<p class="warn">Hata: ${esc(err.message)}</p>`; }
+    catch (err) { console.error(err); $('#impOut').innerHTML = `<p class="warn">Hata: ${esc(err.message || err)}</p>`; }
   };
+  $('#impFile').onchange = e => load(e.target.files[0]);
+  const drop = $('#impDrop');
+  drop.ondragover = e => { e.preventDefault(); drop.style.borderColor = 'var(--teal)'; };
+  drop.ondragleave = () => { drop.style.borderColor = ''; };
+  drop.ondrop = e => { e.preventDefault(); drop.style.borderColor = ''; load(e.dataTransfer.files[0]); };
   for (const id of ['#impUnit', '#impUp']) $(id).onchange = () => IMP && runImport();
 }
 function runImport() {
   const up = $('#impUp').value === 'auto' ? IMP.upGuess : $('#impUp').value;
-  const pr = prepare(IMP.meshes, { unit: $('#impUnit').value, up });
+  const pr = prepare(IMP.meshes, { unit: $('#impUnit').value, up, split: IMP.fmt === 'stl' || IMP.meshes.length === 1 });
   IMP.bodies = pr.bodies.map((b, i) => { const a = analyzeBody(b); a.idx = i; a.file = IMP.file; a.use = a.kind !== 'yoksay'; return a; });
   IMP.unitUsed = pr.unitUsed; IMP.up = up;
+  if (!IMP.bodies.length) { $('#impOut').innerHTML = '<p class="warn">Dosyada gövde (üçgen ağı) bulunamadı.</p>'; return; }
   renderImport();
 }
 function impPlanSVG(bodies) {
