@@ -574,7 +574,7 @@ async function openReport() {
   }
   // kapak
   const elRows = models.map(m => `<tr><td class="pz">${esc(m.el.code)}</td><td>${esc(m.el.name)}</td><td>${TYPES[m.el.type].label}</td><td>${esc(m.info[0])}</td></tr>`).join('');
-  page('cover', null, 'Kapak', `<div class="brandline"></div><div class="cover"><div><h1>${esc(P.name)}</h1>
+  page('cover', null, 'Kapak', `<div class="brandline"></div><div class="cover"><div><img class="cover-logo" src="assets/logo.png" alt="SAGG Drywall+"><h1>${esc(P.name)}</h1>
     <div class="kv"><b>Müşteri</b><span>${esc(P.client) || '—'}</span><b>Adres</b><span>${esc(P.address) || '—'}</span><b>Hazırlayan</b><span>${esc(P.author) || '—'}</span><b>Tarih</b><span>${esc(P.date)}</span><b>Firma</b><span>${esc(S.company)}</span>${P.note ? `<b>Not</b><span>${esc(P.note)}</span>` : ''}</div>
     <h3 style="margin-top:8mm">Elemanlar</h3><table class="t"><thead><tr><th>Kod</th><th>Ad</th><th>Tip</th><th>Ölçü</th></tr></thead><tbody>${elRows}</tbody></table>
     <h3>Özet</h3><div class="kv"><b>Profil</b><span>${nf(T.rows.filter(r => r.grp === 'Profil').reduce((a, r) => a + r.qty, 0))} boy</span><b>Levha</b><span>${nf(T.rows.filter(r => r.grp === 'Levha').reduce((a, r) => a + r.qty, 0))} adet (${S.sheetW}×${S.sheetH})</span><b>Kaplama yüzeyi</b><span>${nf(T.cladArea, 1)} m²</span><b>Malzeme bedeli</b><span>${nf(T.total, 2)} ${S.currency} (KDV hariç)</span></div>
