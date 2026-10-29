@@ -71,6 +71,7 @@ export function renderQuote(root, job, settings, save, ctx) {
     return;
   }
   const q = job.quote, met = jobMetrics(job);
+  q._revPrev = q.rev || 1;   // revizyon artışını yakalamak için (oninput q.rev’i önce günceller)
   ensureAttach(q, job);
   const attHtml = () => {
     const cands = attachCands(job, ctx), order = attachOrdered(job, q, ctx).map(c => c.key);
@@ -97,7 +98,8 @@ export function renderQuote(root, job, settings, save, ctx) {
           <label>Geçerlilik<div class="inp-unit"><input class="inp" type="number" data-q="validDays" value="${q.validDays}"><span>gün</span></div></label>
           <label>Revizyon<input class="inp" type="number" data-q="rev" value="${q.rev || 1}"></label>
         </div>
-        <label>Giriş metni (isteğe bağlı)<textarea class="inp" rows="2" data-q="intro" placeholder="Sayın ${esc(job.customer.name || 'Müşterimiz')}, keşif sonucu hazırlanan teklifimiz aşağıdadır.">${esc(q.intro)}</textarea></label>
+        ${(q.rev || 1) > 1 ? revBox(q) : ''}
+        <label>${(q.rev || 1) > 1 ? 'Ek açıklama (isteğe bağlı, revizyon metninin altında)' : 'Giriş metni (isteğe bağlı)'}<textarea class="inp" rows="2" data-q="intro" placeholder="${(q.rev || 1) > 1 ? 'Örn. Talebiniz üzerine banyo seramiği bir üst seriye yükseltilmiştir.' : `Sayın ${esc(job.customer.name || 'Müşterimiz')}, keşif sonucu hazırlanan teklifimiz aşağıdadır.`}">${esc(q.intro)}</textarea></label>
       </div>
 
       <div class="card met-card">
@@ -194,6 +196,14 @@ export function renderQuote(root, job, settings, save, ctx) {
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
     if (k === 'format') { q.format = e.target.value; save(); return; }
+    if (k === 'rev') {   // revizyon artınca önceki revizyonun tarihi ve tutarı kaydedilir (karşılaştırma için)
+      const v = Math.max(1, Math.round(+e.target.value || 1)), old = q._revPrev ?? 1;
+      q.revHist ||= [];
+      if (v > old && !q.revHist.some(h => h.rev === old)) q.revHist.push({ rev: old, date: q.date, total: quoteTotals(q).total, t: Date.now() });
+      if (old === 1 && v > 1) q.firstDate ||= q.date;
+      q.rev = v; q._revPrev = v; save(); redrawTotals(); return;
+    }
+    if (k === 'revCmp') { q.revCmp = e.target.checked; save(); return; }
     const ak = e.target.dataset.att;
     if (ak) { q.attach = q.attach.filter(x => x !== ak); if (e.target.checked) q.attach.push(ak); save(); redrawTotals(); return; }
     if (k === 'discMode') {   // tür değişince mevcut iskonto aynı tutarda kalsın
@@ -262,6 +272,28 @@ async function libraryPicker(catalog, met, job) {
   }));
 }
 
+/* revizyon: editördeki bilgi kutusu */
+function revBox(q) {
+  const prev = revPrev(q);
+  return `<div class="q-rev"><div class="q-rev-h">${icon('edit')}<b>Revizyon ${q.rev}</b><span class="muted small">${prev ? `önceki: Rev.${prev.rev} · ${fmtDate(prev.date)} · ${fmtMoney(prev.total)}` : 'önceki tutar kayıtlı değil'}</span></div>
+    <p class="muted small">Teklif belgesinin başında revizyona özel giriş metni yer alır: ilk teklif tarihi ve numarası, bu revizyonun öncekilerin yerine geçtiği, aşağıdaki değişiklikler${prev ? ' ve önceki tutarla karşılaştırma' : ''}. İpucu: revizyon numarasını değişiklikleri yapmadan önce artırırsanız önceki tutar kaydedilir.</p>
+    <label>Revizyonda yapılan değişiklikler (her satır bir madde)<textarea class="inp" rows="3" data-q="revNote" placeholder="Mutfak tezgahı kuvars yerine porselen olarak güncellendi&#10;Salon parkesi teklif kapsamından çıkarıldı">${esc(q.revNote || '')}</textarea></label>
+    ${prev ? `<label class="check"><input type="checkbox" data-q="revCmp" ${q.revCmp !== false ? 'checked' : ''}> Belgede önceki tutarla karşılaştırma göster</label>` : ''}</div>`;
+}
+const revPrev = q => (q.revHist || []).filter(h => h.rev < (q.rev || 1)).sort((a, b) => b.rev - a.rev)[0] || null;
+/* revizyon teklifinin giriş metni (belge) */
+function revIntro(q, job, T) {
+  const name = (job.customer?.name || '').trim(), prev = revPrev(q), first = q.firstDate || prev?.date || q.date;
+  const notes = (q.revNote || '').split('\n').map(x => x.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean);
+  const diff = prev ? T.total - prev.total : 0;
+  return `<section class="p-rev"><div class="p-rev-h"><span>REVİZYON ${q.rev}</span><small>${esc(q.no)} / Rev.${q.rev} · ${fmtDate(q.date)}</small></div>
+    <p>Sayın ${esc(name || 'Müşterimiz')},</p>
+    <p>${fmtDate(first)} tarihli ve <b>${esc(q.no)}</b> numaralı fiyat teklifimiz, görüşmelerimiz ve talepleriniz doğrultusunda revize edilmiştir. İşbu <b>Rev.${q.rev}</b> teklif, ${fmtDate(q.date)} tarihi itibarıyla geçerli olup önceki tüm revizyonların yerine geçer.</p>
+    ${notes.length ? `<p class="p-rev-l">Bu revizyonda yapılan değişiklikler:</p><ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+    ${prev && q.revCmp !== false ? `<div class="p-rev-t"><div><small>Önceki teklif (Rev.${prev.rev} · ${fmtDate(prev.date)})</small><b>${fmtMoney(prev.total)}</b></div><div><small>Güncel teklif (Rev.${q.rev})</small><b>${fmtMoney(T.total)}</b></div><div><small>Fark</small><b class="${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff > 0 ? '+' : diff < 0 ? '−' : ''}${fmtMoney(Math.abs(diff))}</b></div></div>` : ''}
+  </section>`;
+}
+
 /* ═══ yazdırma ═══ */
 /* belge önizleme (Yazdır + PDF) — mobilde de çalışır, bkz. docview.js */
 export function printDoc(html, title = 'TadilatBodrum') {
@@ -308,6 +340,7 @@ async function printQuote(job, settings, ctx) {
       <div><small>Proje adresi</small><b>${esc(c.district || '')}</b>${esc(c.address || '')}</div>
       <div><small>İş kodu</small><b>${esc(job.code)}</b>${esc(job.property?.type || '')}</div>
     </section>
+    ${q.rev > 1 ? revIntro(q, job, T) : ''}
     ${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th>${brief ? '' : '<th class="r">Birim fiyat</th><th class="r">Tutar</th>'}</tr></thead><tbody>${rows}</tbody></table>
     ${brief ? `<section class="p-totals">
