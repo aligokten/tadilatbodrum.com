@@ -53,6 +53,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Drywall+ modül sürümü (önbellek kırıcı)
+        if: steps.check.outputs.ok == 'true'
+        run: python3 scripts/drywall_cachebust.py "${GITHUB_SHA::8}"
       - name: Firebase Hosting'e yayınla
         if: steps.check.outputs.ok == 'true'
         run: npx --yes firebase-tools@13.29.1 deploy --only hosting --project "$PROJECT_ID" --non-interactive --message "GitHub ${GITHUB_SHA::7}" ${{ runner.debug == '1' && '--debug' || '' }}
