@@ -11,12 +11,21 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/favicon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=dev">
 <script type="importmap">
 {
   "imports": {
     "three": "../saha/vendor/three/three.module.js",
-    "three/addons/": "../saha/vendor/three/addons/"
+    "three/addons/": "../saha/vendor/three/addons/",
+    "./js/app.js": "./js/app.js?v=dev",
+    "./js/catalog.js": "./js/catalog.js?v=dev",
+    "./js/draw.js": "./js/draw.js?v=dev",
+    "./js/dxf.js": "./js/dxf.js?v=dev",
+    "./js/generators.js": "./js/generators.js?v=dev",
+    "./js/geom.js": "./js/geom.js?v=dev",
+    "./js/importer.js": "./js/importer.js?v=dev",
+    "./js/takeoff.js": "./js/takeoff.js?v=dev",
+    "./js/view3d.js": "./js/view3d.js?v=dev"
   }
 }
 </script>
@@ -89,6 +98,6 @@
   <div class="report-bar"><b>İmalat dosyası</b><span id="repSel"></span><button id="repPrint" class="primary">Yazdır / PDF</button><button id="repClose">Kapat</button></div>
   <div id="reportBody"></div>
 </div>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=dev"></script>
 </body>
 </html>
