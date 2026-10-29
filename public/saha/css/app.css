@@ -1109,3 +1109,18 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .st-chk{margin:4px 0;padding:6px 8px;border-radius:8px;background:#EEF7F1;color:#1E6B3C}.st-chk.warn{background:#FFF5E5;color:#8A5300}.st-chk.err{background:#FDECEC;color:#A3261F}
 .pe .stair.sel polygon{stroke:#EB591F}
 .rkot{text-anchor:middle;font-family:var(--f);pointer-events:none;fill:#B5480F;font-weight:700}
+/* soru-cevap */
+.qa-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.qa-head h3 .ic{margin-right:6px}.qa-open{color:#B5480F}
+.qa-s{display:grid;gap:8px}.qa-sh{display:flex;gap:8px;align-items:center}.qa-title{font-weight:700;flex:1}
+.qa-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.qa-it{border:1px solid var(--line,#e4e2dd);border-left:4px solid #EB591F;border-radius:12px;padding:8px 10px;display:grid;gap:6px;background:#fff}.qa-it.ok{border-left-color:#00989A}
+.qa-q{display:grid;grid-template-columns:26px 1fr auto;gap:6px;align-items:start}.qa-q textarea{font-weight:600;resize:none;overflow:hidden}
+.qa-n{width:24px;height:24px;border-radius:50%;background:#2B2F35;color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;margin-top:8px}
+.qa-ops{display:flex;gap:2px}.qa-a{resize:none;overflow:hidden;background:#F4FAFA}
+.qa-act{align-items:center;gap:6px}.qa-act .grow{flex:1}
+.qa-raw summary{cursor:pointer;font-size:12px;color:var(--muted)}.qa-raw pre{white-space:pre-wrap;font:12px/1.45 var(--f);background:var(--bg);padding:10px;border-radius:10px;max-height:240px;overflow:auto}
+.qa-prev{display:grid;gap:4px;max-height:320px;overflow:auto}.qa-cand{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;background:var(--bg);font-size:13.5px}.qa-cand.nq{opacity:.7}.qa-who{gap:6px;align-items:center}
+.qa-doc{display:grid;gap:10px;margin:8px 0 14px}.qa-p{border:1px solid #E4E2DD;border-radius:10px;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+.qa-pq{display:flex;gap:10px;background:#F4F2EE;padding:8px 12px;align-items:flex-start}.qa-pq span{flex:none;width:22px;height:22px;border-radius:50%;background:#EB591F;color:#fff;font-weight:800;font-size:9.5pt;display:grid;place-items:center}
+.qa-pq p{margin:1px 0;font-weight:700;font-size:10.5pt}.qa-pa{padding:8px 12px 10px 44px;font-size:10.5pt;line-height:1.5}
+.qa-cand{flex-direction:row!important;display:flex!important}.qa-cand input{flex:none;margin-top:3px;width:auto}.qa-cand span{font-weight:500}
