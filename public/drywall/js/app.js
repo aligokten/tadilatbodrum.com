@@ -3,7 +3,7 @@ import { SYSTEMS, BOARDS, INSULATION, DEFAULT_SETTINGS } from './catalog.js';
 import { TYPES, defaults, generate, EXTRA_KINDS } from './generators.js';
 import { assignPoz, projectTakeoff, steps, barFor } from './takeoff.js';
 import { frameView, boardView, sheetView, barsView, wallSection, floorDetail, nicheDetail, ceilingDetail, jointDetail } from './draw.js';
-import { readModelFile, prepare, analyzeBody, toElement, findJoints, JOINT_LABEL } from './importer.js';
+import { readModelFile, prepare, analyzeBodies, toElement, findJoints, JOINT_LABEL } from './importer.js';
 import { toDXF } from './dxf.js';
 
 export const APP_VERSION = '1.0.0';
@@ -659,7 +659,7 @@ function openImport() {
 function runImport() {
   const up = $('#impUp').value === 'auto' ? IMP.upGuess : $('#impUp').value;
   const pr = prepare(IMP.meshes, { unit: $('#impUnit').value, up, split: IMP.fmt === 'stl' || IMP.meshes.length === 1 });
-  IMP.bodies = pr.bodies.map((b, i) => { const a = analyzeBody(b); a.idx = i; a.file = IMP.file; a.use = a.kind !== 'yoksay'; return a; });
+  IMP.bodies = pr.bodies.flatMap(analyzeBodies).map((a, i) => { a.idx = i; a.file = IMP.file; a.use = a.kind !== 'yoksay'; return a; });
   IMP.unitUsed = pr.unitUsed; IMP.up = up;
   if (!IMP.bodies.length) { $('#impOut').innerHTML = '<p class="warn">Dosyada gövde (üçgen ağı) bulunamadı.</p>'; return; }
   renderImport();

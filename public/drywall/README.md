@@ -24,7 +24,7 @@ tasarımı ve imalat dosyası hazırlama aracı. Tarayıcıda çalışır, kurul
 - gövdeler arası temaslardan **montaj detayları**: T birleşimi, L köşe, düz ek, serbest uç, duvar–asma tavan, mobilya–duvar; T ve L için bağlantı dikmesi, tavan için duvar içi U kuşak **ilave profil** olarak otomatik eklenir; duvara dayanan mobilya yüzü kaplanmaz
 - **3B → Tüm model** içe aktarılan elemanları modeldeki yerlerinde gösterir; **Montaj** sekmesi ve imalat dosyasında birleşim detayları ve notları
 
-Her gövde dikdörtgen prizma olarak çözümlenir; farklı derinlikteki kısımları (ör. TV ünitesinde alt konsol ve panel) Shapr3D'de ayrı gövde olarak modelleyin.
+Tek gövde olarak çizilmiş birleşik duvarlar (L, T, U …) üstten ayak izine göre ayrı duvar şeritlerine bölünür; boşluklar ait oldukları duvarda kalır, aralarındaki köşe / T birleşimleri bulunur. Mobilya gövdeleri dikdörtgen prizma olarak çözümlenir; farklı derinlikteki kısımları (ör. TV ünitesinde alt konsol ve panel) Shapr3D'de ayrı gövde olarak modelleyin.
 STEP / IGES okuyucu: `vendor/occt/` ([occt-import-js](https://github.com/kovacsv/occt-import-js), LGPL-2.1, değiştirilmeden), yalnızca STEP / IGES açılınca yüklenir.
 
 ## İlave profiller

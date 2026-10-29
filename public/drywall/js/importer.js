@@ -10,11 +10,14 @@ export async function readModelFile(file) {
   const buf = new Uint8Array(await file.arrayBuffer());
   if (!buf.length) throw new Error('Dosya boş okundu. iPad\'de dosya iCloud\'da ise önce Dosyalar uygulamasında indirin (bulut simgesi), sonra tekrar seçin.');
   const fmt = sniffFormat(file.name, buf);
+  const base = file.name.replace(/\.[^.]+$/, '').slice(0, 30) || 'Gövde';
+  // anlamsız gövde adlarını (STEP ürün adı "root", STL başlığı) dosya adıyla değiştir
+  const named = r => { r.meshes.forEach((m, i) => { if (!m.name || /^(root|stl|body|part|solid)?\s*\d*$/i.test(m.name.trim())) m.name = r.meshes.length > 1 ? `${base} ${i + 1}` : base; }); return r; };
   if (fmt === 'zip') throw new Error('Dosya sıkıştırılmış (.zip). Dosyalar uygulamasında üzerine dokunup açın, içindeki STEP / STL dosyasını seçin.');
-  if (fmt === 'obj') return { meshes: parseOBJ(new TextDecoder().decode(buf)), upGuess: 'y', fmt };
-  if (fmt === 'stl') return { meshes: parseSTL(buf), upGuess: 'z', fmt };
+  if (fmt === 'obj') return named({ meshes: parseOBJ(new TextDecoder().decode(buf)), upGuess: 'y', fmt });
+  if (fmt === 'stl') return named({ meshes: parseSTL(buf), upGuess: 'z', fmt });
   if (fmt === 'step' || fmt === 'iges') {
-    try { return { meshes: await parseCAD(buf, fmt), upGuess: 'z', fmt }; }
+    try { return named({ meshes: await parseCAD(buf, fmt), upGuess: 'z', fmt }); }
     catch (e) {
       const mem = /memory|bellek|abort|OOM|RangeError/i.test(String(e?.message || e));
       throw new Error(mem ? 'STEP dosyası bu cihazın tarayıcı belleğine sığmadı. Shapr3D\'den STL olarak dışa aktarıp deneyin ya da bilgisayardan açın.' : (e?.message || String(e)));
@@ -152,8 +155,9 @@ function splitComponents(p) {
 /* ───────────── gövde çözümleme ───────────── */
 const deg = r => r * 180 / Math.PI;
 
-export function analyzeBody(b) {
-  const p = b.p, nt = p.length / 9;
+/* Gövdenin yerel çerçevesi: düşey yüz normallerinden ana doğrultu, uzun kenar yerel x, köşe (0,0,0). */
+function frame(p) {
+  const nt = p.length / 9;
   // ana doğrultu: düşey yüz normallerinin 4θ ortalaması (90° simetrisi)
   let C = 0, S = 0;
   for (let t = 0; t < nt; t++) {
@@ -181,19 +185,94 @@ export function analyzeBody(b) {
   const { q, mn, mx } = L;
   for (let i = 0; i < q.length; i++) q[i] -= mn[i % 3];
   const dims = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]].map(v => Math.round(v));
-  // yerel köşe (0,0,0) → dünya
   const c = Math.cos(th), s = Math.sin(th);
-  const place = { x: c * mn[0] - s * mn[1], y: s * mn[0] + c * mn[1], z: mn[2], rot: Math.round(deg(th) * 100) / 100 };
-  const body = { name: b.name, tris: q, dims, place, nt };
-  const cell = Math.max(10, Math.min(40, Math.max(...dims) / 320));
-  body.cell = cell;
+  const place = { x: c * mn[0] - s * mn[1], y: s * mn[0] + c * mn[1], z: mn[2], rot: Math.round(deg(th) * 100) / 100 + 0 };
+  return { q, dims, place, th };
+}
+
+const cellFor = dims => Math.max(10, Math.min(40, Math.max(...dims) / 320));
+
+function finish(name, q, dims, place) {
+  const body = { name, tris: q, dims, place, nt: q.length / 9 };
+  const cell = body.cell = cellFor(dims);
   body.maps = {};
-  for (const side of ['front', 'back', 'left', 'right', 'bottom']) body.maps[side] = depthMap(q, dims, side, cell);
+  for (const side of ['front', 'back', 'left', 'right']) body.maps[side] = depthMap(q, dims, side, cell);
   body.feat = {};
   for (const side of ['front', 'back', 'left', 'right']) body.feat[side] = features(body.maps[side], side === 'front' || side === 'back' ? dims[1] : dims[0]);
   classify(body);
   return body;
 }
+
+/* Tek gövde olarak çizilmiş birleşik duvarlar (L, T, U …): üstten ayak izi dikdörtgen şeritlere ayrılır.
+ * Doluluk ızgarasında en büyük dolu dikdörtgen tekrar tekrar alınır; kenarlar model köşe koordinatlarına oturtulur. */
+function splitFootprint(F) {
+  const { q, dims } = F, cell = cellFor(dims);
+  const m = depthMap(q, dims, 'bottom', cell);
+  const { nu, nv } = m, occ = new Uint8Array(nu * nv);
+  let n = 0;
+  for (let k = 0; k < occ.length; k++) if (m.d[k] !== Infinity) { occ[k] = 1; n++; }
+  if (n / occ.length > 0.92) return null; // dikdörtgen gövde
+  const xs = new Set(), ys = new Set();
+  for (let i = 0; i < q.length; i += 3) { xs.add(Math.round(q[i] * 10) / 10); ys.add(Math.round(q[i + 1] * 10) / 10); }
+  const snapTo = (set, v) => { let best = v, bd = cell * 1.5; for (const a of set) { const d = Math.abs(a - v); if (d < bd) { bd = d; best = a; } } return best; };
+  const rects = [];
+  for (let guard = 0; guard < 16; guard++) {
+    // histogram yöntemiyle en büyük dolu dikdörtgen
+    const h = new Int32Array(nu);
+    let best = null;
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) h[i] = occ[j * nu + i] ? h[i] + 1 : 0;
+      const st = [];
+      for (let i = 0; i <= nu; i++) {
+        const hi = i < nu ? h[i] : 0;
+        let start = i;
+        while (st.length && st[st.length - 1][1] >= hi) {
+          const [si, sh] = st.pop();
+          const a = sh * (i - si);
+          if (sh > 0 && (!best || a > best.a)) best = { a, i0: si, i1: i - 1, j0: j - sh + 1, j1: j };
+          start = si;
+        }
+        st.push([start, hi]);
+      }
+    }
+    if (!best || best.a * cell * cell < 0.03e6) break;
+    for (let j = best.j0; j <= best.j1; j++) for (let i = best.i0; i <= best.i1; i++) occ[j * nu + i] = 0;
+    const r = { x0: snapTo(xs, best.i0 * cell), x1: snapTo(xs, (best.i1 + 1) * cell), y0: snapTo(ys, best.j0 * cell), y1: snapTo(ys, (best.j1 + 1) * cell) };
+    r.x1 = Math.min(r.x1, dims[0]); r.y1 = Math.min(r.y1, dims[1]);
+    if (Math.min(r.x1 - r.x0, r.y1 - r.y0) >= 30) rects.push(r);
+  }
+  return rects.length > 1 ? rects : null;
+}
+
+// ayak izi dikdörtgeninin kendi çerçevesi (uzun kenarı yerel x)
+function partFrame(F, r) {
+  const { q, place, th } = F, c = Math.cos(th), s = Math.sin(th), Lz = F.dims[2];
+  const along = r.x1 - r.x0 >= r.y1 - r.y0;
+  const out = new Float64Array(q.length);
+  for (let i = 0; i < q.length; i += 3) {
+    const x = q[i], y = q[i + 1];
+    if (along) { out[i] = x - r.x0; out[i + 1] = y - r.y0; } else { out[i] = y - r.y0; out[i + 1] = r.x1 - x; }
+    out[i + 2] = q[i + 2];
+  }
+  const [bx, by] = along ? [r.x0, r.y0] : [r.x1, r.y0];
+  const rot = Math.round(deg(th + (along ? 0 : Math.PI / 2)) * 100) / 100;
+  const dims = along ? [r.x1 - r.x0, r.y1 - r.y0, Lz] : [r.y1 - r.y0, r.x1 - r.x0, Lz];
+  return { q: out, dims: dims.map(v => Math.round(v)), place: { x: place.x + c * bx - s * by, y: place.y + s * bx + c * by, z: place.z, rot } };
+}
+
+/* Bir gövdeyi çözümler; birleşik duvar gövdeleri birden çok elemana ayrılır. */
+export function analyzeBodies(b) {
+  const F = frame(b.p);
+  const rects = splitFootprint(F);
+  if (!rects) return [finish(b.name, F.q, F.dims, F.place)];
+  return rects.map((r, i) => {
+    const P = partFrame(F, r);
+    const body = finish(`${b.name} · ${i + 1}`, P.q, P.dims, P.place);
+    body.notes.push(`Birleşik gövdeden ayrıldı (${rects.length} parça)`);
+    return body;
+  });
+}
+export const analyzeBody = b => analyzeBodies(b)[0];
 
 /* Yandan bakışla derinlik haritası: her hücre için görünen ilk yüzeyin derinliği (yoksa ∞).
  * Yüz koordinatları (u, v) mobilya kutusu yüz tanımlarıyla aynıdır: ön u = x, arka u = Lx − x, sol u = Ly − y, sağ u = y. */
@@ -203,6 +282,7 @@ function depthMap(q, [Lx, Ly, Lz], side, cell) {
     left: (x, y, z) => [Ly - y, z, x], right: (x, y, z) => [y, z, Lx - x], bottom: (x, y, z) => [x, y, z],
   }[side];
   const W = side === 'left' || side === 'right' ? Ly : Lx, H = side === 'bottom' ? Ly : Lz;
+  const maxD = side === 'front' || side === 'back' ? Ly : side === 'bottom' ? Lz : Lx;
   const nu = Math.max(1, Math.ceil(W / cell)), nv = Math.max(1, Math.ceil(H / cell));
   const d = new Float32Array(nu * nv).fill(Infinity);
   for (let o = 0; o < q.length; o += 9) {
@@ -218,6 +298,7 @@ function depthMap(q, [Lx, Ly, Lz], side, cell) {
       const w3 = 1 - w1 - w2;
       if (w1 < -1e-6 || w2 < -1e-6 || w3 < -1e-6) continue;
       const z = w1 * A[2] + w2 * B[2] + w3 * Cc[2];
+      if (z < -2 || z > maxD + 2) continue; // birleşik gövdede komşu parçanın yüzleri
       const k = j * nu + i;
       if (z < d[k]) d[k] = z;
     }
