@@ -325,3 +325,47 @@ export function skirtSegs(plan, r) {
   return out;
 }
 export const skirtLen = (plan, r) => skirtSegs(plan, r).reduce((s, g) => s + V.dist(g.a, g.b), 0) / 100;   // m
+
+/* ── duvar köşe birleşimleri (plan çizimi): her duvar 4 köşeli çokgen ──
+   L köşe: iç yüz iç yüzle, dış yüz dış yüzle kesişir (sıfır yarıçaplı fillet);
+   T birleşim: duvar ucu diğer duvarın yakın yüzünde kesilir; serbest uç ve aynı doğrultudaki uç: dik kesim.
+   Uçlar tam çakışmasa da (farklı kalınlık / yüzden çizim) yakınlığa göre birleşir. */
+const xLine = (p1, u1, p2, u2) => { const d = V.cross(u1, u2); return Math.abs(d) < 1e-9 ? null : V.add(p1, V.mul(u1, V.cross(V.sub(p2, p1), u2) / d)); };
+export function wallPolys(plan) {
+  const T0 = plan.meta?.wallT || 15, W = (plan.walls || []).filter(w => wallLen(w) > 0.5);
+  const info = W.map(w => ({ w, u: wallDir(w), n: wallNormal(w), t: w.t || T0, L: wallLen(w) }));
+  const face = (I, s) => ({ p: V.add(I.w.a, V.mul(I.n, s * I.t / 2)), u: I.u });
+  const endPts = (I, e) => {
+    const E = I.w[e], din = e === 'a' ? I.u : V.mul(I.u, -1), flat = { '1': V.add(E, V.mul(I.n, I.t / 2)), '-1': V.sub(E, V.mul(I.n, I.t / 2)) };
+    const ends = [], mids = [];
+    for (const J of info) {
+      if (J === I) continue;
+      const tol = Math.max(I.t, J.t) / 2 + 1;
+      const ne = ['a', 'b'].find(k => V.dist(J.w[k], E) < tol);
+      if (ne) { ends.push({ J, din: ne === 'a' ? J.u : V.mul(J.u, -1) }); continue; }
+      const pr = projSeg(E, J.w.a, J.w.b);
+      if (pr.d <= J.t / 2 + I.t / 2 + 0.5 && pr.t > 0.001 && pr.t < 0.999 && Math.abs(V.cross(I.u, J.u)) > 0.17) mids.push({ J });
+    }
+    const ok = p => p && Math.abs(V.dot(V.sub(p, E), I.u)) < I.L + Math.max(I.t, 30) * 2;   // aşırı uzayan sivri köşe yok
+    const trim = J => {   // T: J'nin A'ya bakan yüzünde kes
+      const s2 = V.dot(J.n, din) > 0 ? 1 : -1, F = face(J, s2), out = {};
+      for (const s of [1, -1]) { const f = face(I, s), q = xLine(f.p, f.u, F.p, F.u); out[s] = ok(q) ? q : flat[s]; }
+      return out;
+    };
+    if (mids.length) return trim(mids[0].J);
+    if (ends.length === 1) {
+      const { J, din: dj } = ends[0];
+      if (Math.abs(V.cross(I.u, J.u)) < 0.17) return flat;   // aynı doğrultu: dik kesim
+      const si = V.dot(I.n, dj) > 0 ? 1 : -1, sj = V.dot(J.n, din) > 0 ? 1 : -1, out = {};   // iç yüz: diğer duvarın gövdesine bakan
+      for (const [s, t] of [[si, sj], [-si, -sj]]) { const f = face(I, s), g = face(J, t), q = xLine(f.p, f.u, g.p, g.u); out[s] = ok(q) ? q : flat[s]; }
+      return out;
+    }
+    if (ends.length >= 2) {
+      if (ends.some(x => Math.abs(V.cross(I.u, x.J.u)) < 0.17)) return flat;   // geçen duvarın parçası: dik kesim
+      const J = ends.map(x => x.J).sort((p, q) => Math.abs(V.cross(I.u, q.u)) - Math.abs(V.cross(I.u, p.u)))[0];
+      return trim(J);   // üç uçlu T'nin gövdesi: geçen duvarın yüzünde kesilir
+    }
+    return flat;
+  };
+  return info.map(I => { const A = endPts(I, 'a'), B = endPts(I, 'b'); return { w: I.w, pts: [A[1], B[1], B[-1], A[-1]] }; });
+}
