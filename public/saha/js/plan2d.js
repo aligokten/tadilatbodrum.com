@@ -15,7 +15,7 @@ import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as 
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, offsetPolyVar, roomMetrics, SKIRTS, skirtOf, skirtLen, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
+  offsetPoly, offsetPolyVar, wallPolys, roomMetrics, SKIRTS, skirtOf, skirtLen, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
 } from './plan-geom.js';
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.wallf{stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
@@ -1589,35 +1589,17 @@ export class PlanEditor {
     }
     // merdivenler (odaların üstünde, duvarların altında)
     for (const st of P.stairs || []) o += stairSvg(st, px, live && this.sel?.kind === 'stair' && this.sel.id === st.id);
-    // duvarlar: 1. geçiş dış çerçeve / dolu, 2. geçiş tarama ya da boş iç (birleşimlerde çerçeve kaybolur, tek gövde görünür)
-    const arcDone = new Set(), segs = [];
-    for (const w of P.walls) {   // uçlar: ortak köşede yarım kalınlık uzar, serbest uçta tam noktada biter
+    // duvarlar: köşe çokgenleri (iç yüz iç yüzle, dış yüz dış yüzle birleşir; T'de yüzde kesilir)
+    // 1. geçiş: çerçeve + dolgu (çizim rengi), 2. geçiş: dolgu / tarama — komşu duvarların ek çizgileri kapanır, tek gövde görünür
+    const lw = Math.max(px(1.2), 0.6), pats = new Set(), WP = wallPolys(P);
+    const pstr = q => q.map(v => `${v.x},${v.y}`).join(' ');
+    for (const { w, pts } of WP) { const ink = w.ink || meta.wallInk || '#24272B'; o += `<polygon class="wpoly" points="${pstr(pts)}" fill="${ink}" stroke="${ink}" stroke-width="${2 * lw}" stroke-linejoin="miter" stroke-miterlimit="4"/>`; }
+    for (const { w, pts } of WP) {
       const st = w.fill || meta.wallFill || 'solid', ink = w.ink || meta.wallInk || '#24272B';
-      if (w.arc) {   // yay duvar: parçalar tek birleşik çizgi (köşelerde yuvarlak birleşim, tırtıksız)
-        if (arcDone.has(w.arc.id)) continue; arcDone.add(w.arc.id);
-        const ws = P.walls.filter(x => x.arc?.id === w.arc.id).sort((a, b) => a.arc.i - b.arc.i), f = ws[0], l = ws.at(-1);
-        const pts = [f.a, ...ws.map(x => x.b)].map(q => ({ ...q })), ef = wallExt(P, f).a, el = wallExt(P, l).b;
-        if (ef) { const u = wallDir(f); pts[0] = V.sub(f.a, V.mul(u, ef)); }
-        if (el) { const u = wallDir(l); pts[pts.length - 1] = V.add(l.b, V.mul(u, el)); }
-        segs.push({ pts, t: f.t || meta.wallT, st, ink, free: [!ef, !el] });
-        continue;
-      }
-      const e = wallExt(P, w), u = wallDir(w), A = V.sub(w.a, V.mul(u, e.a)), B = V.add(w.b, V.mul(u, e.b));
-      segs.push({ pts: [A, B], t: w.t || meta.wallT, st, ink, free: [!e.a, !e.b] });
-    }
-    const lw = Math.max(px(1.3), 0.8), pats = new Set();
-    const line = (pts, wdt, sty, cls = 'wall') => pts.length === 2
-      ? `<line class="${cls}" x1="${pts[0].x}" y1="${pts[0].y}" x2="${pts[1].x}" y2="${pts[1].y}" stroke-width="${wdt}" style="${sty}"/>`
-      : `<polyline class="${cls}" fill="none" stroke-linejoin="round" points="${pts.map(q => `${q.x},${q.y}`).join(' ')}" stroke-width="${wdt}" style="${sty}"/>`;
-    for (const g of segs) o += line(g.pts, g.t, `stroke:${g.ink}`);
-    for (const g of segs) {
-      if (g.st === 'solid') continue;
-      const pts = g.pts.map(q => ({ ...q }));   // serbest uçta iç dolgu çerçeve kalınlığı kadar kısalır (uç çizgisi görünsün)
-      if (g.free[0]) { const u = V.norm(V.sub(pts[1], pts[0])); pts[0] = V.add(pts[0], V.mul(u, lw)); }
-      if (g.free[1]) { const k = pts.length - 1, u = V.norm(V.sub(pts[k], pts[k - 1])); pts[k] = V.sub(pts[k], V.mul(u, lw)); }
-      let paint = '#fff';
-      if (g.st !== 'outline') { const id = `wf-${g.st}-${g.ink.slice(1)}-${Math.round(s * 1000)}`; pats.add(JSON.stringify([id, g.st, g.ink])); paint = `url(#${id})`; }
-      o += line(pts, Math.max(0.5, g.t - 2 * lw), `stroke:${paint}`, 'wallf');
+      let paint = ink;
+      if (st === 'outline') paint = '#fff';
+      else if (st !== 'solid') { const id = `wf-${st}-${ink.slice(1)}-${Math.round(s * 1000)}`; pats.add(JSON.stringify([id, st, ink])); paint = `url(#${id})`; }
+      o += `<polygon class="wpoly" points="${pstr(pts)}" fill="${paint}" stroke="none"/>`;
     }
     if (pats.size) o = `<defs>${[...pats].map(j => { const [id, st, ink] = JSON.parse(j); return wallPattern(id, st, ink, px); }).join('')}</defs>` + o;
     // açıklıklar
@@ -1626,7 +1608,7 @@ export class PlanEditor {
       const t = w.t || meta.wallT, u = wallDir(w), n = wallNormal(w);
       const c = V.add(w.a, V.mul(u, op.pos)), A = V.sub(c, V.mul(u, op.w / 2)), B = V.add(c, V.mul(u, op.w / 2));
       const isSel = live && this.sel?.id === op.id;
-      o += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#fff" stroke-width="${t + px(1.5)}"/>`;
+      o += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#fff" stroke-width="${t + px(4)}"/>`;
       const sd = op.side || 1, PT = (f, k) => V.add(V.lerp(A, B, f), V.mul(n, k)), L2 = (p1, p2) => `M${p1.x} ${p1.y}L${p2.x} ${p2.y}`;
       if (op.type === 'window') {
         const wm = winModel(op), k1 = t / 2, k2 = t / 6;
