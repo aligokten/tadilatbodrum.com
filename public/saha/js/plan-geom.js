@@ -275,3 +275,53 @@ export function arcStats(walls) {
   return { ...g, v, n: walls.length, chord, len: walls.reduce((s, w) => s + wallLen(w), 0), deg: Math.abs(g.sweep) * 180 / Math.PI,
     sag: Math.max(...v.map(q => Math.abs(V.dot(V.sub(q, v[0]), nrm)))), mid: v[Math.floor(v.length / 2)] };
 }
+
+/* odanın a–b kenarı boyunca uzanan duvarlar (paralel, ekseni kenara yarım kalınlık + payla yakın) */
+export function edgeWalls(plan, a, b) {
+  const L = V.dist(a, b); if (L < 1) return [];
+  const u = V.mul(V.sub(b, a), 1 / L), T = plan.meta?.wallT || 15;
+  return (plan.walls || []).filter(w => {
+    const wl = wallLen(w); if (wl < 1) return false;
+    if (Math.abs(V.cross(u, wallDir(w))) > 0.03) return false;
+    const m = V.lerp(a, b, 0.5), d = Math.abs(V.cross(u, V.sub(w.a, m)));   // eksenin kenar doğrusuna uzaklığı
+    if (d > (w.t || T) / 2 + 4) return false;
+    const s0 = V.dot(V.sub(w.a, a), u), s1 = V.dot(V.sub(w.b, a), u);   // kenarla örtüşme
+    return Math.max(s0, s1) > 1 && Math.min(s0, s1) < L - 1;
+  });
+}
+
+/* süpürgelik tipleri: yükseklik (cm), derinlik (cm), renk */
+export const SKIRTS = [
+  { k: 'mdf', t: 'MDF lake (beyaz)', h: 8, d: 1.2, c: '#F4F2EE' },
+  { k: 'ahsap', t: 'Masif ahşap', h: 7, d: 1.5, c: '#A87B55' },
+  { k: 'seramik', t: 'Seramik / porselen', h: 8, d: 1, c: '#D9D4CB' },
+  { k: 'pvc', t: 'PVC (kablo kanallı)', h: 6, d: 2, c: '#ECEAE5' },
+  { k: 'aluminyum', t: 'Alüminyum (gizli / LED)', h: 4, d: 1, c: '#A9AEB3', metal: true },
+  { k: 'mermer', t: 'Mermer / traverten', h: 10, d: 1.5, c: '#E6DFD2' },
+  { k: 'golge', t: 'Gölge boşluklu (gizli)', h: 5, d: 0.6, c: '#2B2F35' },
+];
+export const skirtOf = r => (r?.skirt?.k && SKIRTS.find(x => x.k === r.skirt.k)) || null;
+
+/* süpürgelik parçaları: oda iç yüzü boyunca; alt kotu duvar tabanında olan kapı / boşluk / pencere önünde kesilir */
+export function skirtSegs(plan, r) {
+  const n = r.pts.length, out = [], ctr = polyCentroid(r.pts);
+  for (let i = 0; i < n; i++) {
+    const a = r.pts[i], b = r.pts[(i + 1) % n], L = V.dist(a, b); if (L < 2) continue;
+    const u = V.mul(V.sub(b, a), 1 / L); let nn = { x: -u.y, y: u.x }; if (V.dot(nn, V.sub(ctr, V.lerp(a, b, 0.5))) < 0) nn = V.mul(nn, -1);
+    const ws = edgeWalls(plan, a, b); if (!ws.length) continue;   // duvarsız kenar (açık geçiş) süpürgeliksiz
+    const gaps = [];
+    for (const o of plan.openings || []) {
+      const w = ws.find(x => x.id === o.wallId); if (!w) continue;
+      const bottom0 = o.type === 'door' || o.type === 'gap' || (o.type === 'window' && !(+o.sill > 0));
+      if (!bottom0) continue;
+      const c = V.add(w.a, V.mul(wallDir(w), o.pos)), s = V.dot(V.sub(c, a), u);
+      gaps.push([s - o.w / 2, s + o.w / 2]);
+    }
+    gaps.sort((p, q) => p[0] - q[0]);
+    let s0 = 0;
+    for (const [g0, g1] of gaps) { if (g0 > s0 + 1) out.push({ a: V.add(a, V.mul(u, s0)), b: V.add(a, V.mul(u, Math.min(g0, L))), u, n: nn }); s0 = Math.max(s0, g1); }
+    if (L > s0 + 1) out.push({ a: V.add(a, V.mul(u, s0)), b: b, u, n: nn });
+  }
+  return out;
+}
+export const skirtLen = (plan, r) => skirtSegs(plan, r).reduce((s, g) => s + V.dist(g.a, g.b), 0) / 100;   // m

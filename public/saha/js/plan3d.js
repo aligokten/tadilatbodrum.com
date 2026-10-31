@@ -4,13 +4,13 @@
  *   • hızlı   — rasterize + yumuşak gölge + GTAO ortam kapatma + IBL
  *   • gerçekçi — GPU path tracing (three-gpu-pathtracer), ilerlemeli örnekleme
  */
-import { V, wallLen, wallDir, polyCentroid, pointInPoly, polyArea, wallExt, planLevels } from './plan-geom.js';
+import { V, wallLen, wallDir, polyCentroid, pointInPoly, polyArea, wallExt, planLevels, edgeWalls, skirtOf, skirtSegs } from './plan-geom.js';
 import { roofFaces, coverOf, outlineOf } from './roof.js';
 import { floorTexture } from './textures.js';
 import { stairWorld, stairBuild, stairXf, stairSolid, stairOutline } from './stairs.js';
 import { build3D } from './cabinet.js';
 import { fixtureOf, fixture3D } from './fixtures.js';
-import { frameColor, leafColor, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
+import { frameColor, leafColor, leafStyle, doorUse, doorModel, winUse, winModel, winRail, railKind, sashes, leaves, winHingeAtStart } from './openings.js';
 
 let THREE, OrbitControls, RoomEnvironment;
 async function loadThree() {
@@ -278,9 +278,10 @@ export class Plan3D {
       const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.name = 'Döşeme dolgusu';
       g.add(m); return;
     }
-    const n = r.pts.length;
+    const n = r.pts.length, P = this.curPlan;
     for (let i = 0; i < n; i++) {
       const a = r.pts[i], b = r.pts[(i + 1) % n], L = V.dist(a, b); if (L < 1) continue;
+      if (P && edgeWalls(P, a, b).length) continue;   // duvar boyunca: duvar zaten çukur kotundan başlar (çakışan yüz olmasın)
       const m = new THREE.Mesh(new THREE.PlaneGeometry(M(L), M(-fz)), mat);
       m.position.set(M((a.x + b.x) / 2), M(fz / 2), M((a.y + b.y) / 2)); m.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x); m.receiveShadow = true; m.name = 'Döşeme kot farkı';
       g.add(m);
@@ -289,7 +290,10 @@ export class Plan3D {
 
   buildLevel(P, g, meta, cut, ground0, voids = []) {
     const cutH = 110;
-    this.curMeta = meta;
+    this.curMeta = meta; this.curPlan = { ...P, meta };
+    // çukur döşemeli odaların kenarındaki duvarlar en az o kottan başlar (alt boşluk / çakışan yüz kalmasın)
+    const sunk = new Map();
+    for (const r of P.rooms) { const fz = +r.fz || 0; if (fz >= 0) continue; const n = r.pts.length; for (let i = 0; i < n; i++) for (const w of edgeWalls(this.curPlan, r.pts[i], r.pts[(i + 1) % n])) sunk.set(w.id, Math.min(sunk.get(w.id) ?? 0, fz)); }
 
     const ownVoids = (P.stairs || []).filter(st => st.void !== false).map(stairOutline).filter(Boolean);
     // odalar: zemin + tavan
@@ -326,12 +330,27 @@ export class Plan3D {
       }
     }
 
+    // süpürgelik: oda iç yüzü boyunca, kapı / boşluk önünde kesik
+    for (const r of P.rooms) {
+      const sk = skirtOf(r); if (!sk) continue;
+      const h = +r.skirt.h || sk.h, d = sk.d, fz = +r.fz || 0;
+      const mat = this.mat('skirt' + sk.k, () => new THREE.MeshStandardMaterial({ color: sk.c, roughness: sk.metal ? 0.35 : 0.7, metalness: sk.metal ? 0.6 : 0 }));
+      for (const sg of skirtSegs(this.curPlan, r)) {
+        const L = V.dist(sg.a, sg.b); if (L < 1) continue;
+        const c = V.add(V.lerp(sg.a, sg.b, 0.5), V.mul(sg.n, d / 2));
+        const m = new THREE.Mesh(new THREE.BoxGeometry(M(L), M(h), M(d)), mat);
+        m.position.set(M(c.x), M(fz + h / 2), M(c.y)); m.rotation.y = -Math.atan2(sg.u.y, sg.u.x); m.receiveShadow = true; m.name = 'Süpürgelik';
+        g.add(m);
+      }
+    }
+
     // duvarlar (açıklıklar kesilerek)
     const roomColorOf = w => P.rooms.find(r => (r.walls || []).includes(w.id) && r.wallColor)?.wallColor;
     for (const w of P.walls) {
       const L = wallLen(w); if (L < 1) continue;
       const t = w.t || meta.wallT, H0 = w.h || meta.wallH, H = cut ? Math.min(cutH, H0) : H0;
       const B = Math.min(+w.z0 || 0, H - 1);   // duvarın alt kotu (çukur döşemeden başlayabilir: −); açıklıklar bu kottan ölçülür
+      const Bb = Math.min(B, sunk.get(w.id) ?? 0);   // gövde tabanı: komşu çukur döşemenin kotuna kadar iner
       const color = w.color || roomColorOf(w) || meta.wallColor || '#F7F5F0';
       const mw = this.std(color, 0.92);
       const u = wallDir(w), ang = -Math.atan2(u.y, u.x);
@@ -348,14 +367,14 @@ export class Plan3D {
       let s = -ex.a;
       for (const o of ops) {
         const o0 = o.pos - o.w / 2, o1 = o.pos + o.w / 2;
-        piece(s, o0, B, H);
+        piece(s, o0, Bb, H);
         const sill = B + (o.type === 'window' ? o.sill : 0), top = Math.min(H0, sill + o.h);
-        piece(o0, o1, B, Math.min(sill, H));
+        piece(o0, o1, Bb, Math.min(sill, H));
         if (top < H) piece(o0, o1, top, H);
         this.opening(o, w, u, ang, t, Math.min(top, H) - B, g, B);
         s = o1;
       }
-      piece(s, L + ex.b, B, H);
+      piece(s, L + ex.b, Bb, H);
     }
 
     // korkuluklar
@@ -424,6 +443,7 @@ export class Plan3D {
           else if (du.glass === 'low') { glazed(x0, x1, 0.45, lh, z, 0.06, th, leafM, false); box(ww, 0.45, th, cx, 0.225 + 0.005, z, leafM); }
           else {
             const lf = box(ww, lh, th, cx, lh / 2 + 0.005, z, leafM); lf.userData.door = true;
+            if (du.k === 'ic' || du.k === 'banyo') this.leafDeco(box, leafStyle(o), ww, lh, th, cx, z, leafM, glassM);
             if (du.k === 'banyo') for (let i = 0; i < 5; i++) box(ww * 0.5, 0.008, th + 0.004, cx, 0.08 + i * 0.022, z, this.std('#3A3F45', 0.6));   // alt menfez
             if (du.k === 'giris') { box(ww * 0.7, lh * 0.7, 0.004, cx, lh / 2, z + sd * (th / 2 + 0.002), this.std(leafColor(o), 0.5)); box(0.06, 0.25, 0.01, hx, H * 0.47, z + sd * (th / 2 + 0.005), this.std('#9DA3A8', 0.3, 0.9)); }
           }
@@ -444,6 +464,21 @@ export class Plan3D {
       }
     }
     parent.add(g);   // katın grubuna: üst katların kapı / pencereleri kendi kotunda
+  }
+
+  /* iç kapı kanat modeli: yüzey detayları (iki yüzde) */
+  leafDeco(box, st, ww, lh, th, cx, z, leafM, glassM) {
+    const groove = this.std('#2B2F35', 0.6), y0 = 0.005, D = th + 0.004, rel = th + 0.014;
+    if (st === 'yatay') for (let y = 0.3; y < lh - 0.2; y += 0.17) box(ww * 0.86, 0.006, D, cx, y0 + y, z, groove);
+    else if (st === 'dikey') for (const f of [-0.25, 0, 0.25]) box(0.006, lh * 0.86, D, cx + f * ww, y0 + lh / 2, z, groove);
+    else if (st === 'panel2' || st === 'panel4') {   // kabartma tablalar
+      const cols = st === 'panel4' ? 2 : 1, mx = 0.09, my = 0.1, gap = 0.08, pw = (ww - 2 * mx - (cols - 1) * gap) / cols;
+      const hs = [lh * 0.36, lh * 0.44], ys = [my, my + hs[0] + 0.1];
+      for (let c = 0; c < cols; c++) for (let k = 0; k < 2; k++) box(pw, hs[k], rel, cx - ww / 2 + mx + pw / 2 + c * (pw + gap), y0 + ys[k] + hs[k] / 2, z, leafM);
+    } else if (st === 'camserit') box(0.11, lh * 0.72, D, cx + ww * 0.22, y0 + lh * 0.5, z, glassM(true));
+    else if (st === 'camust') { box(ww * 0.62, lh * 0.34, D, cx, y0 + lh * 0.72, z, glassM(true)); box(ww * 0.66, 0.02, rel, cx, y0 + lh * 0.54, z, leafM); }
+    else if (st === 'camkare') box(0.3, 0.3, D, cx, y0 + lh * 0.7, z, glassM(true));
+    else if (st === 'kanal') box(ww * 0.82, 0.012, D, cx, y0 + lh * 0.5, z, this.std('#9DA3A8', 0.3, 0.8));   // yatay alüminyum şerit
   }
 
   /* çizilen korkuluk: dikmeler + küpeşte; dolgu türe göre (dikey / yatay çubuk, cam panel, dolu parapet) */
