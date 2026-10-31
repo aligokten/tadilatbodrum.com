@@ -20,7 +20,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.31-3';
+export const APP_VERSION = '2026.10.31-4';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1594,8 +1594,45 @@ async function printFloorOrder(j, dw, plan) {
   printDoc(`<div class="pdoc">${docHeader(S.settings, 'Zemin Kaplaması Sipariş Listesi', `<div class="p-meta"><span>İş kodu <b>${esc(j.code)}</b></span><span>Müşteri <b>${esc(j.customer.name || '—')}</b></span><span>Çizim <b>${esc(name)}</b></span><span>Tarih <b>${fmtDate(Date.now())}</b></span></div>`)}${body}${docFooter()}</div>`, `Zemin Siparis ${j.code}`);
 }
 
+/* keşif raporu seçenekleri: hangi çizimler (plan) eklenecek, tasarım önerisi görselleri (galeriden yüklenebilir) */
+async function reportDialog(j) {
+  const urls = {}, ro = j.reportOpt || {};
+  const dws = drawingsOf(j).filter(d => hasContent(d.plan));
+  const plans = new Set(ro.plans ?? dws.filter(d => d.main).map(d => d.id));
+  const design = () => j.photos.filter(p => p.tag === 'tasarim' || p.tag === 'render');
+  const pick = new Set(ro.design ?? design().map(p => p.id));
+  const urlOf = async p => (urls[p.id] ??= await S.be.photoUrl(p).catch(() => ''));
+  await Promise.all(design().map(urlOf));
+  const grid = () => design().length ? design().map(p => `<label class="rp-ph ${pick.has(p.id) ? 'on' : ''}"><input type="checkbox" data-ph="${p.id}" ${pick.has(p.id) ? 'checked' : ''}><img src="${esc(urls[p.id] || '')}" alt=""><input class="inp sm" data-cap="${p.id}" value="${esc(p.caption || '')}" placeholder="Açıklama (isteğe bağlı)"></label>`).join('') : '<p class="muted small">Henüz tasarım önerisi görseli yok.</p>';
+  const r = await modal({ title: 'Keşif raporu', wide: true, body: `
+    <h4>Çizimler</h4>
+    ${dws.length ? `<div class="rp-dw">${dws.map(d => `<label class="check"><input type="checkbox" data-dw="${d.id}" ${plans.has(d.id) ? 'checked' : ''}> ${esc(d.main ? 'Rölöve (mevcut durum)' : d.name)}</label>`).join('')}</div>` : '<p class="muted small">Çizim yok.</p>'}
+    <h4>Tasarım önerileri</h4>
+    <p class="muted small">Rapora eklenecek görselleri işaretleyin. Telefon / tablet galerisinden yeni görsel yükleyebilirsiniz; yüklenenler işin fotoğraflarına "Tasarım önerisi" etiketiyle kaydedilir.</p>
+    <label class="btn btn-ghost btn-sm rp-up">${icon('image')}Galeriden görsel ekle<input type="file" accept="image/*" multiple hidden data-up></label>
+    <div class="rp-grid">${grid()}</div>`,
+    actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Raporu hazırla', cls: 'btn-primary', icon: 'print' }],
+    onOpen: el => {
+      el.addEventListener('change', async e => {
+        const t = e.target;
+        if (t.dataset.dw) t.checked ? plans.add(t.dataset.dw) : plans.delete(t.dataset.dw);
+        if (t.dataset.ph) { t.checked ? pick.add(t.dataset.ph) : pick.delete(t.dataset.ph); t.closest('.rp-ph').classList.toggle('on', t.checked); }
+        if (t.dataset.cap) { const p = j.photos.find(x => x.id === t.dataset.cap); if (p) { p.caption = t.value; save(); } }
+        if (t.dataset.up !== undefined && t.files?.length) {
+          const added = await addPhotos(t.files, { tag: 'tasarim' }); t.value = '';
+          for (const p of added) { pick.add(p.id); await urlOf(p); }
+          $('.rp-grid', el).innerHTML = grid();
+        }
+      });
+    } });
+  if (r?.k !== 'ok') return null;
+  j.reportOpt = { plans: [...plans], design: [...pick].filter(id => j.photos.some(p => p.id === id)) }; save();
+  return { plans, design: j.reportOpt.design.map(id => j.photos.find(p => p.id === id)).filter(Boolean) };
+}
+
 async function printReport() {
   const j = S.job, met = jobMetrics(j);
+  const opt = await reportDialog(j); if (!opt) return;
   const urls = {};
   await Promise.all(j.photos.map(async p => { urls[p.id] = await S.be.photoUrl(p); }));
   const imgs = ps => ps.length ? `<div class="p-grid">${ps.map(p => `<figure><img src="${urls[p.id]}"><figcaption>${esc(p.caption || p.room || '')}</figcaption></figure>`).join('')}</div>` : '';
@@ -1607,7 +1644,8 @@ async function printReport() {
       <div><small>Sorumlu</small><b>${esc(j.assigned || '—')}</b>${esc(statusOf(j.status).t)}</div>
     </section>
     ${j.summary ? `<p class="p-intro">${esc(j.summary)}</p>` : ''}
-    ${drawingsOf(j).filter(d => hasContent(d.plan)).map(d => `<section><h3>${d.main ? 'Rölöve (mevcut durum)' : esc(d.name)} ${d.main ? '' : `<small>(${kindOf(d.kind).t})</small>`}</h3><div class="p-plan"><img src="${planImageUrl(d.plan, 900, 520)}" alt="${esc(d.name)}"></div></section>`).join('')}
+    ${drawingsOf(j).filter(d => hasContent(d.plan) && opt.plans.has(d.id)).map(d => `<section><h3>${d.main ? 'Rölöve (mevcut durum)' : esc(d.name)} ${d.main ? '' : `<small>(${kindOf(d.kind).t})</small>`}</h3><div class="p-plan"><img src="${planImageUrl(d.plan, 900, 520)}" alt="${esc(d.name)}"></div></section>`).join('')}
+    ${opt.design.length ? `<section><h3>Tasarım önerileri</h3><div class="p-imgs p-design">${opt.design.map(p => `<figure><img src="${urls[p.id]}"><figcaption>${esc(p.caption || p.room || '')}</figcaption></figure>`).join('')}</div></section>` : ''}
     ${met.rooms.length ? `<section><h3>Mahal metrajı <small>(${esc(met.src)})</small></h3><table class="p-table"><thead><tr><th>Mahal</th><th class="r">Zemin m²</th><th class="r">Net duvar m²</th><th class="r">Çevre m</th></tr></thead><tbody>
       ${met.rooms.map(r => `<tr><td>${esc(r.name)}</td><td class="r">${fmtNum(r.area)}</td><td class="r">${fmtNum(r.wallArea)}</td><td class="r">${fmtNum(r.perim)}</td></tr>`).join('')}
       <tr class="grp"><td>Toplam</td><td class="r">${fmtNum(met.floor)}</td><td class="r">${fmtNum(met.wall)}</td><td class="r">${fmtNum(met.perim)}</td></tr></tbody></table></section>` : ''}
