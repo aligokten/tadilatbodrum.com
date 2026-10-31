@@ -20,7 +20,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.31-4';
+export const APP_VERSION = '2026.10.31-5';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1607,6 +1607,9 @@ async function reportDialog(j) {
   const r = await modal({ title: 'Keşif raporu', wide: true, body: `
     <h4>Çizimler</h4>
     ${dws.length ? `<div class="rp-dw">${dws.map(d => `<label class="check"><input type="checkbox" data-dw="${d.id}" ${plans.has(d.id) ? 'checked' : ''}> ${esc(d.main ? 'Rölöve (mevcut durum)' : d.name)}</label>`).join('')}</div>` : '<p class="muted small">Çizim yok.</p>'}
+    <h4>Kaşe / imza</h4>
+    <label class="check"><input type="checkbox" id="rpSign" ${ro.sign !== false ? 'checked' : ''}> Raporun sonuna kaşe / imza alanı ekle</label>
+    ${S.settings.company?.stamp ? `<label class="check"><input type="checkbox" id="rpStamp" ${ro.stamp !== false ? 'checked' : ''}> Firma kaşesini bas</label>` : '<p class="muted small">Kaşe basmak için Ayarlar → Firma bilgileri\'nden kaşe görseli yükleyin; yüklenmezse imza alanı boş kalır.</p>'}
     <h4>Tasarım önerileri</h4>
     <p class="muted small">Rapora eklenecek görselleri işaretleyin. Telefon / tablet galerisinden yeni görsel yükleyebilirsiniz; yüklenenler işin fotoğraflarına "Tasarım önerisi" etiketiyle kaydedilir.</p>
     <label class="btn btn-ghost btn-sm rp-up">${icon('image')}Galeriden görsel ekle<input type="file" accept="image/*" multiple hidden data-up></label>
@@ -1626,8 +1629,9 @@ async function reportDialog(j) {
       });
     } });
   if (r?.k !== 'ok') return null;
-  j.reportOpt = { plans: [...plans], design: [...pick].filter(id => j.photos.some(p => p.id === id)) }; save();
-  return { plans, design: j.reportOpt.design.map(id => j.photos.find(p => p.id === id)).filter(Boolean) };
+  const sign = $('#rpSign', r.el).checked, stamp = $('#rpStamp', r.el)?.checked ?? false;
+  j.reportOpt = { plans: [...plans], design: [...pick].filter(id => j.photos.some(p => p.id === id)), sign, stamp: $('#rpStamp', r.el) ? stamp : ro.stamp }; save();
+  return { plans, sign, stamp, design: j.reportOpt.design.map(id => j.photos.find(p => p.id === id)).filter(Boolean) };
 }
 
 async function printReport() {
@@ -1655,6 +1659,8 @@ async function printReport() {
       <table class="p-table sm">${INSPECTION.filter(i => r.checks?.[i.k]?.state).map(i => { const c = r.checks[i.k], s = CHECK_STATES.find(x => x.k === c.state); return `<tr><td>${i.t}</td><td style="color:${s.c};font-weight:700">${s.t}</td><td>${esc(c.note || '')}</td></tr>`; }).join('')}</table>
       ${r.notes ? `<p>${esc(r.notes)}</p>` : ''}${imgs(j.photos.filter(p => p.room === r.name && !p.findingId).slice(0, 6))}</div>`).join('')}</section>` : ''}
     ${j.kesifNotes ? `<section><h3>Genel notlar</h3><p>${esc(j.kesifNotes).replace(/\n/g, '<br>')}</p></section>` : ''}
+    ${opt.sign ? (() => { const st = opt.stamp && S.settings.company?.stamp, by = teamOf(S.settings).find(m => m.id === j.kesifBy);
+      return `<section class="p-sign${st ? ' has-stamp' : ''}"><div>${esc(S.settings.company?.name || 'Firma')}<span>Kaşe / İmza</span>${st ? `<img class="p-stamp" src="${st}" alt="Kaşe">` : ''}</div><div>Keşfi yapan<span>${esc(by ? by.name + (by.title ? ' · ' + by.title : '') : j.assigned || '')}<br>Ad Soyad / İmza / Tarih</span></div></section>`; })() : ''}
     ${surveyProgress(j.survey.answers).d ? `<section class="p-break"><h2>Müşteri anketi</h2>${surveyPrintHtml(j)}</section>` : ''}
     ${docFooter()}</div>`;
   printDoc(html, `Keşif Raporu ${j.code}`);
