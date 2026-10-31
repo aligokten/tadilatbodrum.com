@@ -37,6 +37,19 @@ export const WIN_USES = [
   { k: 'vitrin',  t: 'Vitrin / panoramik',                  w: 240, h: 220, sill: 10,  model: 'sabit' },
 ];
 export const FRAME_COLORS = [['#F4F4F2', 'Beyaz'], ['#3A3F45', 'Antrasit'], ['#1F2125', 'Siyah'], ['#9A6B3F', 'Altın meşe'], ['#5B3F2C', 'Ceviz']];
+/* iç kapı kanat modeli (iç oda ve banyo kapılarında) */
+export const LEAF_STYLES = [
+  { k: 'duz', t: 'Düz (lake / laminat)' },
+  { k: 'yatay', t: 'Yatay frezeli (çizgili)' },
+  { k: 'dikey', t: 'Dikey frezeli' },
+  { k: 'kanal', t: 'Ortada alüminyum şerit' },
+  { k: 'panel2', t: 'Klasik — 2 tablalı' },
+  { k: 'panel4', t: 'Klasik — 4 tablalı' },
+  { k: 'camserit', t: 'Dikey buzlu cam şeritli' },
+  { k: 'camust', t: 'Üstü buzlu camlı' },
+  { k: 'camkare', t: 'Kare buzlu cam pencereli' },
+];
+export const leafStyle = o => (LEAF_STYLES.find(x => x.k === o.leaf) || LEAF_STYLES[0]).k;
 export const LEAF_COLORS = [['#F2F0EC', 'Beyaz lake'], ['#E9E1D3', 'Krem'], ['#B08463', 'Meşe'], ['#6E4B33', 'Ceviz'], ['#4A4F55', 'Antrasit'], ['#1F2125', 'Siyah']];
 
 const pick = (L, k) => L.find(x => x.k === k);

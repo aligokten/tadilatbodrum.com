@@ -8,17 +8,17 @@ import { fixtureOf, fixtureSvg } from './fixtures.js';
 import { ROOF_TYPES, COVERS, newRoof, roofModel, roofSvg, roofFrame, roofTakeoff, roofLayers, roofSheetSvg, roofSectionSvg, roofLayersSvg, outlineOf, coverOf } from './roof.js';
 import { STAIR_TYPES, STAIR_BUILD, newStair, isU, winders, stairParams, stairLocal, stairHit, stairSvg, stairSvgIcon, stairCheck, autoRisers, stairBounds, stairSolid, stairOutline } from './stairs.js';
 import { TILE_SIZES, TILE_PATTERNS, TILE_JOINTS, tileable, tileOf, tileDefaults, applySize, tileLayout, tilePreviewSvg, tilePlanPath } from './tiles.js';
-import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart } from './openings.js';
+import { DOOR_MODELS, DOOR_USES, WIN_MODELS, WIN_USES, FRAME_COLORS, LEAF_COLORS, RAIL_KINDS, doorModel, doorUse, winModel, winUse, winRail, railKind, frameColor, leafColor, applyUse, sashes, leaves, winTilt, winHingeAtStart, LEAF_STYLES, leafStyle } from './openings.js';
 import { newCabinet, autoFill, itemDims, planSymbol, runLength, FRONTS, pick as cabPick, MT as CAB_MT } from './cabinet.js';
 
 /* mobilya seçim listesi: kategorilere göre gruplu */
 const furnOptions = (cur, dims = true) => FURN_GROUPS.map(([g, t]) => `<optgroup label="${t}">${FURNITURE.filter(f => f.g === g).map(f => `<option value="${f.k}" ${f.k === cur ? 'selected' : ''}>${f.t}${dims ? ` (${f.w}×${f.d})` : ''}</option>`).join('')}</optgroup>`).join('');
 import {
   emptyPlan, V, wallLen, wallDir, wallNormal, projSeg, polyArea, polyCentroid, pointInPoly,
-  offsetPoly, offsetPolyVar, roomMetrics, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
+  offsetPoly, offsetPolyVar, roomMetrics, SKIRTS, skirtOf, skirtLen, planBounds, planLevels, newLevel, levelName, rectRoom, rectPts, rectWallSegs, polyRoom, itemOutline, wallExt, wallRef, arcWallVerts, arcApex, arcStats, arcThrough,
 } from './plan-geom.js';
 
-const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
+const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.wallf{stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
   .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
   .rname{font-weight:700}.rkot{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#B5480F;font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
 
@@ -39,6 +39,18 @@ const TOOLS = [
   { k: 'text', t: 'Yazı', ic: 'text', key: 't' },
 ];
 const r2 = p => ({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) });
+/* duvar tarama desenleri (plan): dünya biriminde, ekrana göre çizgi aralığı */
+export const WALL_FILLS = [['solid', 'Dolu'], ['hatch', 'Eğik tarama'], ['cross', 'Çapraz tarama'], ['brick', 'Tuğla'], ['dots', 'Noktalı (beton / gazbeton)'], ['outline', 'Boş (yalnız çerçeve)']];
+export const WALL_INKS = [['#24272B', 'Siyah'], ['#5B6169', 'Koyu gri'], ['#8E959E', 'Gri'], ['#B5482E', 'Tuğla kırmızısı'], ['#00797B', 'Petrol'], ['#1F4E8C', 'Lacivert']];
+function wallPattern(id, st, ink, px) {
+  const g = Math.max(px(6), 4), sw = Math.max(px(1), 0.4);
+  const bg = `<rect width="${g * 2}" height="${g * 2}" fill="#fff"/>`;
+  if (st === 'hatch') return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${g}" height="${g}" patternTransform="rotate(45)"><rect width="${g}" height="${g}" fill="#fff"/><line x1="0" y1="0" x2="0" y2="${g}" stroke="${ink}" stroke-width="${sw}"/></pattern>`;
+  if (st === 'cross') return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${g}" height="${g}" patternTransform="rotate(45)"><rect width="${g}" height="${g}" fill="#fff"/><path d="M0 0V${g}M0 0H${g}" stroke="${ink}" stroke-width="${sw}"/></pattern>`;
+  if (st === 'brick') { const w2 = g * 2, h2 = g; return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${w2}" height="${h2 * 2}">${bg.replace(`height="${g * 2}"`, `height="${h2 * 2}"`)}<path d="M0 0H${w2}M0 ${h2}H${w2}M0 0V${h2}M${g} ${h2}V${h2 * 2}" stroke="${ink}" stroke-width="${sw}" fill="none"/></pattern>`; }
+  if (st === 'dots') return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${g}" height="${g}"><rect width="${g}" height="${g}" fill="#fff"/><circle cx="${g / 2}" cy="${g / 2}" r="${sw * 0.9}" fill="${ink}"/><circle cx="0" cy="0" r="${sw * 0.6}" fill="${ink}"/></pattern>`;
+  return '';
+}
 /* döşeme kotu yazımı (cm → m): +0,45 / ±0,00 / −0,30 */
 export const kotTxt = cm => { const v = (+cm || 0) / 100; return (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 /* kullanıcının araç seçimleri cihazda hatırlanır */
@@ -113,6 +125,9 @@ export class PlanEditor {
     this.arc = null;              // yay duvar çizimi: { p1, p2 }
     this.polyWalls = pref('tb-pe-polywalls', true);   // çokgen oda: duvarları da oluştur
     this.wallFace = pref('tb-pe-wallface', true);     // duvar aracı: çizgi = iç yüz, kalınlık dışa
+    // duvar çizgisi: aks (orta) / iç yüz (kalınlık dışa) / dış yüz (kalınlık içe)
+    this.wallMode = (() => { try { return localStorage.getItem('tb-pe-wallmode'); } catch { return null; } })() || (this.wallFace ? 'in' : 'axis');
+    this.wallFace = this.wallMode !== 'axis';
     this.preview = null;          // imleç önizleme noktası
     this.snapInd = null;
     this.ptrs = new Map();
@@ -938,13 +953,13 @@ export class PlanEditor {
     if (t === 'scale') { this.chain = null; this.scalePlan(last, p); return; }
     const closes = c.pts.length >= 3 && V.eq(p, c.pts[0], 1);
     if (t === 'wall') {
-      if (!c.started) { this.snap(); c.started = true; c.wallIds = []; c.face = this.wallFace; }
+      if (!c.started) { this.snap(); c.started = true; c.wallIds = []; c.face = this.wallMode !== 'axis'; c.fsign = this.wallMode === 'out' ? 1 : -1; }
       const w = { id: uid('w'), a: { ...last }, b: { ...p }, t: this.plan.meta.wallT, h: 0 };
       this.plan.walls.push(w); c.wallIds.push(w.id);
       if (closes) {
         c.closed = true; this.layoutChain(c);
         // kapalı duvar zinciri → oda: iç yüz çizildiyse çizilen çokgen zaten net iç ölçüdür
-        const pts = c.face ? c.pts.map(q => ({ ...q })) : offsetPoly(c.pts, this.plan.meta.wallT / 2);
+        const pts = c.face ? (c.fsign === 1 ? offsetPoly(c.pts, this.plan.meta.wallT) : c.pts.map(q => ({ ...q }))) : offsetPoly(c.pts, this.plan.meta.wallT / 2);
         const room = { id: uid('r'), name: this.nextRoomName(), pts, floor: 'parke', wallColor: '', h: 0, walls: [...c.wallIds] };
         if (Math.abs(polyArea(c.pts)) > 1e4) this.plan.rooms.push(room);
         this.chain = null; this.dir = null; this.changed(); this.renderHud(); return;
@@ -969,7 +984,7 @@ export class PlanEditor {
     if (!c.wallIds?.length) return;
     const walls = c.wallIds.map(id => this.wall(id)).filter(Boolean);
     if (!c.face) return;
-    const off = -this.plan.meta.wallT / 2;
+    const off = (c.fsign || -1) * this.plan.meta.wallT / 2;   // iç yüz: kalınlık dışa (−), dış yüz: içe (+)
     if (c.closed) {
       const q = offsetPoly(c.pts, off);
       walls.forEach((w, i) => { w.a = q[i]; w.b = q[(i + 1) % q.length]; });
@@ -1574,21 +1589,37 @@ export class PlanEditor {
     }
     // merdivenler (odaların üstünde, duvarların altında)
     for (const st of P.stairs || []) o += stairSvg(st, px, live && this.sel?.kind === 'stair' && this.sel.id === st.id);
-    // duvarlar
-    const arcDone = new Set();
+    // duvarlar: 1. geçiş dış çerçeve / dolu, 2. geçiş tarama ya da boş iç (birleşimlerde çerçeve kaybolur, tek gövde görünür)
+    const arcDone = new Set(), segs = [];
     for (const w of P.walls) {   // uçlar: ortak köşede yarım kalınlık uzar, serbest uçta tam noktada biter
+      const st = w.fill || meta.wallFill || 'solid', ink = w.ink || meta.wallInk || '#24272B';
       if (w.arc) {   // yay duvar: parçalar tek birleşik çizgi (köşelerde yuvarlak birleşim, tırtıksız)
         if (arcDone.has(w.arc.id)) continue; arcDone.add(w.arc.id);
         const ws = P.walls.filter(x => x.arc?.id === w.arc.id).sort((a, b) => a.arc.i - b.arc.i), f = ws[0], l = ws.at(-1);
         const pts = [f.a, ...ws.map(x => x.b)].map(q => ({ ...q })), ef = wallExt(P, f).a, el = wallExt(P, l).b;
         if (ef) { const u = wallDir(f); pts[0] = V.sub(f.a, V.mul(u, ef)); }
         if (el) { const u = wallDir(l); pts[pts.length - 1] = V.add(l.b, V.mul(u, el)); }
-        o += `<polyline class="wall" fill="none" stroke-linejoin="round" points="${pts.map(q => `${q.x},${q.y}`).join(' ')}" stroke-width="${f.t || meta.wallT}"/>`;
+        segs.push({ pts, t: f.t || meta.wallT, st, ink, free: [!ef, !el] });
         continue;
       }
       const e = wallExt(P, w), u = wallDir(w), A = V.sub(w.a, V.mul(u, e.a)), B = V.add(w.b, V.mul(u, e.b));
-      o += `<line class="wall" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${w.t || meta.wallT}"/>`;
+      segs.push({ pts: [A, B], t: w.t || meta.wallT, st, ink, free: [!e.a, !e.b] });
     }
+    const lw = Math.max(px(1.3), 0.8), pats = new Set();
+    const line = (pts, wdt, sty, cls = 'wall') => pts.length === 2
+      ? `<line class="${cls}" x1="${pts[0].x}" y1="${pts[0].y}" x2="${pts[1].x}" y2="${pts[1].y}" stroke-width="${wdt}" style="${sty}"/>`
+      : `<polyline class="${cls}" fill="none" stroke-linejoin="round" points="${pts.map(q => `${q.x},${q.y}`).join(' ')}" stroke-width="${wdt}" style="${sty}"/>`;
+    for (const g of segs) o += line(g.pts, g.t, `stroke:${g.ink}`);
+    for (const g of segs) {
+      if (g.st === 'solid') continue;
+      const pts = g.pts.map(q => ({ ...q }));   // serbest uçta iç dolgu çerçeve kalınlığı kadar kısalır (uç çizgisi görünsün)
+      if (g.free[0]) { const u = V.norm(V.sub(pts[1], pts[0])); pts[0] = V.add(pts[0], V.mul(u, lw)); }
+      if (g.free[1]) { const k = pts.length - 1, u = V.norm(V.sub(pts[k], pts[k - 1])); pts[k] = V.sub(pts[k], V.mul(u, lw)); }
+      let paint = '#fff';
+      if (g.st !== 'outline') { const id = `wf-${g.st}-${g.ink.slice(1)}-${Math.round(s * 1000)}`; pats.add(JSON.stringify([id, g.st, g.ink])); paint = `url(#${id})`; }
+      o += line(pts, Math.max(0.5, g.t - 2 * lw), `stroke:${paint}`, 'wallf');
+    }
+    if (pats.size) o = `<defs>${[...pats].map(j => { const [id, st, ink] = JSON.parse(j); return wallPattern(id, st, ink, px); }).join('')}</defs>` + o;
     // açıklıklar
     for (const op of P.openings) {
       const w = P.walls.find(x => x.id === op.wallId); if (!w) continue;
@@ -1738,6 +1769,7 @@ export class PlanEditor {
       if (this.sel.kind === 'wall') {
         const rf = wallRef(so, this.plan.meta.wallT, this.plan);
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${this.T(so) + px(6)}"/>`;
+        if (so.face) o += `<line x1="${rf.a.x}" y1="${rf.a.y}" x2="${rf.b.x}" y2="${rf.b.y}" stroke="#EB591F" stroke-width="${px(2)}" stroke-dasharray="${px(7)} ${px(4)}"/>`;   // ölçü / birleşim çizgisi
         o += [rf.a, rf.b].map(p => `<circle class="hdl" cx="${p.x}" cy="${p.y}" r="${px(7)}" stroke-width="${px(2)}"/>`).join('');
       } else if (this.sel.kind === 'rail') {
         o += `<line class="selline" x1="${so.a.x}" y1="${so.a.y}" x2="${so.b.x}" y2="${so.b.y}" stroke-width="${px(12)}"/>`;
@@ -1800,8 +1832,8 @@ export class PlanEditor {
         const L = V.dist(last, p);
         const tw = this.tool === 'wall' ? this.plan.meta.wallT : px(2);
         let A = last, B = p;
-        if (this.tool === 'wall' && (c.started ? c.face : this.wallFace) && L > 0.5) {   // kalınlık dışa: önizleme de kaydırılmış
-          const pts = [...c.pts, p], q = offsetOpen(pts, -tw / 2, chainSide(pts, c.flip));
+        if (this.tool === 'wall' && (c.started ? c.face : this.wallMode !== 'axis') && L > 0.5) {   // yüzden çizim: önizleme de kaydırılmış
+          const pts = [...c.pts, p], q = offsetOpen(pts, (c.started ? c.fsign || -1 : this.wallMode === 'out' ? 1 : -1) * tw / 2, chainSide(pts, c.flip));
           A = q.at(-2); B = q.at(-1);
           o += `<line class="prevface" x1="${last.x}" y1="${last.y}" x2="${p.x}" y2="${p.y}" stroke-width="${px(1.5)}"/>`;
         }
@@ -1869,7 +1901,7 @@ export class PlanEditor {
         ${this.chain ? `<button class="btn btn-xs btn-primary" data-fin>${icon('check')}Bitir</button>` : ''}
       </div>
       ${t === 'wall' ? `<div class="hud-row"><label class="mini-l">Kalınlık <input id="peT" type="number" value="${this.plan.meta.wallT}"> cm</label>
-          <label class="mini-l"><input type="checkbox" id="peFace" ${this.wallFace ? 'checked' : ''} ${this.chain?.started ? 'disabled' : ''}> Çizgi iç yüz, kalınlık dışa</label>
+          <label class="mini-l">Çizgi <select class="inp sm" id="peWm" ${this.chain?.started ? 'disabled' : ''}>${[['axis', 'Aks (orta)'], ['in', 'İç yüz — kalınlık dışa'], ['out', 'Dış yüz — kalınlık içe']].map(([k, t]) => `<option value="${k}" ${this.wallMode === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           ${this.chain?.started && this.chain.face && !this.chain.closed ? `<button class="btn btn-xs btn-ghost" data-flip title="Duvar kalınlığını çizginin diğer tarafına al">${icon('rotate')}Tarafı çevir</button>` : ''}</div>`
         : t === 'rail' ? `<div class="hud-row"><select class="inp sm" id="peRail">${RAIL_KINDS.map(k => `<option value="${k.k}" ${this.railPick.kind === k.k ? 'selected' : ''}>${k.t}</option>`).join('')}</select>
           <label class="mini-l">Yükseklik <input id="peRailH" type="number" value="${this.railPick.h}"> cm</label></div>`
@@ -1920,6 +1952,7 @@ export class PlanEditor {
     if (ou) ou.onchange = () => { const pk = this.opPick[t]; pk.use = ou.value; const m = WIN_USES.find(u => u.k === ou.value)?.model; if (t === 'window' && m) { pk.model = m; om.value = m; } };
     if (om) om.onchange = () => { this.opPick[t].model = om.value; };
     const pw = $('#peWalls', this.hud); if (pw) pw.onchange = () => { this.polyWalls = pw.checked; setPref('tb-pe-polywalls', pw.checked); };
+    const wm = $('#peWm', this.hud); if (wm) wm.onchange = () => { this.wallMode = wm.value; this.wallFace = wm.value !== 'axis'; try { localStorage.setItem('tb-pe-wallmode', wm.value); } catch { /* yok say */ } this.renderUI(); };
     const pf = $('#peFace', this.hud); if (pf) pf.onchange = () => { this.wallFace = pf.checked; setPref('tb-pe-wallface', pf.checked); this.renderUI(); };
     const fl = $('[data-flip]', this.hud); if (fl) fl.onclick = () => { const c = this.chain; if (!c) return; c.flip = !c.flip; this.layoutChain(c); this.changed(); this.renderHud(); };
   }
@@ -1959,6 +1992,8 @@ export class PlanEditor {
         ${isRoofLv ? '' : `<h4>Plan</h4>
         ${num('meta.wallH', 'Duvar yüksekliği (kat yüksekliği)', P.meta.wallH)}`}
         ${isRoofLv ? '' : num('meta.wallT', 'Varsayılan duvar kalınlığı', P.meta.wallT)}
+        <div class="grid2"><label>Duvar çizimi (plan)<select class="inp sm" data-k="meta.wallFill">${WALL_FILLS.map(([k, t]) => `<option value="${k}" ${(P.meta.wallFill || 'solid') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label>Çizim rengi<div class="swatches" data-k="meta.wallInk">${WALL_INKS.map(([c, n]) => `<button style="background:${c}" data-c="${c}" title="${n}" class="${(P.meta.wallInk || '#24272B') === c ? 'on' : ''}"></button>`).join('')}</div></label></div>
         <label>Duvar rengi (3D)<div class="swatches" data-k="meta.wallColor">${WALL_COLORS.map(c => `<button style="background:${c}" data-c="${c}" class="${P.meta.wallColor === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <h4>Metraj</h4>
         <div class="mtable">${m.map(x => `<div><span>${esc(x.r.name)}</span><b>${fmtNum(x.m.area)} m²</b></div>`).join('') || '<p class="muted small">Henüz oda yok.</p>'}
@@ -1971,6 +2006,7 @@ export class PlanEditor {
       body = `<h4>Duvar</h4>
         ${o.face ? num('len', 'Uzunluk (çizilen yüz)', +(() => { const r = wallRef(o, P.meta.wallT, P); return V.dist(r.a, r.b); })().toFixed(1), 'cm', 0.5) : num('len', 'Uzunluk (eksen)', +wallLen(o).toFixed(1), 'cm', 0.5)}
         ${num('t', 'Kalınlık', this.T(o))}
+        ${this.wallRefInsp(o)}
         <div class="grid2">${num('z0', 'Alt kot', +o.z0 || 0)}${num('h', 'Üst kot (yükseklik)', o.h || P.meta.wallH)}</div>
         <p class="muted small">Kotlar katın ±0,00 kotuna göredir. Alt kot eksi girilirse duvar çukur döşemeden başlar (duvar boyu ${fmtNum((o.h || P.meta.wallH) - Math.min(0, +o.z0 || 0), 0)} cm); kapı eşiği ve pencere parapeti duvarın alt kotundan ölçülür.</p>
         <label>Renk (3D)<div class="swatches" data-k="color">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.color || '') === c ? 'on' : ''}" title="${c ? c : 'Varsayılan'}"></button>`).join('')}</div></label>
@@ -1983,7 +2019,8 @@ export class PlanEditor {
         <label>Tür<select class="inp sm" data-k="type"><option value="door" ${o.type === 'door' ? 'selected' : ''}>Kapı</option><option value="window" ${o.type === 'window' ? 'selected' : ''}>Pencere</option><option value="gap" ${o.type === 'gap' ? 'selected' : ''}>Boşluk / kemer</option></select></label>
         ${o.type === 'door' || o.type === 'window' ? `
         <label>Kullanım<select class="inp sm" data-k="use">${(o.type === 'door' ? DOOR_USES : WIN_USES).map(u => `<option value="${u.k}" ${(o.type === 'door' ? doorUse(o) : winUse(o)).k === u.k ? 'selected' : ''}>${u.t}</option>`).join('')}</select></label>
-        <label>Model<select class="inp sm" data-k="model">${(o.type === 'door' ? DOOR_MODELS : WIN_MODELS).map(m => `<option value="${m.k}" ${(o.type === 'door' ? doorModel(o) : winModel(o)) === m.k ? 'selected' : ''}>${m.t}</option>`).join('')}</select></label>` : ''}
+        <label>Model<select class="inp sm" data-k="model">${(o.type === 'door' ? DOOR_MODELS : WIN_MODELS).map(m => `<option value="${m.k}" ${(o.type === 'door' ? doorModel(o) : winModel(o)) === m.k ? 'selected' : ''}>${m.t}</option>`).join('')}</select></label>
+        ${o.type === 'door' && ['ic', 'banyo'].includes(doorUse(o).k) ? `<label>Kanat modeli (3D)<select class="inp sm" data-k="leaf">${LEAF_STYLES.map(z => `<option value="${z.k}" ${leafStyle(o) === z.k ? 'selected' : ''}>${z.t}</option>`).join('')}</select></label>` : ''}` : ''}
         ${num('w', 'Genişlik', o.w)}
         ${num('h', 'Yükseklik', o.h)}
         ${o.type === 'window' ? num('sill', +w.z0 ? 'Denizlik yüksekliği (duvar alt kotundan)' : 'Denizlik yüksekliği', o.sill) : ''}
@@ -2004,6 +2041,10 @@ export class PlanEditor {
         <div class="grid2">${num('h', 'Tavan yüksekliği (net)', o.h || P.meta.wallH)}${num('fz', 'Döşeme kotu', +o.fz || 0)}</div>
         <p class="muted small">Döşeme kotu katın ±0,00 kotuna göredir (yükseltilmiş döşeme +, çukur döşeme −); şu an ▽ ${kotTxt(o.fz)}. Tavan, döşeme kotundan net yükseklik kadar yukarıdadır.</p>
         <label>Zemin kaplaması<select class="inp sm" data-k="floor">${FLOORS.map(f => `<option value="${f.k}" ${o.floor === f.k ? 'selected' : ''}>${f.t}</option>`).join('')}</select></label>
+        <div class="grid2"><label>Süpürgelik<select class="inp sm" data-k="skirt.k"><option value="">Yok</option>${SKIRTS.map(z => `<option value="${z.k}" ${o.skirt?.k === z.k ? 'selected' : ''}>${z.t}</option>`).join('')}</select></label>
+          ${skirtOf(o) ? num('skirt.h', 'Süpürgelik yüksekliği', +o.skirt.h || skirtOf(o).h) : ''}</div>
+        ${skirtOf(o) ? `<p class="muted small">Süpürgelik boyu ${fmtNum(skirtLen(P, o), 2)} m — kapı ve döşemeden başlayan açıklıkların önü otomatik boş bırakılır.</p>` : ''}
+        <button class="btn btn-xs btn-ghost" data-act="skirtAll">Bu süpürgeliği tüm odalara uygula</button>
         <label>Duvar rengi (3D)<div class="swatches" data-k="wallColor">${['', ...WALL_COLORS].map(c => `<button style="background:${c || 'repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)'}" data-c="${c}" class="${(o.wallColor || '') === c ? 'on' : ''}"></button>`).join('')}</div></label>
         <div class="mtable"><div><span>Zemin alanı</span><b>${fmtNum(m.area)} m²</b></div><div><span>Çevre</span><b>${fmtNum(m.perim)} m</b></div><div><span>Net duvar alanı</span><b>${fmtNum(m.wallArea)} m²</b></div></div>
         ${this.edgeInsp(o)}
@@ -2050,6 +2091,20 @@ export class PlanEditor {
     this.insp.innerHTML = `<div class="insp-body">${body}</div>${o ? `<button class="btn btn-danger btn-xs del" data-act="del">${icon('trash')}Sil</button>` : ''}`;
     this.el.classList.toggle('has-sel', !!o);
     this.bindInsp(o);
+  }
+
+  /* duvar: ölçü / birleşim referansı (aks ya da yüz), kalınlığın tarafı, plan taraması */
+  wallRefInsp(o) {
+    const P = this.plan, t = this.T(o), m = V.lerp(o.a, o.b, 0.5), n = wallNormal(o);
+    const side = sg => P.rooms.find(r => pointInPoly(V.add(m, V.mul(n, sg * (t / 2 + 12))), r.pts));
+    const rp = side(1), rm = side(-1);
+    const lab = sg => { const r = sg > 0 ? rp : rm, other = sg > 0 ? rm : rp; return r && !other ? `İç yüz (${r.name})` : !r && other ? 'Dış yüz' : r ? `Yüz — ${r.name} tarafı` : `Yüz ${sg > 0 ? 'A' : 'B'}`; };
+    const cur = o.face || 0, opt = (v, tx) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${tx}</option>`;
+    return `<label>Ölçü / birleşim çizgisi<select class="inp sm" data-k="face">${opt(0, 'Aks (duvar ortası)')}${opt(1, lab(1))}${opt(-1, lab(-1))}</select></label>
+      ${cur ? `<button class="btn btn-xs btn-ghost" data-act="wflip">${icon('rotate')}Kalınlığı çizginin diğer tarafına al</button>` : ''}
+      <p class="muted small">Seçilen çizgi yerinde kalır: kalınlık ve uzunluk bu çizgiye göre değişir, köşeler bu çizgide birleşir.</p>
+      <div class="grid2"><label>Plan çizimi<select class="inp sm" data-k="fill"><option value="">Plan varsayılanı</option>${WALL_FILLS.map(([k, tx]) => `<option value="${k}" ${o.fill === k ? 'selected' : ''}>${tx}</option>`).join('')}</select></label>
+        <label>Çizim rengi<div class="swatches" data-k="ink"><button style="background:repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)" data-c="" title="Plan varsayılanı" class="${o.ink ? '' : 'on'}"></button>${WALL_INKS.map(([c, nm]) => `<button style="background:${c}" data-c="${c}" title="${nm}" class="${o.ink === c ? 'on' : ''}"></button>`).join('')}</div></label></div>`;
   }
 
   /* çokgen kenar ölçüleri: uzunluk girilir, + ile kenara köşe eklenir, köşe silinir */
@@ -2164,6 +2219,11 @@ export class PlanEditor {
           // çukur döşemede odanın kendi duvarları döşeme kotundan başlar; kot kalkınca eski hâline döner
           const old = +x.fz || 0; x.fz = v;
           (x.walls || []).forEach(id => { const w = id && this.wall(id); if (!w) return; if (v < 0 && (+w.z0 || 0) >= Math.min(0, old)) w.z0 = v; else if (v >= 0 && (+w.z0 || 0) === Math.min(0, old)) delete w.z0; });
+        } else if (k === 'face' && this.sel.kind === 'wall') {
+          const f = Math.sign(+v); if (f) x.face = f; else delete x.face;   // geometri yerinde; yalnızca referans değişir
+        } else if (k.startsWith('skirt.') && this.sel.kind === 'room') {
+          if (k === 'skirt.k') { if (!v) delete x.skirt; else x.skirt = { k: v, h: SKIRTS.find(z => z.k === v)?.h || 8 }; }
+          else { x.skirt ||= { k: 'mdf' }; x.skirt.h = Math.max(1, v); }
         } else if (k.startsWith('edge.')) {
           this.setEdgeLen(x, +k.slice(5), v);
           if (this.sel.kind === 'room') this.syncRoomWalls(x);
@@ -2230,6 +2290,13 @@ export class PlanEditor {
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
       if (a === 'cabV') return this.vestiyerDialog(x);
       if (a === 'vdel') return this.delVertex(x, +b.dataset.i, this.sel.kind);
+      if (a === 'skirtAll') { this.snap(); P.rooms.forEach(r => { if (x.skirt) r.skirt = { ...x.skirt }; else delete r.skirt; }); this.changed(); return toast(x.skirt ? 'Süpürgelik tüm odalara uygulandı' : 'Tüm odalardan süpürgelik kaldırıldı'); }
+      if (a === 'wflip') {   // referans çizgisi yerinde, gövde diğer tarafa: eksen 2 × yarım kalınlık kayar
+        this.snap();
+        const d = V.mul(wallNormal(x), x.face * this.T(x)), A = V.add(x.a, d), B = V.add(x.b, d), u = wallDir(x);
+        for (const [pt, np] of [[x.a, A], [x.b, B]]) this.endsAt(pt).forEach(([w, kk]) => { if (w === x || Math.abs(V.cross(u, wallDir(w))) > 0.1) w[kk] = { x: +np.x.toFixed(2), y: +np.y.toFixed(2) }; });
+        x.face = -x.face; this.changed(); return;
+      }
       this.snap();
       if (a === 'vins') { const i = +b.dataset.i; this.insertVertex(x, i, V.lerp(x.pts[i], x.pts[(i + 1) % x.pts.length], 0.5)); if (this.sel.kind === 'room') this.syncRoomWalls(x); }
       if (a === 'stype') { x.type = b.dataset.v; x.n1 = 0; x.sweep = 0; }
