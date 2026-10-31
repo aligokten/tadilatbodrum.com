@@ -1137,3 +1137,9 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .qa-sign span{display:block;font-size:8.5pt;color:#6B7280;margin-top:2px}.qa-sign.has-stamp div{padding-bottom:116px}
 .qa-stamp{position:absolute;left:0;top:62px;max-width:230px;max-height:110px;object-fit:contain;transform:rotate(-2deg);opacity:.92}
 .wallf{stroke-linecap:butt}
+.rp-dw{display:grid;gap:4px;margin-bottom:8px}.rp-up{margin:4px 0 8px;display:inline-flex}
+.rp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;max-height:380px;overflow:auto}
+.rp-ph{display:grid;gap:4px;border:2px solid transparent;border-radius:12px;padding:4px;background:var(--bg);position:relative;cursor:pointer}.rp-ph.on{border-color:#EB591F}
+.rp-ph img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px}.rp-ph input[type=checkbox]{position:absolute;top:10px;left:10px;width:20px;height:20px}
+.p-design figure img{aspect-ratio:auto;max-height:90mm;object-fit:contain}
+.rp-up{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;width:auto!important;justify-self:start}

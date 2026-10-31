@@ -58,7 +58,7 @@ export const sevOf = k => SEVERITY.find(s => s.k === k) || SEVERITY[0];
 
 export const PHOTO_TAGS = [
   { k: 'kesif', t: 'Keşif' }, { k: 'tespit', t: 'Tespit' }, { k: 'rolove', t: 'Rölöve / Kroki' },
-  { k: 'once', t: 'Önce' }, { k: 'uygulama', t: 'Uygulama' }, { k: 'sonra', t: 'Sonra' }, { k: 'render', t: 'Render' }, { k: 'diger', t: 'Diğer' },
+  { k: 'once', t: 'Önce' }, { k: 'uygulama', t: 'Uygulama' }, { k: 'sonra', t: 'Sonra' }, { k: 'tasarim', t: 'Tasarım önerisi' }, { k: 'render', t: 'Render' }, { k: 'diger', t: 'Diğer' },
 ];
 
 export const ROOM_TYPES = ['Salon', 'Oturma Odası', 'Yatak Odası', 'Çocuk Odası', 'Mutfak', 'Banyo', 'WC', 'Ebeveyn Banyosu',
