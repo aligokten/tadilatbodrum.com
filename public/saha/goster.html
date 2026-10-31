@@ -60,6 +60,12 @@
   .legend div{display:flex;justify-content:space-between;gap:14px}
   .legend b{font-weight:700}
   .legend .tot{border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+  .lvp{position:absolute;left:12px;top:64px;display:flex;flex-direction:column;gap:6px;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:8px;box-shadow:0 6px 20px rgba(11,11,12,.12);max-height:calc(100% - 170px);overflow:auto}
+  .lvp[hidden]{display:none}
+  .lvp small{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:0 6px}
+  .lvp button{padding:9px 14px;border-radius:12px;font-weight:700;font-size:13.5px;text-align:left;white-space:nowrap;color:var(--ink);background:var(--bg)}
+  .lvp button.on{background:var(--ink);color:#fff}
+  @media (max-width:560px){.lvp{top:auto;bottom:calc(84px + var(--safe-b));left:12px;right:auto;flex-direction:row;flex-wrap:wrap;max-width:calc(100% - 84px)} .lvp small{display:none} .lvp button{padding:8px 11px;font-size:12.5px} .legend{bottom:calc(140px + var(--safe-b))}}
   @media (min-width:900px){ header img{height:40px} .tools,.legend{bottom:24px} footer{justify-content:center} footer a{flex:0 0 260px} }
 </style>
 </head>
@@ -77,6 +83,7 @@
   <div class="tools" id="tools2" hidden>
     <button data-z="fit" title="Sığdır"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
+  <div class="lvp" id="lvp" hidden></div>
   <div class="hint" id="hint">Döndürmek için sürükleyin · iki parmakla yakınlaştırın</div>
 </main>
 <footer id="foot" hidden></footer>
