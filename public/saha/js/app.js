@@ -9,6 +9,7 @@ import { renderRemindCard, renderRemindSettings, remindDialog, dueAll, REMIND_KI
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
 import { renderQA, qaOpen } from './qa.js';
+import { urunPage, renderUrunTab } from './urunui.js';
 import { PlanEditor, planThumbSvg, planImageUrl } from './plan2d.js';
 import { useName, modelName } from './openings.js';
 import { emptyPlan, planMetrics, rectRoom, roomMetrics } from './plan-geom.js';
@@ -20,7 +21,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.10.31-5';
+export const APP_VERSION = '2026.11.01-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -152,6 +153,7 @@ function shell() {
       <nav>
         <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
         <button data-new>${gicon('plus')}<span>Yeni iş</span></button>
+        <a href="#/urunler" data-nav="urunler">${gicon('box')}<span>Ürünler</span></a>
         <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
       </nav>
       <div class="side-foot">
@@ -169,6 +171,7 @@ function shell() {
         <a href="#/" data-nav="home">${gicon('home')}<span>İşler</span></a>
         <button data-search>${gicon('search')}<span>Ara</span></button>
         <button data-new class="bn-new"><i>${icon('plus')}</i><span>Yeni iş</span></button>
+        <a href="#/urunler" data-nav="urunler">${gicon('box')}<span>Ürünler</span></a>
         <a href="#/ayarlar" data-nav="ayarlar">${gicon('settings')}<span>Ayarlar</span></a>
       </div>
     </nav>
@@ -193,7 +196,7 @@ async function route() {
   await flushSave();
   teardownPlan();
   const parts = location.hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
-  const nav = parts[0] === 'ayarlar' ? 'ayarlar' : 'home';
+  const nav = parts[0] === 'ayarlar' || parts[0] === 'urunler' ? parts[0] : 'home';
   $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav && parts[0] !== 'is'));
   document.body.classList.toggle('plan-mode', parts[0] === 'is' && parts[2] === 'plan');
   if (parts[0] === 'is' && parts[1]) {
@@ -208,6 +211,7 @@ async function route() {
   }
   openJob(null);
   if (parts[0] === 'ayarlar') return settingsView();
+  if (parts[0] === 'urunler') return urunPage(view(), { settings: S.settings, saveSettings: urunSave, printDoc, docHeader, docFooter }, parts[1] === 'p' ? '' : parts[1] || 'program', parts[1] === 'p' ? decodeURIComponent(parts[2] || '') : '');
   dashboard();
   // listeyi buluttan tazele (başka cihazlarda eklenen/değişen işler)
   S.be.listJobs().then(list => {
@@ -458,6 +462,7 @@ const TABS = [
   { k: 'kesif', t: 'Keşif', ic: 'scan' },
   { k: 'rolove', t: 'Rölöve & 3D', ic: 'ruler' },
   { k: 'foto', t: 'Fotoğraflar', ic: 'camera' },
+  { k: 'urun', t: 'Ürün', ic: 'box' },
   { k: 'teklif', t: 'Teklif', ic: 'file' },
   { k: 'uygulama', t: 'Uygulama', ic: 'roller' },
 ];
@@ -479,11 +484,12 @@ function jobView(tab) {
     <section class="tab-body" id="tb"></section>`;
   $('.tabs .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const tb = $('#tb');
-  ({ genel: tabGenel, talepler: tabTalepler, sorular: tabSorular, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
+  ({ genel: tabGenel, talepler: tabTalepler, sorular: tabSorular, urun: tabUrun, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
 }
 function badge(k) {
   const j = S.job;
   const n = { talepler: j.requests.filter(r => r.status !== 'kapsamdisi').length, kesif: j.findings.length, foto: j.photos.length }[k];
+  if (k === 'urun') { const u = j.urun; if (!u?.sel?.length) return ''; return u.cls === 'C' ? '<i class="tbadge warn">C</i>' : `<i class="tbadge">${u.sel.length}</i>`; }
   if (k === 'sorular') { const n = qaOpen(j), all = (j.qa || []).length; return n ? `<i class="tbadge warn">${n}</i>` : all ? `<i class="tbadge">${icon('check')}</i>` : ''; }
   if (k === 'anket') { const p = surveyProgress(j.survey.answers).pct; return p ? `<i class="tbadge">${p}%</i>` : ''; }
   if (k === 'uygulama') { if (!j.exec) return ''; const A = execAlerts(j.exec), w = A.late + A.mats + A.nok; return `<i class="tbadge ${w ? 'warn' : ''}">${w || execProgress(j.exec) + '%'}</i>`; }
@@ -645,6 +651,12 @@ function tabTalepler(tb) {
 function roomNames() {
   const j = S.job;
   return [...new Set([...(j.inspection.rooms || []).map(r => r.name), ...(j.plan ? planMetrics(j.plan).rooms : []).map(r => r.name), ...ROOM_TYPES])].filter(Boolean);
+}
+
+/* ── Ürün: standart ürün / paket, proje sınıfı, maliyet reçetesi, kalite kontrol ── */
+const urunSave = debounce(() => S.be.saveSettings(S.settings).catch(e => toast(e.message, 'err')), 700);
+function tabUrun(tb) {
+  renderUrunTab(tb, S.job, { settings: S.settings, saveSettings: urunSave, save: () => save(), logEvt, jobMetrics, newQuote, printDoc, docHeader, docFooter, addPhotos, photoUrl: p => S.be.photoUrl(p), team: teamOf(S.settings) });
 }
 
 /* ── Soru-Cevap: WhatsApp mesajındaki sorular ve yanıtlar ── */

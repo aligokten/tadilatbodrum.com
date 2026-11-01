@@ -3,6 +3,7 @@ import { uid } from './store.js';
 import { CATEGORIES, catOf, UNITS, PHOTO_TAGS } from './catalog.js';
 import { icon, esc, h, $, $$, fmtMoney, fmtNum, fmtDate, modal, toast, waLink } from './ui.js';
 import { planMetrics } from './plan-geom.js';
+import { quoteScopeHtml } from './urunui.js';
 
 export function newQuote(job, settings) {
   const d = new Date();
@@ -354,6 +355,7 @@ async function printQuote(job, settings, ctx) {
       <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
     </section>`}
     ${q.notes ? `<section class="p-notes"><h4>Notlar</h4><p>${esc(q.notes).replace(/\n/g, '<br>')}</p></section>` : ''}
+    ${quoteScopeHtml(q)}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
     ${annexList}
     ${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
