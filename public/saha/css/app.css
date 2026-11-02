@@ -1173,3 +1173,4 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .ur-co{display:grid;grid-template-columns:1fr 130px auto 32px;gap:6px;align-items:center;margin:4px 0}@media(max-width:640px){.ur-co{grid-template-columns:1fr 110px}.ur-mh{grid-template-columns:1fr 1fr}}
 .p-urun-i{margin:6px 0 10px}.p-urun-i p{margin:2px 0;font-size:9pt}.p-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.p-two small{font-weight:700;font-size:8.5pt;color:#555}.p-urun ul{margin:2px 0 0 14px;font-size:9pt}
 .ur-head{display:block}.ur-head h1{margin:0 0 4px}.ur-head .row-between{gap:10px;flex-wrap:wrap}
+.oplbl{font-family:var(--f);fill:#1F4E8C;font-weight:600;paint-order:stroke;stroke:#fff;stroke-width:3px;pointer-events:none}

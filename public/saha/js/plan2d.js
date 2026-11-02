@@ -20,7 +20,7 @@ import {
 
 const PLAN_CSS = `.wall{stroke:#24272B;stroke-linecap:butt}.wallf{stroke-linecap:butt}.room{stroke:none}.win{fill:#fff;stroke:#24272B}.door,.jamb{fill:none;stroke:#24272B}.winarc{fill:none;stroke:#24272B;opacity:.65}.rail{fill:#24272B;stroke:#24272B}.railp{stroke:#24272B}
   .item{stroke:#555}.itemback{stroke:#555}.itemtxt,.rname,.rarea,.wlen,.lbl{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#24272B}
-  .rname{font-weight:700}.rkot{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#B5480F;font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
+  .rname{font-weight:700}.oplbl{font-family:Inter,Arial,sans-serif;fill:#1F4E8C;font-weight:600;paint-order:stroke;stroke:#fff;stroke-width:3px}.rkot{font-family:Inter,Arial,sans-serif;text-anchor:middle;fill:#B5480F;font-weight:700}.rarea{fill:#00989A}.wlen{fill:#EB591F;font-weight:600}.dimg path{fill:none;stroke:#00989A}.dimg text{fill:#00989A;text-anchor:middle;font-family:Inter,Arial}`;
 
 const TOOLS = [
   { k: 'select', t: 'Seç / Taşı', ic: 'pointer', key: 'v' },
@@ -425,6 +425,12 @@ export class PlanEditor {
     // duvar ekseni uçları duvarın içinde kalır: yüz köşeleri yakınsa onlar tercih edilsin
     this.plan.walls.forEach(w => { if (w.id !== skip) { cand(w.a, 'end', 1.8); cand(w.b, 'end', 1.8); } });
     this.plan.rooms.forEach(r => r.pts.forEach(q => cand(q, 'corner')));
+    // ölçü çizgisi: kapı / pencere / boşluk kenarları (iki yüzde ve eksende) yakalanır
+    if (this.tool === 'dim') for (const o of this.plan.openings) {
+      const w = this.wall(o.wallId); if (!w) continue;
+      const u = wallDir(w), n = wallNormal(w), t = this.T(w) / 2, c = V.add(w.a, V.mul(u, o.pos));
+      for (const sg of [-1, 1]) { const e = V.add(c, V.mul(u, sg * o.w / 2)); for (const k of [-t, 0, t]) cand(V.add(e, V.mul(n, k)), 'corner', 0.85); }
+    }
     (this.plan.rails || []).forEach(r => { if (r.id !== skip) { cand(r.a); cand(r.b); } });
     if (this.chain) this.chain.pts.forEach(q => cand(q));
     if (best) { const q = { x: +best.x.toFixed(2), y: +best.y.toFixed(2) }; this.snapInd = { ...q, k: bk }; return q; }
@@ -1669,6 +1675,15 @@ export class PlanEditor {
       }
       if (isSel) o += `<line class="selline" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="${t + px(6)}"/>`;
     }
+    // kapı / pencere ölçü etiketleri: genişlik / yükseklik (pencerede parapet), duvarın açılmayan tarafında
+    if (meta.opLabels !== false) for (const op of P.openings) {
+      const w = P.walls.find(x => x.id === op.wallId); if (!w) continue;
+      const t = w.t || meta.wallT, u = wallDir(w), n = wallNormal(w);
+      const c = V.add(w.a, V.mul(u, op.pos)), tp = V.add(c, V.mul(n, -(w.face || -1) * (t / 2 + px(11))));   // duvar boyu yazısının karşı tarafı
+      const ang = Math.atan2(u.y, u.x) * 180 / Math.PI, rot = ang > 90 || ang <= -90 ? ang + 180 : ang;
+      const txt = op.type === 'window' ? `${fmtNum(op.w, 0)}/${fmtNum(op.h, 0)} h:${fmtNum(op.sill || 0, 0)}` : `${fmtNum(op.w, 0)}/${fmtNum(op.h, 0)}`;
+      o += `<text class="oplbl" x="${tp.x}" y="${tp.y}" font-size="${px(10.5)}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${rot} ${tp.x} ${tp.y})">${txt}</text>`;
+    }
     // korkuluklar: iki ince çizgi + dikmeler; dolu parapet taralı; cam panel orta çizgi
     for (const r of P.rails || []) {
       const L = V.dist(r.a, r.b); if (L < 1) continue;
@@ -1974,6 +1989,7 @@ export class PlanEditor {
         ${isRoofLv ? '' : `<h4>Plan</h4>
         ${num('meta.wallH', 'Duvar yüksekliği (kat yüksekliği)', P.meta.wallH)}`}
         ${isRoofLv ? '' : num('meta.wallT', 'Varsayılan duvar kalınlığı', P.meta.wallT)}
+        <label class="check"><input type="checkbox" data-k="meta.opLabels" ${P.meta.opLabels !== false ? 'checked' : ''}> Kapı / pencere ölçü etiketlerini göster (genişlik / yükseklik, pencerede parapet)</label>
         <div class="grid2"><label>Duvar çizimi (plan)<select class="inp sm" data-k="meta.wallFill">${WALL_FILLS.map(([k, t]) => `<option value="${k}" ${(P.meta.wallFill || 'solid') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label>Çizim rengi<div class="swatches" data-k="meta.wallInk">${WALL_INKS.map(([c, n]) => `<button style="background:${c}" data-c="${c}" title="${n}" class="${(P.meta.wallInk || '#24272B') === c ? 'on' : ''}"></button>`).join('')}</div></label></div>
         <label>Duvar rengi (3D)<div class="swatches" data-k="meta.wallColor">${WALL_COLORS.map(c => `<button style="background:${c}" data-c="${c}" class="${P.meta.wallColor === c ? 'on' : ''}"></button>`).join('')}</div></label>
