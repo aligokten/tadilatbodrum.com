@@ -21,7 +21,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.11.02-2';
+export const APP_VERSION = '2026.11.02-3';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -839,6 +839,7 @@ function setDrawingPlan(j, id, p) {
   const d = (j.drawings || []).find(x => x.id === id); if (d) { d.plan = p; d.updatedAt = Date.now(); }
 }
 /* herhangi bir katta (çatı hariç) dolu dizi var mı */
+const hasJn = p => !!p && [p, ...(p.levels || []).filter(l => l.kind !== 'roof')].some(x => (x.openings || []).some(o => o.type === 'door' || o.type === 'window'));
 const anyLv = (p, k) => !!p && [p, ...(p.levels || []).filter(l => l.kind !== 'roof')].some(x => x[k]?.length);
 const hasContent = p => !!(p?.walls?.length || p?.rooms?.length || p?.items?.length || p?.rails?.length);
 const clonePlan = p => p ? JSON.parse(JSON.stringify(p)) : emptyPlan();
@@ -880,7 +881,7 @@ function tabRolove(tb) {
           <a class="btn btn-primary btn-sm" href="${url}">${icon('edit')}${has ? 'Aç' : 'Çizime başla'}</a>
           ${has ? `<a class="btn btn-ghost btn-sm" href="${url}&v=3d">${icon('cube')}3D</a><a class="btn btn-ghost btn-sm" href="${url}&v=3d&r=1">${icon('sparkle')}Render</a>` : ''}
           ${d.main && !has ? `<a class="btn btn-ghost btn-sm" href="${url}&import=1">${icon('upload')}DXF / PDF aktar</a><button class="btn btn-ghost btn-sm" data-tpl>${icon('layers')}Örnek plan</button>` : ''}
-          ${anyLv(d.plan, 'openings') ? `<button class="btn btn-ghost btn-sm" data-dwa="jn" title="Kapı / pencere listesi, ölçülü (PDF)">${icon('print')}Doğrama listesi</button>` : ''}
+          ${hasJn(d.plan) ? `<button class="btn btn-ghost btn-sm" data-dwa="jn" title="Kapı / pencere listesi, ölçülü (PDF)">${icon('print')}Doğrama listesi</button>` : ''}
           ${anyLv(d.plan, 'rooms') ? `<button class="btn btn-ghost btn-sm" data-dwa="fl" title="Zemin kaplaması malzemelerine göre sipariş listesi (PDF)">${icon('layers')}Zemin sipariş listesi</button>` : ''}
           ${has ? `<button class="btn btn-ghost btn-sm" data-dwa="copy" title="Kopyasını oluştur">${icon('copy')}</button>` : ''}
           ${d.main ? '' : `<button class="btn btn-ghost btn-sm" data-dwa="ren" title="Yeniden adlandır">${icon('edit')}</button><button class="btn btn-ghost btn-sm danger-t" data-dwa="del" title="Sil">${icon('trash')}</button>`}

@@ -40,6 +40,7 @@ export function joineryItems(plan) {
   for (const L of lvs) {
     const P = L.plan;
     for (const o of P.openings || []) {
+      if (o.type !== 'door' && o.type !== 'window') continue;   // kapısız / penceresiz boşluklar doğrama değildir
       const w = (P.walls || []).find(x => x.id === o.wallId); if (!w) continue;
       const t = w.t || P.meta?.wallT || meta.wallT || 15, u = wallDir(w), n = wallNormal(w), sd = o.side || 1;
       const c = V.add(w.a, V.mul(u, o.pos));
