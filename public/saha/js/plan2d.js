@@ -952,7 +952,7 @@ export class PlanEditor {
     if (V.dist(p, last) < 1) return;
     if (t === 'dim') {
       this.snap();
-      this.plan.dims.push({ id: uid('d'), a: last, b: p, off: 40 });
+      this.plan.dims.push({ id: uid('d'), a: last, b: p, off: 40, ra: this.dimRef(last) || 0, rb: this.dimRef(p) || 0 });
       this.chain = null; this.changed(); this.renderHud(); return;
     }
     if (t === 'calib') { this.chain = null; this.calibrate(last, p); return; }
@@ -1531,7 +1531,58 @@ export class PlanEditor {
   }
 
   /* ───────────── çizim ───────────── */
+  /* ── ilişkili ölçüler: ölçü uçları duvar / kapı-pencere / oda köşesine bağlanır, onlar kayınca ölçü de güncellenir ── */
+  dimRef(q) {
+    const P = this.plan, eps = 0.6;
+    for (const o of P.openings) {   // kapı / pencere kenarı (iç yüz, eksen, dış yüz)
+      const w = this.wall(o.wallId); if (!w) continue;
+      const u = wallDir(w), n = wallNormal(w), t = this.T(w) / 2, c = V.add(w.a, V.mul(u, o.pos));
+      for (const e of [-1, 1]) for (const sd of [-1, 0, 1]) if (V.dist(q, V.add(V.add(c, V.mul(u, e * o.w / 2)), V.mul(n, sd * t))) < eps) return { o: o.id, e, s: sd };
+    }
+    for (const r of P.rooms) { const i = r.pts.findIndex(p => V.dist(p, q) < eps); if (i >= 0) return { r: r.id, i }; }
+    let best = null;
+    for (const w of P.walls) {   // duvar yüzü / ekseni: en yakın uca göre mesafe (uç kayınca birlikte gider)
+      const L = wallLen(w); if (L < 1) continue;
+      const u = wallDir(w), n = wallNormal(w), t = this.T(w) / 2;
+      for (const sd of [-1, 0, 1]) {
+        const a = V.add(w.a, V.mul(n, sd * t)), d = V.dot(V.sub(q, a), u), off = Math.abs(V.cross(u, V.sub(q, a)));
+        if (off > eps || d < -t - 1 || d > L + t + 1) continue;
+        const end = d < L / 2 ? 'a' : 'b', ref = { w: w.id, s: sd, end, d: end === 'a' ? d : d - L };
+        if (!best || Math.abs(ref.d) < Math.abs(best.d)) best = ref;
+      }
+    }
+    return best;
+  }
+  dimResolve(ref) {
+    if (!ref) return null;
+    if (ref.o) {
+      const o = this.plan.openings.find(x => x.id === ref.o), w = o && this.wall(o.wallId); if (!w) return null;
+      const u = wallDir(w), n = wallNormal(w);
+      return V.add(V.add(w.a, V.mul(u, o.pos + ref.e * o.w / 2)), V.mul(n, ref.s * this.T(w) / 2));
+    }
+    if (ref.r) { const r = this.plan.rooms.find(x => x.id === ref.r); return r?.pts[ref.i] || null; }
+    if (ref.w) {
+      const w = this.wall(ref.w); if (!w) return null;
+      const u = wallDir(w), n = wallNormal(w);
+      return V.add(V.add(ref.end === 'b' ? w.b : w.a, V.mul(u, ref.d)), V.mul(n, ref.s * this.T(w) / 2));
+    }
+    return null;
+  }
+  syncDims() {
+    for (const d of this.plan.dims || []) {
+      if (d.ra === undefined) d.ra = this.dimRef(d.a) || 0;   // eski ölçüler de ilk açılışta bağlanır
+      if (d.rb === undefined) d.rb = this.dimRef(d.b) || 0;
+      for (const [k, rk] of [['a', 'ra'], ['b', 'rb']]) {
+        if (!d[rk]) continue;
+        const p = this.dimResolve(d[rk]);
+        if (!p) { d[rk] = 0; continue; }   // bağlı nesne silindi: ölçü yerinde kalır
+        d[k] = { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+      }
+    }
+  }
+
   render() {
+    this.syncDims();
     const r = this.svg.getBoundingClientRect();
     this.gW.setAttribute('transform', `matrix(${this.s} 0 0 ${this.s} ${this.ox} ${this.oy})`);
     this.gW.innerHTML = this.grid(r) + this.lowerSvg() + this.drawPlan(this.plan, this.s, true) + this.ghostSvg();
@@ -2082,7 +2133,11 @@ export class PlanEditor {
         <div class="grid2">${num('len', 'Uzunluk', +V.dist(o.a, o.b).toFixed(1), 'cm', 0.5)}${num('h', 'Yükseklik', o.h || 110)}</div>
         <p class="muted small">Uç noktaları sürükleyerek uzatın, gövdeyi sürükleyerek taşıyın. Balkon ve teraslarda korkuluk yüksekliği yönetmelikte en az 110 cm'dir.</p>`;
     } else if (s.kind === 'dim') {
-      body = `<h4>Ölçü çizgisi</h4><p class="big">${fmtNum(V.dist(o.a, o.b), 1)} cm</p>${num('off', 'Kaydırma', o.off)}`;
+      const rn = r => !r ? 'serbest nokta' : r.o ? (this.plan.openings.find(x => x.id === r.o)?.type === 'door' ? 'kapı kenarı' : 'pencere / boşluk kenarı') : r.r ? 'oda köşesi' : r.s ? 'duvar yüzü' : 'duvar ekseni';
+      body = `<h4>Ölçü çizgisi</h4><p class="big">${fmtNum(V.dist(o.a, o.b), 1)} cm</p>${num('off', 'Kaydırma', o.off)}
+        <div class="mtable"><div><span>1. uç</span><b>${rn(o.ra)}</b></div><div><span>2. uç</span><b>${rn(o.rb)}</b></div></div>
+        <p class="muted small">Bağlı uçlar, duvar ya da kapı / pencere kaydığında kendiliğinden güncellenir.</p>
+        ${o.ra || o.rb ? `<button class="btn btn-xs btn-ghost" data-act="dimfree">Bağı çöz (ölçüyü sabitle)</button>` : `<button class="btn btn-xs btn-ghost" data-act="dimlink">Yeniden bağla</button>`}`;
     } else if (s.kind === 'label') {
       body = `<h4>Yazı</h4><label>Metin<input class="inp sm" data-k="text" value="${esc(o.text)}"></label>${num('size', 'Boyut', o.size || 25)}`;
     }
@@ -2287,6 +2342,8 @@ export class PlanEditor {
       }
       if (a === 'cabK' || a === 'cabW') return this.createCab(a === 'cabW' ? 'wardrobe' : 'kitchen', x);
       if (a === 'cabV') return this.vestiyerDialog(x);
+      if (a === 'dimfree') { this.snap(); x.ra = 0; x.rb = 0; return this.changed(); }
+      if (a === 'dimlink') { this.snap(); x.ra = this.dimRef(x.a) || 0; x.rb = this.dimRef(x.b) || 0; if (!x.ra && !x.rb) toast('Uçlarda bağlanacak duvar / açıklık bulunamadı', 'err'); return this.changed(); }
       if (a === 'vdel') return this.delVertex(x, +b.dataset.i, this.sel.kind);
       if (a === 'skirtAll') { this.snap(); P.rooms.forEach(r => { if (x.skirt) r.skirt = { ...x.skirt }; else delete r.skirt; }); this.changed(); return toast(x.skirt ? 'Süpürgelik tüm odalara uygulandı' : 'Tüm odalardan süpürgelik kaldırıldı'); }
       if (a === 'wflip') {   // referans çizgisi yerinde, gövde diğer tarafa: eksen 2 × yarım kalınlık kayar
