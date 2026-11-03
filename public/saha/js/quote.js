@@ -422,8 +422,12 @@ function letterBody(q, job, T, valid) {
       : `<p class="p-lt-to">Sayın ${esc(name || 'Müşterimiz')},</p><p class="p-intro">${esc((L.intro || '').trim() || letterIntroDef(job)).replace(/\n/g, '<br>')}</p>${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}`}
     <section class="p-lt"><h4>Teklif kapsamındaki işler</h4>
       <ol class="p-lt-list${heads ? ' priced' : ''}">${list.map(h => `<li><span>${esc(h.t)}</span>${heads ? `<i></i><b>${h.items.length ? fmtMoney(headAmt(q, h)) : 'dahil'}</b>` : ''}</li>`).join('')}</ol>
-    </section>
-    <section class="p-lt-total">
+    </section>`;
+}
+/* mektubun son bloğu: teklif bedeli + kapanış (+ IBAN, imza printQuote'ta) — hep aynı sayfada kalır */
+function letterEnd(q, T, valid) {
+  const L = letterSync(q), heads = L.price === 'heads';
+  return `<section class="p-lt-total">
       ${heads && (T.disc || q.showVat) ? `<div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : ''}` : ''}
       <div class="tline grand"><span>Teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
       <p class="p-lt-note">${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${!heads && T.disc ? (q.discMode === 'amt' ? ` · ${fmtMoney(T.disc)} iskonto uygulanmıştır` : ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır`) : ''}.${L.words !== false ? ` <span>Yalnız: ${trWords(T.total)}${q.showVat ? '' : ' + KDV'}.</span>` : ''}</p>
@@ -495,9 +499,8 @@ async function printQuote(job, settings, ctx) {
     ${letter ? '' : quoteScopeHtml(q)}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
     ${annexList}
-    ${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
-    ${letter ? '<p class="p-lt-sal">Saygılarımızla,</p>' : ''}
-    <section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>
+    ${letter ? `<section class="p-lt-end">${letterEnd(q, T, valid)}${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}<p class="p-lt-sal">Saygılarımızla,</p><section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section></section>` : `${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
+    <section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>`}
     ${annexPages}
     ${docFooter()}
   </div>`;

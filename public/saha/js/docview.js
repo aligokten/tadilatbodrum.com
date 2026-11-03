@@ -26,6 +26,39 @@ async function loadLibs() {
 const waitImages = root => Promise.all($$('img', root).map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
 const fileName = t => (t || 'belge').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.pdf';
 
+/* tek sayfalık belgeler (.p-letter: teklif mektubu): ilk sayfaya sığmıyorsa yazı ve boşluklar kademeli
+ * sıkılaştırılır (fit1…fit3); yine sığmazsa olduğu gibi kalır (son blok bölünmeden bir sonraki sayfaya geçer).
+ * Ölçüm PDF sayfa düzeniyle yapılır; ekler (.p-break) hesaba katılmaz. */
+export async function fitOnePage(html) {
+  if (!/class="pdoc[^"]*\bp-letter\b/.test(html)) return html;
+  const host = h(`<div class="pdf-render"><div class="pdf-page" style="height:${PAGE_H}px"><div class="pdoc pdf-body"></div><div class="pdoc pdf-foot"></div></div></div>`);
+  document.body.append(host);
+  try {
+    const t = document.createElement('template'); t.innerHTML = html;
+    const doc = t.content.firstElementChild;
+    const foot = doc.querySelector(':scope > .p-foot');
+    const body = $('.pdf-body', host);
+    if (foot) $('.pdf-foot', host).innerHTML = foot.outerHTML + '<div class="pdf-num"><span>—</span><b>1 / 1</b></div>';
+    const probe = doc.cloneNode(true);
+    probe.querySelectorAll(':scope > .p-foot, :scope > .p-break').forEach(x => x.remove());
+    body.innerHTML = `<div style="display:flow-root">${probe.innerHTML}</div>`;   // içerik yüksekliği ayrı kapta ölçülür (gövde sabit yükseklikte)
+    const inner = body.firstElementChild;
+    await waitImages(host);
+    if (document.fonts?.ready) await document.fonts.ready;
+    const cls = ['', 'fit1', 'fit2', 'fit3'];
+    const room = () => body.clientHeight * 0.97;   // tarayıcıdan yazdırmada kenar boşluğu biraz farklı: pay bırak
+    let pick = null;
+    for (const c of cls) {
+      body.className = 'pdoc pdf-body ' + [...doc.classList].filter(x => x !== 'pdoc').join(' ') + (c ? ' ' + c : '');
+      if (inner.offsetHeight <= room()) { pick = c; break; }
+    }
+    if (pick === '' || pick == null) return html;
+    doc.classList.add(pick);
+    return doc.outerHTML;
+  } catch (e) { console.warn('fitOnePage', e); return html; }
+  finally { host.remove(); }
+}
+
 export function openDocument(html, title = 'TadilatBodrum') {
   const ov = h(`<div class="docview" role="dialog" aria-modal="true">
     <header class="dv-bar">
@@ -44,6 +77,8 @@ export function openDocument(html, title = 'TadilatBodrum') {
   const page = $('.dv-page', ov), status = $('.dv-status', ov);
   const fit = () => { page.style.zoom = Math.min(1, (ov.clientWidth - 24) / A4_W); };
   fit(); addEventListener('resize', fit);
+  // tek sayfaya sığdırma ölçümü bitince önizleme / yazdırma / PDF sıkılaştırılmış belgeyle
+  fitOnePage(html).then(x => { if (x !== html) { html = x; page.innerHTML = x; } });
   const close = () => { ov.remove(); document.body.classList.remove('dv-open'); removeEventListener('resize', fit); document.removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
@@ -108,7 +143,7 @@ async function sharePdf(file, quiet = false) {
  * (bir sonraki içerikle birlikte yeni sayfaya geçer); alt bilgi ve sayfa numarası her sayfada yer alır.
  */
 const SPLIT = 'div.pdoc, section, table, tbody, ul, ol, .p-grid, .p-imgs, .p-find, .p-room, .p-notes';   // gerekirse bölünebilen kaplar
-const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-lt-total, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
+const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-lt-total, .p-lt-end, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
 const isHeading = el => el.matches('h1, h2, h3, h4, thead');
 
 function shallowClone(src) {
@@ -202,8 +237,9 @@ export async function buildPdf(html, title, onProgress) {
     const foot = $(':scope > .p-foot', doc);
     foot?.remove();
     const footHtml = foot ? foot.outerHTML : '';
+    const extra = [...doc.classList].filter(c => c !== 'pdoc').join(' ');   // belge sınıfları (p-letter, fit…) sayfa kabına
     const makePage = () => {
-      const pg = h(`<div class="pdf-page" style="height:${PAGE_H}px"><div class="pdoc pdf-body"></div><div class="pdoc pdf-foot">${footHtml}<div class="pdf-num"><span>${esc(title)}</span><b></b></div></div></div>`);
+      const pg = h(`<div class="pdf-page" style="height:${PAGE_H}px"><div class="pdoc pdf-body ${extra}"></div><div class="pdoc pdf-foot ${extra}">${footHtml}<div class="pdf-num"><span>${esc(title)}</span><b></b></div></div></div>`);
       out.append(pg);
       return { el: pg, body: $('.pdf-body', pg) };
     };
