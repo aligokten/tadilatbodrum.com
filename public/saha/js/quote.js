@@ -142,6 +142,8 @@ export function renderQuote(root, job, settings, save, ctx) {
           </div>`).join('') : `<p class="muted center pad">Henüz kalem yok. Kütüphaneden ekleyerek başlayın.</p>`}
       </div>
 
+      ${q.format === 'mektup' ? letterCard(q, job) : ''}
+
       <div class="q-bottom">
         <div class="card">
           <label>Notlar<textarea class="inp" rows="3" data-q="notes" placeholder="Malzeme markaları, kapsam dışı işler…">${esc(q.notes)}</textarea></label>
@@ -168,8 +170,9 @@ export function renderQuote(root, job, settings, save, ctx) {
           ${T.profit ? `<p class="muted small">Kalem fiyatları maliyet olarak girilir. ${q.profitMode === 'spread' ? 'Teklif çıktısında kâr birim fiyatlara dağıtılır; müşteri ayrı kâr satırı görmez.' : 'Teklif çıktısında "Genel giderler ve yüklenici kârı" ayrı satır olarak görünür.'} Net kâr (iskonto sonrası): <b>${fmtMoney(T.profit - T.disc)}</b></p>` : ''}
           <div class="col">
             <label>Müşteriye gidecek teklif formu<select class="inp" data-q="format">
-              <option value="detayli" ${q.format !== 'ozet' ? 'selected' : ''}>Ayrıntılı — her kalemin birim fiyatı ve tutarı</option>
-              <option value="ozet" ${q.format === 'ozet' ? 'selected' : ''}>Özet — kalemler ve miktarlar, yalnızca toplam fiyat</option></select></label>
+              <option value="detayli" ${!q.format || q.format === 'detayli' ? 'selected' : ''}>Ayrıntılı — her kalemin birim fiyatı ve tutarı</option>
+              <option value="ozet" ${q.format === 'ozet' ? 'selected' : ''}>Özet — kalemler ve miktarlar, yalnızca toplam fiyat</option>
+              <option value="mektup" ${q.format === 'mektup' ? 'selected' : ''}>Teklif mektubu — iş başlıkları ve teklif bedeli (metraj yok)</option></select></label>
             <button class="btn btn-primary" data-act="print">${icon('print')}Teklifi yazdır / PDF</button>
             <button class="btn btn-ghost" data-act="wa">${icon('chat')}WhatsApp ile gönder</button>
             <button class="btn btn-ghost btn-sm danger-t" data-act="reset">${icon('trash')}Teklifi sil</button>
@@ -184,6 +187,9 @@ export function renderQuote(root, job, settings, save, ctx) {
   const redrawTotals = () => { const y = scrollY; draw(); scrollTo(0, y); };
   root.oninput = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
+    const lt = e.target.dataset.lt, lh = e.target.dataset.lh;
+    if (lt === 'intro' || lt === 'outro') { q.letter[lt] = e.target.value; save(); return; }
+    if (lh) { const h = q.letter.heads.find(x => x.id === e.target.closest('.q-lh').dataset.h); if (h) { h.t = e.target.value; save(); } return; }
     if (k === 'discMode') return;   // tür değişimi 'change'te işlenir (mevcut iskonto korunarak)
     if (k) { q[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'number' ? +e.target.value : e.target.value; save(); return; }
     if (ik) {
@@ -196,7 +202,9 @@ export function renderQuote(root, job, settings, save, ctx) {
   };
   root.onchange = e => {
     const k = e.target.dataset.q, ik = e.target.dataset.i;
-    if (k === 'format') { q.format = e.target.value; save(); return; }
+    if (k === 'format') { q.format = e.target.value; if (q.format === 'mektup' && !q.letter?.heads) { letterSync(q); letterRegen(q); } save(); redrawTotals(); return; }
+    const lt = e.target.dataset.lt;
+    if (lt === 'price' || lt === 'words') { q.letter[lt] = lt === 'words' ? e.target.checked : e.target.value; save(); return; }
     if (k === 'rev') {   // revizyon artınca önceki revizyonun tarihi ve tutarı kaydedilir (karşılaştırma için)
       const v = Math.max(1, Math.round(+e.target.value || 1)), old = q._revPrev ?? 1;
       q.revHist ||= [];
@@ -225,6 +233,20 @@ export function renderQuote(root, job, settings, save, ctx) {
       if (op === 'met') it.qty = +(met[it.qtyKey] || 0).toFixed(2);
       save(); redrawTotals(); return;
     }
+    const lop = e.target.closest('[data-lhop]')?.dataset.lhop;
+    if (lop) {
+      const H = q.letter.heads, i = H.findIndex(x => x.id === e.target.closest('.q-lh').dataset.h);
+      if (lop === 'up' && i > 0) [H[i - 1], H[i]] = [H[i], H[i - 1]];
+      if (lop === 'merge' && i > 0) { H[i - 1].items.push(...H[i].items); H.splice(i, 1); }
+      if (lop === 'del') H.splice(i, 1);
+      save(); redrawTotals(); return;
+    }
+    if (a === 'lhadd') { q.letter.heads.push({ id: uid('lh'), t: '', items: [] }); save(); redrawTotals(); $$('.q-lh input', root).at(-1)?.focus(); return; }
+    if (a === 'lhgen') {
+      const r = await modal({ title: 'İş başlıklarını yeniden oluştur', body: '<p>Başlıklarda yaptığınız değişiklikler (metin, sıra, birleştirme, eklenen başlıklar) silinip kalemlerden yeniden oluşturulacak.</p>', actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Yeniden oluştur', cls: 'btn-primary' }] });
+      if (r?.k === 'ok') { letterRegen(q); save(); redrawTotals(); }
+      return;
+    }
     if (a === 'add') { q.items.push({ id: uid('q'), cat: 'diger', desc: '', unit: 'adet', qty: 1, price: 0 }); save(); draw(); $$('.q-desc', root).at(-1)?.focus(); }
     if (a === 'lib') { const added = await libraryPicker(settings.catalog, met, job); if (added?.length) { q.items.push(...added); save(); draw(); toast(`${added.length} kalem eklendi`); } }
     if (a === 'attpr') { q.attach = attachCands(job, ctx).filter(c => c.kind === 'plan' || c.p.tag === 'render' || c.p.tag === 'rolove').map(c => c.key); save(); redrawTotals(); }
@@ -232,9 +254,10 @@ export function renderQuote(root, job, settings, save, ctx) {
     if (a === 'print') printQuote(job, settings, ctx);
     if (a === 'wa') {
       const T = quoteTotals(q);
-      const txt = `Merhaba ${job.customer.name || ''},\nTadilatBodrum.com olarak ${job.customer.address || 'mülkünüz'} için hazırladığımız teklif özeti:\n\n` +
-        CATEGORIES.map(c => { const its = q.items.filter(i => i.cat === c.k); return its.length ? `• ${c.t}: ${fmtMoney(its.reduce((s, i) => s + i.qty * i.price, 0))}` : ''; }).filter(Boolean).join('\n') +
-        `\n\nGenel toplam: ${fmtMoney(T.total)}${q.showVat ? ' (KDV dahil)' : ' + KDV'}\nTeklif no: ${q.no} · Geçerlilik: ${q.validDays} gün\n\nDetaylı PDF teklifimizi ayrıca iletiyoruz. Sorularınız için buradayız.`;
+      const lines = q.format === 'mektup' ? letterSync(q).heads.filter(h => (h.t || '').trim()).map(h => `• ${h.t.trim()}${q.letter.price === 'heads' && h.items.length ? ': ' + fmtMoney(headAmt(q, h)) : ''}`) : null;
+      const txt = `Merhaba ${job.customer.name || ''},\nTadilatBodrum.com olarak ${job.customer.address || 'mülkünüz'} için hazırladığımız teklif ${lines ? 'kapsamındaki işler' : 'özeti'}:\n\n` + (lines ? lines.join('\n') :
+        CATEGORIES.map(c => { const its = q.items.filter(i => i.cat === c.k); return its.length ? `• ${c.t}: ${fmtMoney(its.reduce((s, i) => s + i.qty * i.price, 0))}` : ''; }).filter(Boolean).join('\n')) +
+        `\n\n${lines ? 'Teklif bedeli' : 'Genel toplam'}: ${fmtMoney(T.total)}${q.showVat ? ' (KDV dahil)' : ' + KDV'}\nTeklif no: ${q.no} · Geçerlilik: ${q.validDays} gün\n\nDetaylı PDF teklifimizi ayrıca iletiyoruz. Sorularınız için buradayız.`;
       window.open(waLink(job.customer.phone, txt), '_blank');
     }
     if (a === 'reset') {
@@ -295,6 +318,119 @@ function revIntro(q, job, T) {
   </section>`;
 }
 
+/* ═══ teklif mektubu: iş başlıkları + teklif bedeli (metraj / birim fiyat yok) ═══ */
+/* kalem → iş başlığı kuralları (sırayla; ilk eşleşen); başlıklar teklifte düzenlenebilir */
+const LH_RULES = [
+  ['yikim', null, 'Söküm ve yıkım işleri ile moloz atımı'],
+  ['insaat', /duvar|tuğla|tugla|gazbeton|bims|ytong|briket|bölme|bolme/i, 'Yeni oda bölme duvarlarının örülmesi işi'],
+  ['insaat', /sıva|siva/i, 'Sıva işleri'],
+  ['insaat', /betonarme|beton|kolon|kiriş|kiris|döşeme|doseme|lento/i, 'Betonarme imalat işleri'],
+  ['insaat', null, 'İnşaat ve kaba imalat işleri'],
+  ['alcipan', /sıva|siva|saten/i, 'Sıva ve alçı işleri'],
+  ['alcipan', null, 'Alçıpan ve asma tavan işleri'],
+  ['seramik', null, 'Seramik ve fayans döşeme işleri'],
+  ['zemin', null, 'Zemin kaplama (parke) işleri'],
+  ['boya', null, 'Boya ve badana işleri'],
+  ['tesisat', null, 'Sıhhi tesisat hatlarının komple yenilenmesi'],
+  ['elektrik', null, 'Elektrik tesisat hatlarının komple yenilenmesi'],
+  ['banyo', null, 'Banyo yenileme işleri'],
+  ['mutfak', null, 'Mutfak yenileme işleri'],
+  ['vitrifiye', null, 'Vitrifiye ve armatürlerin temini ve montajı'],
+  ['kapi', null, 'Kapı ve pencere (doğrama) işleri'],
+  ['iklim', null, 'Isıtma ve klima tesisatı işleri'],
+  ['yalitim', null, 'Yalıtım ve çatı işleri'],
+  ['dis', null, 'Dış cephe, teras ve havuz işleri'],
+  ['sabitmob', null, 'Sabit mobilya (dolap, vestiyer) imalatı ve montajı'],
+  ['mobilya', null, 'Hareketli mobilya temini'],
+  ['beyazesya', null, 'Beyaz eşya ve ankastre cihazların temini ve montajı'],
+  ['aydinlatma', null, 'Aydınlatma armatürlerinin temini ve montajı'],
+  ['perde', null, 'Perde ve stor uygulamaları'],
+  ['peyzaj', null, 'Peyzaj ve bahçe düzenlemesi'],
+  ['temizlik', null, 'İnşaat sonrası temizlik ve nakliye'],
+];
+const lhAuto = i => (LH_RULES.find(([c, re]) => c === i.cat && (!re || re.test(i.desc || ''))) || [0, 0, 'Diğer işler'])[2];
+/* kalemlerin hepsi bir başlıkta olsun: yeni kalemler kural başlığına (yoksa yeni başlık) eklenir, silinen kalemler çıkarılır */
+function letterSync(q) {
+  q.letter ||= { price: 'total', words: true, intro: '', outro: '' };
+  const L = q.letter, ids = new Set(q.items.map(i => i.id));
+  L.heads ||= [];
+  L.heads.forEach(h => { h.items = (h.items || []).filter(id => ids.has(id)); });
+  const taken = new Set(L.heads.flatMap(h => h.items));
+  for (const i of q.items) {
+    if (taken.has(i.id)) continue;
+    const t = lhAuto(i); let h = L.heads.find(x => x.auto === t);
+    if (!h) { h = { id: uid('lh'), t, auto: t, items: [] }; L.heads.push(h); }
+    h.items.push(i.id);
+  }
+  // otomatik başlıktan kalemleri boşalan (kalemleri silinmiş) başlıklar kalkar; elle eklenen başlıklar kalır
+  L.heads = L.heads.filter(h => h.items.length || !h.auto);
+  return L;
+}
+function letterRegen(q) {
+  const L = q.letter; L.heads = [];
+  letterSync(q);
+  const ts = L.heads.find(h => h.auto === 'Sıhhi tesisat hatlarının komple yenilenmesi'), el = L.heads.find(h => h.auto === 'Elektrik tesisat hatlarının komple yenilenmesi');
+  if (ts && el) { ts.t = 'Sıhhi tesisat ve elektrik tesisat hatlarının komple yenilenmesi'; ts.items.push(...el.items); L.heads = L.heads.filter(h => h !== el); }
+  // kural sırası (iş akışı: söküm → kaba → ince → montaj)
+  const rank = h => { const r = LH_RULES.findIndex(x => x[2] === h.auto); return r < 0 ? 99 : r; };
+  L.heads.sort((a, b) => rank(a) - rank(b));
+}
+/* başlık bedeli: kalemler + yüklenici kârı (mektupta kâr ayrı satır olmaz) */
+const headAmt = (q, h) => h.items.reduce((s, id) => { const i = q.items.find(x => x.id === id); return s + (i ? (+i.qty || 0) * (+i.price || 0) : 0); }, 0) * (1 + (+q.profitPct || 0) / 100);
+
+/* tutarı yazıyla (Türk Lirası, kuruş) */
+function trWords(v) {
+  const B = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz'], O = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan'], G = ['', 'bin', 'milyon', 'milyar', 'trilyon'];
+  const three = n => { const y = Math.floor(n / 100), r = n % 100; return [y ? (y > 1 ? B[y] + ' ' : '') + 'yüz' : '', O[Math.floor(r / 10)], B[r % 10]].filter(Boolean).join(' '); };
+  const int = n => { if (!n) return 'sıfır'; const out = []; let g = 0; while (n > 0) { const p = n % 1000; if (p) out.unshift(g === 1 && p === 1 ? 'bin' : three(p) + (G[g] ? ' ' + G[g] : '')); n = Math.floor(n / 1000); g++; } return out.join(' '); };
+  const r = Math.round(Math.abs(v) * 100), tl = Math.floor(r / 100), kr = r % 100;
+  const s = `${int(tl)} Türk Lirası${kr ? ' ' + int(kr) + ' kuruş' : ''}`;
+  return s.charAt(0).toLocaleUpperCase('tr') + s.slice(1);
+}
+const letterIntroDef = job => `Yaptığımız keşif ve görüşmelerimiz doğrultusunda, ${job.customer?.address ? job.customer.address + ' adresindeki' : ''} mülkünüzde yapılacak tadilat işleri için hazırladığımız fiyat teklifimizi bilgilerinize sunarız.`.replace(/\s+/g, ' ');
+const letterOutroDef = valid => `Yapılacak işlere ait ayrıntılı iş tanımları, malzeme ve uygulama bilgileri tarafınıza ayrıca iletilecektir. Teklifimiz ${fmtDate(valid)} tarihine kadar geçerlidir. Teklifimizi uygun bulacağınızı umar, iyi çalışmalar dileriz.`;
+
+/* teklif ekranında mektup kartı */
+function letterCard(q, job) {
+  const L = letterSync(q), valid = new Date(q.date); valid.setDate(valid.getDate() + (+q.validDays || 0));
+  const heads = L.price === 'heads';
+  return `<div class="card q-letter">
+    <div class="q-toolbar"><h3>${icon('file')}Teklif mektubu — iş başlıkları</h3><button class="btn btn-ghost btn-sm" data-act="lhgen">${icon('rotate')}Kalemlerden yeniden oluştur</button></div>
+    <p class="muted small">Müşteriye giden mektupta metraj, miktar ve birim fiyat yer almaz; yalnızca iş başlıkları ve teklif bedeli. Başlıklar kalemlerden otomatik oluşur; metni düzenleyebilir, başlıkları üsttekiyle birleştirebilir, kalemsiz başlık ekleyebilirsiniz. Yeni eklenen kalemler kendi başlığına otomatik girer.</p>
+    <div class="q-lhs">${L.heads.map((h, n) => `<div class="q-lh" data-h="${h.id}">
+      <span class="q-lh-n">${n + 1}</span>
+      <input class="inp" data-lh="t" value="${esc(h.t)}" placeholder="İş başlığı">
+      <span class="q-lh-a">${h.items.length ? `<small>${h.items.length} kalem</small><b>${fmtMoney(headAmt(q, h))}</b>` : '<small>kalemsiz</small>'}</span>
+      <span class="q-lh-op">${n ? `<button class="icon-btn sm" data-lhop="up" title="Yukarı taşı">${icon('chevU')}</button><button class="icon-btn sm" data-lhop="merge" title="Üstteki başlıkla birleştir">${icon('layers')}</button>` : ''}${h.items.length ? '' : `<button class="icon-btn sm danger" data-lhop="del" title="Sil">${icon('trash')}</button>`}</span>
+    </div>`).join('') || '<p class="muted small">Kalem ekleyince başlıklar oluşur.</p>'}</div>
+    <button class="btn btn-ghost btn-sm" data-act="lhadd">${icon('plus')}Başlık ekle</button>
+    <div class="grid2">
+      <label>Fiyat gösterimi<select class="inp" data-lt="price"><option value="total" ${heads ? '' : 'selected'}>Yalnızca toplam teklif bedeli</option><option value="heads" ${heads ? 'selected' : ''}>Her iş başlığının bedeli ve toplam</option></select></label>
+      <label class="check" style="align-self:end"><input type="checkbox" data-lt="words" ${L.words !== false ? 'checked' : ''}> Teklif bedelini yazıyla da yaz</label>
+    </div>
+    <label>Giriş metni<textarea class="inp" rows="3" data-lt="intro" placeholder="${esc(letterIntroDef(job))}">${esc(L.intro || '')}</textarea></label>
+    <label>Kapanış metni<textarea class="inp" rows="3" data-lt="outro" placeholder="${esc(letterOutroDef(valid))}">${esc(L.outro || '')}</textarea></label>
+    <p class="muted small">Boş bırakılan metin kutularında gri görünen varsayılan metin kullanılır. Notlar, şartlar ve ekler mektupta da yer alır.</p>
+  </div>`;
+}
+
+/* mektup belgesi */
+function letterBody(q, job, T, valid) {
+  const L = letterSync(q), c = job.customer, name = (c.name || '').trim(), heads = L.price === 'heads';
+  const list = L.heads.filter(h => (h.t || '').trim());
+  return `${q.rev > 1 ? revIntro(q, job, T) + (q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : '')
+      : `<p class="p-lt-to">Sayın ${esc(name || 'Müşterimiz')},</p><p class="p-intro">${esc((L.intro || '').trim() || letterIntroDef(job)).replace(/\n/g, '<br>')}</p>${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}`}
+    <section class="p-lt"><h4>Teklif kapsamındaki işler</h4>
+      <ol class="p-lt-list${heads ? ' priced' : ''}">${list.map(h => `<li><span>${esc(h.t)}</span>${heads ? `<i></i><b>${h.items.length ? fmtMoney(headAmt(q, h)) : 'dahil'}</b>` : ''}</li>`).join('')}</ol>
+    </section>
+    <section class="p-lt-total">
+      ${heads && (T.disc || q.showVat) ? `<div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : ''}` : ''}
+      <div class="tline grand"><span>Teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
+      <p class="p-lt-note">${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${!heads && T.disc ? (q.discMode === 'amt' ? ` · ${fmtMoney(T.disc)} iskonto uygulanmıştır` : ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır`) : ''}.${L.words !== false ? ` <span>Yalnız: ${trWords(T.total)}${q.showVat ? '' : ' + KDV'}.</span>` : ''}</p>
+    </section>
+    <p class="p-intro">${esc((L.outro || '').trim() || letterOutroDef(valid)).replace(/\n/g, '<br>')}</p>`;
+}
+
 /* ═══ yazdırma ═══ */
 /* belge önizleme (Yazdır + PDF) — mobilde de çalışır, bkz. docview.js */
 export function printDoc(html, title = 'TadilatBodrum') {
@@ -334,14 +470,15 @@ async function printQuote(job, settings, ctx) {
     return `<tr class="grp"><td colspan="5">${esc(cat.t)}</td><td class="r">${fmtMoney(st)}</td></tr>` +
       its.map(i => `<tr><td class="c">${++n}</td><td>${esc(i.desc).replace(/\n/g, '<br>')}</td><td class="r">${fmtNum(i.qty)}</td><td>${esc(i.unit)}</td><td class="r">${fmtMoney(i.price * k)}</td><td class="r">${fmtMoney(i.qty * i.price * k)}</td></tr>`).join('');
   }).join('');
-  const html = `<div class="pdoc">
-    ${docHeader(settings, 'Fiyat Teklifi', `<div class="p-meta"><span>Teklif no <b>${esc(q.no)}${q.rev > 1 ? ' / Rev.' + q.rev : ''}</b></span><span>Tarih <b>${fmtDate(q.date)}</b></span><span>Geçerlilik <b>${fmtDate(valid)}</b></span></div>`)}
+  const letter = q.format === 'mektup';
+  const html = `<div class="pdoc${letter ? ' p-letter' : ''}">
+    ${docHeader(settings, letter ? 'Teklif Mektubu' : 'Fiyat Teklifi', `<div class="p-meta"><span>Teklif no <b>${esc(q.no)}${q.rev > 1 ? ' / Rev.' + q.rev : ''}</b></span><span>Tarih <b>${fmtDate(q.date)}</b></span><span>Geçerlilik <b>${fmtDate(valid)}</b></span></div>`)}
     <section class="p-cust">
       <div><small>Müşteri</small><b>${esc(c.name || '—')}</b>${esc(c.phone || '')}${c.email ? '<br>' + esc(c.email) : ''}</div>
       <div><small>Proje adresi</small><b>${esc(c.district || '')}</b>${esc(c.address || '')}</div>
       <div><small>İş kodu</small><b>${esc(job.code)}</b>${esc(job.property?.type || '')}</div>
     </section>
-    ${q.rev > 1 ? revIntro(q, job, T) : ''}
+    ${letter ? letterBody(q, job, T, valid) : `${q.rev > 1 ? revIntro(q, job, T) : ''}
     ${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th>${brief ? '' : '<th class="r">Birim fiyat</th><th class="r">Tutar</th>'}</tr></thead><tbody>${rows}</tbody></table>
     ${brief ? `<section class="p-totals">
@@ -353,12 +490,13 @@ async function printQuote(job, settings, ctx) {
       ${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
       ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : '<div class="tline"><span>KDV</span><b>Hariç</b></div>'}
       <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
-    </section>`}
+    </section>`}`}
     ${q.notes ? `<section class="p-notes"><h4>Notlar</h4><p>${esc(q.notes).replace(/\n/g, '<br>')}</p></section>` : ''}
-    ${quoteScopeHtml(q)}
+    ${letter ? '' : quoteScopeHtml(q)}
     ${q.terms ? `<section class="p-notes"><h4>Şartlar ve koşullar</h4><ul>${q.terms.split('\n').filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
     ${annexList}
     ${settings.company.iban ? `<p class="p-iban">IBAN: <b>${esc(settings.company.iban)}</b>${settings.company.taxNo ? ' · VKN: ' + esc(settings.company.taxNo) : ''}</p>` : ''}
+    ${letter ? '<p class="p-lt-sal">Saygılarımızla,</p>' : ''}
     <section class="p-sign${stamp ? ' has-stamp' : ''}"><div>TadilatBodrum.com<span>Kaşe / İmza</span>${stamp ? `<img class="p-stamp" src="${stamp}" alt="Kaşe">` : ''}</div><div>Müşteri onayı<span>Ad Soyad / İmza / Tarih</span></div></section>
     ${annexPages}
     ${docFooter()}

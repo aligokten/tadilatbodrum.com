@@ -108,7 +108,7 @@ async function sharePdf(file, quiet = false) {
  * (bir sonraki içerikle birlikte yeni sayfaya geçer); alt bilgi ve sayfa numarası her sayfada yer alır.
  */
 const SPLIT = 'div.pdoc, section, table, tbody, ul, ol, .p-grid, .p-imgs, .p-find, .p-room, .p-notes';   // gerekirse bölünebilen kaplar
-const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
+const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-lt-total, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
 const isHeading = el => el.matches('h1, h2, h3, h4, thead');
 
 function shallowClone(src) {

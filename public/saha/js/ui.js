@@ -28,6 +28,7 @@ const P = {
   film: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   chevR: '<path d="m9 18 6-6-6-6"/>',
+  chevU: '<path d="m18 15-6-6-6 6"/>',
   back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
