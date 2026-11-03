@@ -25,6 +25,11 @@ export function quoteTotals(q) {
   const vat = q.showVat ? net * (+q.vatPct || 0) / 100 : 0;
   return { cost, profit, sub, disc, net, vat, total: net + vat };
 }
+/* KDV ibaresi: KDV eklenmemişse '+ KDV' / 'KDV hariçtir' yazısı tercihe bağlı (q.vatNote, varsayılan açık) */
+const vatNoteOn = q => !q.showVat && q.vatNote !== false;
+const plusVat = q => vatNoteOn(q) ? ' <small class="p-pvat">+ KDV</small>' : '';
+const vatTxt = q => q.showVat ? `KDV (%${q.vatPct}) dahildir` : vatNoteOn(q) ? 'KDV hariçtir' : '';
+const discTxt = q => q.discMode === 'amt' ? `${fmtMoney(quoteTotals(q).disc)} iskonto uygulanmıştır` : `%${fmtNum(q.discountPct)} iskonto uygulanmıştır`;
 const discLabel = q => q.discMode === 'amt' ? 'İskonto' : `İskonto (%${fmtNum(q.discountPct)})`;
 /* "birim fiyatlara dağıt" modunda müşteriye giden birim fiyat çarpanı */
 const priceK = q => q.profitMode === 'spread' ? 1 + (+q.profitPct || 0) / 100 : 1;
@@ -161,6 +166,7 @@ export function renderQuote(root, job, settings, save, ctx) {
             <label>KDV<div class="inp-unit"><input class="inp" type="number" data-q="vatPct" value="${q.vatPct}"><span>%</span></div></label>
           </div>
           <label class="check"><input type="checkbox" data-q="showVat" ${q.showVat ? 'checked' : ''}> KDV ekle</label>
+          ${q.showVat ? '' : `<label class="check"><input type="checkbox" data-q="vatNote" ${q.vatNote !== false ? 'checked' : ''}> Teklifte "+ KDV" ibaresi yazılsın <small class="muted">(KDV hariç olduğu belirtilir)</small></label>`}
           ${settings.company?.stamp ? `<label class="check"><input type="checkbox" data-q="stamp" ${q.stamp !== false ? 'checked' : ''}> Kaşeyi teklife ekle</label>` : `<p class="muted small">Teklife kaşe basmak için Ayarlar → Firma bilgileri'nden kaşe görseli yükleyin.</p>`}
           ${T.profit ? `<div class="tline"><span>Maliyet (kalemler)</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>+ ${fmtMoney(T.profit)}</b></div>` : ''}
           <div class="tline"><span>Ara toplam${T.profit ? ' (kâr dahil)' : ''}</span><b>${fmtMoney(T.sub)}</b></div>
@@ -221,7 +227,7 @@ export function renderQuote(root, job, settings, save, ctx) {
       if (q.discMode === 'amt') q.discountAmt = Math.round(cur * 100) / 100; else q.discountPct = sub ? Math.round(cur / sub * 10000) / 100 : 0;
       save(); redrawTotals(); return;
     }
-    if (k && ['discountPct', 'discountAmt', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
+    if (k && ['discountPct', 'discountAmt', 'vatPct', 'profitPct', 'profitMode', 'showVat', 'vatNote', 'includeRenders', 'stamp'].includes(k)) { q[k] = e.target.type === 'checkbox' ? e.target.checked : k === 'profitMode' ? e.target.value : +e.target.value; save(); redrawTotals(); }
     if (ik === 'cat' || ik === 'qty' || ik === 'price') redrawTotals();
   };
   root.onclick = async e => {
@@ -257,7 +263,7 @@ export function renderQuote(root, job, settings, save, ctx) {
       const lines = q.format === 'mektup' ? letterSync(q).heads.filter(h => (h.t || '').trim()).map(h => `• ${h.t.trim()}${q.letter.price === 'heads' && h.items.length ? ': ' + fmtMoney(headAmt(q, h)) : ''}`) : null;
       const txt = `Merhaba ${job.customer.name || ''},\nTadilatBodrum.com olarak ${job.customer.address || 'mülkünüz'} için hazırladığımız teklif ${lines ? 'kapsamındaki işler' : 'özeti'}:\n\n` + (lines ? lines.join('\n') :
         CATEGORIES.map(c => { const its = q.items.filter(i => i.cat === c.k); return its.length ? `• ${c.t}: ${fmtMoney(its.reduce((s, i) => s + i.qty * i.price, 0))}` : ''; }).filter(Boolean).join('\n')) +
-        `\n\n${lines ? 'Teklif bedeli' : 'Genel toplam'}: ${fmtMoney(T.total)}${q.showVat ? ' (KDV dahil)' : ' + KDV'}\nTeklif no: ${q.no} · Geçerlilik: ${q.validDays} gün\n\nDetaylı PDF teklifimizi ayrıca iletiyoruz. Sorularınız için buradayız.`;
+        `\n\n${lines ? 'Teklif bedeli' : 'Genel toplam'}: ${fmtMoney(T.total)}${q.showVat ? ' (KDV dahil)' : vatNoteOn(q) ? ' + KDV' : ''}\nTeklif no: ${q.no} · Geçerlilik: ${q.validDays} gün\n\nDetaylı PDF teklifimizi ayrıca iletiyoruz. Sorularınız için buradayız.`;
       window.open(waLink(job.customer.phone, txt), '_blank');
     }
     if (a === 'reset') {
@@ -429,8 +435,8 @@ function letterEnd(q, T, valid) {
   const L = letterSync(q), heads = L.price === 'heads';
   return `<section class="p-lt-total">
       ${heads && (T.disc || q.showVat) ? `<div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : ''}` : ''}
-      <div class="tline grand"><span>Teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
-      <p class="p-lt-note">${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${!heads && T.disc ? (q.discMode === 'amt' ? ` · ${fmtMoney(T.disc)} iskonto uygulanmıştır` : ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır`) : ''}.${L.words !== false ? ` <span>Yalnız: ${trWords(T.total)}${q.showVat ? '' : ' + KDV'}.</span>` : ''}</p>
+      <div class="tline grand"><span>Teklif bedeli</span><b>${fmtMoney(T.total)}${plusVat(q)}</b></div>
+      ${(() => { const t = [vatTxt(q), !heads && T.disc ? discTxt(q) : ''].filter(Boolean).join(' · '); return t || L.words !== false ? `<p class="p-lt-note">${t ? t + '.' : ''}${L.words !== false ? ` <span>Yalnız: ${trWords(T.total)}${vatNoteOn(q) ? ' + KDV' : ''}.</span>` : ''}</p>` : ''; })()}
     </section>
     <p class="p-intro">${esc((L.outro || '').trim() || letterOutroDef(valid)).replace(/\n/g, '<br>')}</p>`;
 }
@@ -486,14 +492,14 @@ async function printQuote(job, settings, ctx) {
     ${q.intro ? `<p class="p-intro">${esc(q.intro).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="p-table"><thead><tr><th>#</th><th>Açıklama</th><th class="r">Miktar</th><th>Birim</th>${brief ? '' : '<th class="r">Birim fiyat</th><th class="r">Tutar</th>'}</tr></thead><tbody>${rows}</tbody></table>
     ${brief ? `<section class="p-totals">
-      <div class="tline grand"><span>Toplam teklif bedeli</span><b>${fmtMoney(T.total)}</b></div>
-      <div class="tline"><span>${q.showVat ? `KDV (%${q.vatPct}) dahildir` : 'KDV hariçtir'}${T.disc ? (q.discMode === 'amt' ? ` · ${fmtMoney(T.disc)} iskonto uygulanmıştır` : ` · %${fmtNum(q.discountPct)} iskonto uygulanmıştır`) : ''}</span><b></b></div>
+      <div class="tline grand"><span>Toplam teklif bedeli</span><b>${fmtMoney(T.total)}${plusVat(q)}</b></div>
+      ${[vatTxt(q), T.disc ? discTxt(q) : ''].filter(Boolean).length ? `<div class="tline"><span>${[vatTxt(q), T.disc ? discTxt(q) : ''].filter(Boolean).join(' · ')}</span><b></b></div>` : ''}
     </section>` : `<section class="p-totals">
       ${T.profit && !spread ? `<div class="tline"><span>İş kalemleri toplamı</span><b>${fmtMoney(T.cost)}</b></div><div class="tline"><span>Genel giderler ve yüklenici kârı (%${fmtNum(q.profitPct)})</span><b>${fmtMoney(T.profit)}</b></div>` : ''}
       <div class="tline"><span>Ara toplam</span><b>${fmtMoney(T.sub)}</b></div>
       ${T.disc ? `<div class="tline"><span>${discLabel(q)}</span><b>− ${fmtMoney(T.disc)}</b></div>` : ''}
-      ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : '<div class="tline"><span>KDV</span><b>Hariç</b></div>'}
-      <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}</b></div>
+      ${q.showVat ? `<div class="tline"><span>KDV (%${q.vatPct})</span><b>${fmtMoney(T.vat)}</b></div>` : vatNoteOn(q) ? '<div class="tline"><span>KDV</span><b>Hariç</b></div>' : ''}
+      <div class="tline grand"><span>Genel toplam</span><b>${fmtMoney(T.total)}${plusVat(q)}</b></div>
     </section>`}`}
     ${q.notes ? `<section class="p-notes"><h4>Notlar</h4><p>${esc(q.notes).replace(/\n/g, '<br>')}</p></section>` : ''}
     ${letter ? '' : quoteScopeHtml(q)}
