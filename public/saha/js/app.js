@@ -5,6 +5,7 @@ import { openLocal, openCloud, openDemo, MODE_KEY, newJob, uid, compressImage } 
 import { STATUSES, statusOf, CATEGORIES, catOf, REQ_PRESETS, SEVERITY, sevOf, PHOTO_TAGS, ROOM_TYPES, INSPECTION, CHECK_STATES, UNITS, DEFAULT_SETTINGS } from './catalog.js';
 import { icon, gicon, esc, h, $, $$, toast, modal, confirmDlg, promptDlg, fmtMoney, fmtNum, fmtDate, telLink, waLink, bindFields, debounce, downloadBlob } from './ui.js';
 import { LOGO } from './brand.js';
+import { initHScroll, hsArrows } from './hscroll.js';
 import { renderRemindCard, renderRemindSettings, remindDialog, dueAll, REMIND_KINDS, team as teamOf } from './remind.js';
 import { renderSurvey, surveyProgress, surveyPrintHtml } from './survey.js';
 import { renderQuote, quoteTotals, printDoc, docHeader, docFooter, jobMetrics, newQuote } from './quote.js';
@@ -21,7 +22,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.11.03-1';
+export const APP_VERSION = '2026.11.03-2';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -480,9 +481,10 @@ function jobView(tab) {
         <span class="pill lg" style="--c:${s.c}">${s.t}</span>
       </div>
     </header>
-    <nav class="tabs" role="tablist">${TABS.map(t => `<a href="#/is/${j.id}/${t.k}" class="${t.k === tab ? 'on' : ''}" role="tab">${gicon(t.ic)}<span>${t.t}</span>${badge(t.k)}</a>`).join('')}</nav>
+    <div class="tabs-wrap" data-hs-arrows><nav class="tabs" role="tablist">${TABS.map(t => `<a href="#/is/${j.id}/${t.k}" class="${t.k === tab ? 'on' : ''}" role="tab">${gicon(t.ic)}<span>${t.t}</span>${badge(t.k)}</a>`).join('')}</nav></div>
     <section class="tab-body" id="tb"></section>`;
-  $('.tabs .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  { const nav = $('.tabs'), on = $('.tabs .on'); if (nav && on) nav.scrollLeft = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2; }   // seçili sekme ortada (sayfa kaymadan)
+  hsArrows($('.tabs-wrap'));
   const tb = $('#tb');
   ({ genel: tabGenel, talepler: tabTalepler, sorular: tabSorular, urun: tabUrun, anket: tabAnket, kesif: tabKesif, rolove: tabRolove, foto: tabFoto, teklif: tabTeklif, uygulama: tabUygulama }[tab] || tabGenel)(tb);
 }
@@ -1833,4 +1835,5 @@ async function migrateLocal(cloud) {
   finally { t.remove(); }
 }
 
+initHScroll();
 boot();
