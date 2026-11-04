@@ -63,14 +63,76 @@ function ensureAttach(q, job) {
 /* seçili ekler, listedeki sırayla (Ek-1, Ek-2…) */
 const attachOrdered = (job, q, ctx) => attachCands(job, ctx).filter(c => q.attach.includes(c.key));
 
+/* ═══ teklif arşivi: mevcut teklif arşive alınır, yeni teklif açılır; arşivdeki teklif görüntülenir / geri yüklenir ═══ */
+const FMT_T = { detayli: 'Ayrıntılı', ozet: 'Özet', mektup: 'Teklif mektubu' };
+const qClone = q => JSON.parse(JSON.stringify(q));
+const logQ = (job, text) => (job.log ||= []).unshift({ t: Date.now(), text });
+function nextQuoteNo(job) {
+  const ns = [job.quote, ...(job.quoteArchive || []).map(a => a.quote)].filter(Boolean).map(q => +(String(q.no || '').match(/-T(\d+)\s*$/)?.[1] || 0));
+  return `${job.code}-T${Math.max(0, ...ns) + 1}`;
+}
+function archiveCurrent(job, note = '') {
+  const q = job.quote; if (!q) return null;
+  const T = quoteTotals(q);
+  const a = { id: uid('qa'), at: Date.now(), note: note.trim(), no: q.no, rev: q.rev || 1, date: q.date, total: T.total, vat: !!q.showVat, format: q.format || 'detayli', n: q.items.length, quote: qClone(q) };
+  (job.quoteArchive ||= []).unshift(a);
+  return a;
+}
+/* yeni teklif: mevcutun kopyası (kalemler, şartlar, ayarlar) ya da boş; numara bir sonraki T, revizyon 1 */
+function freshQuote(job, settings, base) {
+  const q = base ? qClone(base) : newQuote(job, settings);
+  q.no = nextQuoteNo(job); q.date = new Date().toISOString().slice(0, 10); q.rev = 1;
+  delete q.revHist; delete q.firstDate; delete q.revNote; delete q.revCmp; delete q._revPrev;
+  return q;
+}
+function archHtml(job) {
+  const A = job.quoteArchive || [];
+  if (!A.length) return '';
+  return `<div class="card q-arch">
+    <div class="row-between"><h3>${icon('clock')}Teklif arşivi <span class="muted small">${A.length} teklif</span></h3></div>
+    <div class="q-arch-list">${A.map(a => `<div class="q-arch-it" data-qa="${a.id}">
+      <div class="q-arch-t"><b>${esc(a.no)}${a.rev > 1 ? ' / Rev.' + a.rev : ''}</b><span class="muted small">${fmtDate(a.date)} · ${esc(FMT_T[a.format] || 'Ayrıntılı')} · ${a.n} kalem · arşiv: ${fmtDate(a.at)}</span>
+        ${a.note ? `<span class="small q-arch-note">${esc(a.note)}</span>` : ''}</div>
+      <b class="q-arch-sum">${fmtMoney(a.total)}<small>${a.vat ? 'KDV dahil' : 'KDV hariç'}</small></b>
+      <div class="q-arch-op"><button class="btn btn-ghost btn-xs" data-qaop="view">${icon('print')}Görüntüle / PDF</button><button class="btn btn-ghost btn-xs" data-qaop="restore">${icon('rotate')}Geri yükle</button><button class="icon-btn sm danger" data-qaop="del" title="Arşivden sil">${icon('trash')}</button></div>
+    </div>`).join('')}</div>
+  </div>`;
+}
+/* arşiv düğmeleri (teklif ekranında ve teklif yokken) — işlendiyse true */
+async function archClick(e, root, job, settings, save, ctx) {
+  const op = e.target.closest('[data-qaop]')?.dataset.qaop; if (!op) return false;
+  const A = job.quoteArchive || [], i = A.findIndex(x => x.id === e.target.closest('[data-qa]').dataset.qa), a = A[i];
+  if (!a) return true;
+  if (op === 'view') { printQuote(job, settings, ctx, qClone(a.quote), 'Arşiv'); return true; }
+  if (op === 'del') {
+    const r = await modal({ title: 'Arşivden sil', body: `<p><b>${esc(a.no)}</b> numaralı arşiv teklifi kalıcı olarak silinecek. Emin misiniz?</p>`, actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Sil', cls: 'btn-danger' }] });
+    if (r?.k !== 'ok') return true;
+    A.splice(i, 1); logQ(job, `Arşivdeki teklif silindi: ${a.no}`);
+  }
+  if (op === 'restore') {
+    const cur = job.quote;
+    const r = await modal({ title: 'Arşivden geri yükle', body: `<p><b>${esc(a.no)}</b> (${fmtMoney(a.total)}) güncel teklif olarak açılacak.</p>${cur ? `<p class="muted small">Şu anki teklif (<b>${esc(cur.no)}</b>, ${fmtMoney(quoteTotals(cur).total)}) kaybolmaz; arşive alınır.</p>` : ''}`, actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Geri yükle', cls: 'btn-primary' }] });
+    if (r?.k !== 'ok') return true;
+    A.splice(i, 1);
+    if (cur) archiveCurrent(job, `${a.no} geri yüklenirken arşive alındı`);
+    job.quote = qClone(a.quote);
+    logQ(job, `Arşivden teklif geri yüklendi: ${a.no}`);
+    toast(`${a.no} güncel teklif olarak açıldı`);
+  }
+  save(); renderQuote(root, job, settings, save, ctx);
+  return true;
+}
+
 export function renderQuote(root, job, settings, save, ctx) {
   if (!job.quote) {
     root.innerHTML = `<div class="empty card">
       <div class="empty-ic">${icon('file')}</div><h3>Teklif henüz oluşturulmadı</h3>
       <p class="muted">Fiyat kütüphanesinden kalem ekleyin; metrajlar rölöve planından otomatik gelir.</p>
-      <button class="btn btn-primary" data-newq>${icon('plus')}Teklif oluştur</button></div>`;
+      <button class="btn btn-primary" data-newq>${icon('plus')}Teklif oluştur</button></div>${archHtml(job)}`;
+    root.oninput = root.onchange = null;
+    root.onclick = e => archClick(e, root, job, settings, save, ctx);
     $('[data-newq]', root).onclick = () => {
-      job.quote = newQuote(job, settings);
+      job.quote = (job.quoteArchive || []).length ? freshQuote(job, settings) : newQuote(job, settings);
       // anket kapsamındaki işler için başlangıç kalemleri öner
       save(); renderQuote(root, job, settings, save, ctx);
     };
@@ -181,10 +243,12 @@ export function renderQuote(root, job, settings, save, ctx) {
               <option value="mektup" ${q.format === 'mektup' ? 'selected' : ''}>Teklif mektubu — iş başlıkları ve teklif bedeli (metraj yok)</option></select></label>
             <button class="btn btn-primary" data-act="print">${icon('print')}Teklifi yazdır / PDF</button>
             <button class="btn btn-ghost" data-act="wa">${icon('chat')}WhatsApp ile gönder</button>
+            <button class="btn btn-ghost" data-act="arch">${icon('clock')}Arşive al, yeni teklif oluştur</button>
             <button class="btn btn-ghost btn-sm danger-t" data-act="reset">${icon('trash')}Teklifi sil</button>
           </div>
         </div>
       </div>`;
+    root.insertAdjacentHTML('beforeend', archHtml(job));
     $$('textarea.q-desc', root).forEach(autoGrow);
     loadThumbs();
   };
@@ -238,6 +302,25 @@ export function renderQuote(root, job, settings, save, ctx) {
       if (op === 'dup') q.items.splice(i + 1, 0, { ...it, id: uid('q') });
       if (op === 'met') it.qty = +(met[it.qtyKey] || 0).toFixed(2);
       save(); redrawTotals(); return;
+    }
+    if (await archClick(e, root, job, settings, save, ctx)) return;
+    if (a === 'arch') {
+      const T = quoteTotals(q);
+      const r = await modal({ title: 'Teklifi arşive al', body: `
+        <p><b>${esc(q.no)}${q.rev > 1 ? ' / Rev.' + q.rev : ''}</b> · ${fmtDate(q.date)} · ${fmtMoney(T.total)} — bu teklif değiştirilmeden arşivde saklanır; istediğiniz zaman görüntüleyebilir, PDF alabilir ya da geri yükleyebilirsiniz.</p>
+        <label>Arşiv notu (isteğe bağlı)<input class="inp" id="qaNote" placeholder="Örn. Müşteri bütçeyi yüksek buldu, kapsam daraltılacak"></label>
+        <div class="col" style="gap:6px;margin-top:6px"><b class="small">Yeni teklif (${esc(nextQuoteNo(job))})</b>
+          <label class="check"><input type="radio" name="qaNew" value="copy" checked> Bu teklifin kopyasıyla başla <small class="muted">(kalemler, fiyatlar, şartlar ve ayarlar)</small></label>
+          <label class="check"><input type="radio" name="qaNew" value="blank"> Boş teklif</label></div>`,
+        actions: [{ k: 'no', t: 'Vazgeç' }, { k: 'ok', t: 'Arşive al ve yeni teklif aç', cls: 'btn-primary' }] });
+      if (r?.k !== 'ok') return;
+      const copy = r.el.querySelector('[name="qaNew"]:checked')?.value !== 'blank';
+      const arc = archiveCurrent(job, $('#qaNote', r.el).value || '');
+      job.quote = freshQuote(job, settings, copy ? q : null);
+      logQ(job, `Teklif arşivlendi: ${arc.no} (${fmtMoney(arc.total)}) · yeni teklif ${job.quote.no}`);
+      save(); renderQuote(root, job, settings, save, ctx); scrollTo(0, 0);
+      toast(`${arc.no} arşive alındı · ${job.quote.no} açıldı`);
+      return;
     }
     const lop = e.target.closest('[data-lhop]')?.dataset.lhop;
     if (lop) {
@@ -462,8 +545,8 @@ export const docFooter = () => `<footer class="p-foot">
   <div class="p-badges"><span>${docIcon('shield', '#00AFB0')}Güvenilir Ustalar</span><span>${docIcon('award', '#EB591F')}Kaliteli Malzeme</span><span>${docIcon('clock', '#00AFB0')}Zamanında Teslim</span></div>
   <div class="p-bar"></div></footer>`;
 
-async function printQuote(job, settings, ctx) {
-  const q = job.quote, T = quoteTotals(q), c = job.customer, stamp = q.stamp !== false && settings.company?.stamp;
+async function printQuote(job, settings, ctx, q = job.quote, tag = '') {
+  const T = quoteTotals(q), c = job.customer, stamp = q.stamp !== false && settings.company?.stamp;
   const valid = new Date(q.date); valid.setDate(valid.getDate() + (+q.validDays || 0));
   // ekler: liste teklifte, her biri ayrı tam sayfa (plan yüksek çözünürlüklü, sayfa oranında)
   ensureAttach(q, job);
@@ -510,5 +593,5 @@ async function printQuote(job, settings, ctx) {
     ${annexPages}
     ${docFooter()}
   </div>`;
-  printDoc(html, `Teklif ${q.no} - ${c.name || ''}`);
+  printDoc(html, `${tag ? tag + ' · ' : ''}Teklif ${q.no} - ${c.name || ''}`);
 }
