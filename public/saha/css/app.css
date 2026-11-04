@@ -1254,3 +1254,13 @@ h3 .gi{width:30px;height:30px;margin:-4px 2px -4px -4px}
 .p-letter.fit3 .p-foot{margin-top:6px}.p-letter.fit3 .p-badges{padding:4px 0}
 .p-lt-total .tline.grand:first-child{border-top:0;margin-top:0;padding-top:2px}
 .p-pvat{font-size:.62em;font-weight:700;margin-left:4px;color:inherit;white-space:nowrap}
+
+/* teklif arşivi */
+.q-arch h3{display:flex;align-items:center;gap:8px}
+.q-arch-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.q-arch-it{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.q-arch-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.q-arch-note{color:var(--ink);font-style:italic}
+.q-arch-sum{text-align:right;white-space:nowrap}.q-arch-sum small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+.q-arch-op{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:700px){.q-arch-it{grid-template-columns:1fr auto}.q-arch-op{grid-column:1/-1;justify-content:flex-start}}
