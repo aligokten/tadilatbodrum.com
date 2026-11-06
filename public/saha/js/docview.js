@@ -9,6 +9,10 @@ import { icon, esc, h, $, $$, toast, downloadBlob } from './ui.js';
 const A4_W = 794;                 // px (96 dpi'de 210 mm)
 const MARGIN_MM = 10;
 const PAGE_H = Math.round(A4_W * (297 - 2 * MARGIN_MM) / (210 - 2 * MARGIN_MM)); // sayfa başına içerik yüksekliği (px)
+/* yatay A4 belgeler (.pdoc.p-land: paftalar) */
+const A4L_W = 1123, PAGE_HL = Math.round(A4L_W * (210 - 2 * MARGIN_MM) / (297 - 2 * MARGIN_MM));
+const isLand = html => /class="pdoc[^"]*\bp-land\b/.test(html);
+const geo = html => isLand(html) ? { land: true, W: A4L_W, H: PAGE_HL, mw: 297, mh: 210 } : { land: false, W: A4_W, H: PAGE_H, mw: 210, mh: 297 };
 
 let libs = null;
 function loadScript(src) {
@@ -70,12 +74,12 @@ export function openDocument(html, title = 'TadilatBodrum') {
       </div>
     </header>
     <div class="dv-status" hidden></div>
-    <div class="dv-scroll"><div class="dv-page">${html}</div></div>
+    <div class="dv-scroll"><div class="dv-page${isLand(html) ? ' land' : ''}">${html}</div></div>
   </div>`);
   document.body.append(ov);
   document.body.classList.add('dv-open');
   const page = $('.dv-page', ov), status = $('.dv-status', ov);
-  const fit = () => { page.style.zoom = Math.min(1, (ov.clientWidth - 24) / A4_W); };
+  const fit = () => { page.style.zoom = Math.min(1, (ov.clientWidth - 24) / geo(html).W); };
   fit(); addEventListener('resize', fit);
   // tek sayfaya sığdırma ölçümü bitince önizleme / yazdırma / PDF sıkılaştırılmış belgeyle
   fitOnePage(html).then(x => { if (x !== html) { html = x; page.innerHTML = x; } });
@@ -88,7 +92,7 @@ export function openDocument(html, title = 'TadilatBodrum') {
   $('[data-print]', ov).onclick = () => {
     let p = $('#printArea');
     if (!p) { p = h('<div id="printArea"></div>'); document.body.append(p); }
-    p.innerHTML = printHtml(html);
+    p.innerHTML = (isLand(html) ? '<style>@page{size:A4 landscape;margin:10mm}</style>' : '') + printHtml(html);
     const old = document.title; document.title = title;
     try { window.print(); } catch { toast('Bu cihaz yazdırmayı desteklemiyor — "PDF oluştur" kullanın', 'err'); }
     setTimeout(() => { document.title = old; }, 1000);
@@ -143,7 +147,7 @@ async function sharePdf(file, quiet = false) {
  * (bir sonraki içerikle birlikte yeni sayfaya geçer); alt bilgi ve sayfa numarası her sayfada yer alır.
  */
 const SPLIT = 'div.pdoc, section, table, tbody, ul, ol, .p-grid, .p-imgs, .p-find, .p-room, .p-notes';   // gerekirse bölünebilen kaplar
-const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-lt-total, .p-lt-end, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
+const KEEP = 'tr, li, p, figure, img, h1, h2, h3, h4, .p-head, .p-title, .p-cust, .p-sign, .p-totals, .p-lt-total, .p-lt-end, .iso-sheet, .p-plan, .p-iban, .p-intro'; // asla bölünmeyenler
 const isHeading = el => el.matches('h1, h2, h3, h4, thead');
 
 function shallowClone(src) {
@@ -216,7 +220,8 @@ function paginate(src, makePage) {
 /* belgeyi A4 sayfalarına yerleştir, her sayfayı çiz, PDF üret */
 export async function buildPdf(html, title, onProgress) {
   const { html2canvas, jsPDF } = await loadLibs();
-  const host = h(`<div class="pdf-render"><div class="pdoc-wrap">${html}</div><div class="pdf-pages"></div></div>`);
+  const G = geo(html);
+  const host = h(`<div class="pdf-render" style="width:${G.W}px"><div class="pdoc-wrap">${html}</div><div class="pdf-pages"></div></div>`);
   document.body.append(host);
   try {
     const el = $('.pdoc-wrap', host), out = $('.pdf-pages', host);
@@ -239,22 +244,22 @@ export async function buildPdf(html, title, onProgress) {
     const footHtml = foot ? foot.outerHTML : '';
     const extra = [...doc.classList].filter(c => c !== 'pdoc').join(' ');   // belge sınıfları (p-letter, fit…) sayfa kabına
     const makePage = () => {
-      const pg = h(`<div class="pdf-page" style="height:${PAGE_H}px"><div class="pdoc pdf-body ${extra}"></div><div class="pdoc pdf-foot ${extra}">${footHtml}<div class="pdf-num"><span>${esc(title)}</span><b></b></div></div></div>`);
+      const pg = h(`<div class="pdf-page" style="height:${G.H}px;width:${G.W}px"><div class="pdoc pdf-body ${extra}"></div><div class="pdoc pdf-foot ${extra}">${footHtml}${G.land ? '' : `<div class="pdf-num"><span>${esc(title)}</span><b></b></div>`}</div></div>`);
       out.append(pg);
       return { el: pg, body: $('.pdf-body', pg) };
     };
     const pages = paginate(doc, makePage);
     el.remove();
-    pages.forEach((p, i) => { $('.pdf-num b', p.el).textContent = `${i + 1} / ${pages.length}`; });
+    pages.forEach((p, i) => { const b = $('.pdf-num b', p.el); if (b) b.textContent = `${i + 1} / ${pages.length}`; });
     await waitImages(out);
     onProgress?.(0.2);
 
     const scale = Math.min(2, Math.max(1.5, devicePixelRatio || 1));
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+    const pdf = new jsPDF({ orientation: G.land ? 'l' : 'p', unit: 'mm', format: 'a4', compress: true });
     for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i].el, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: A4_W, width: A4_W, height: PAGE_H });
+      const canvas = await html2canvas(pages[i].el, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: G.W, width: G.W, height: G.H });
       if (i) pdf.addPage();
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', MARGIN_MM, MARGIN_MM, 210 - 2 * MARGIN_MM, 297 - 2 * MARGIN_MM, undefined, 'FAST');
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', MARGIN_MM, MARGIN_MM, G.mw - 2 * MARGIN_MM, G.mh - 2 * MARGIN_MM, undefined, 'FAST');
       onProgress?.(0.2 + 0.8 * (i + 1) / pages.length);
     }
     return pdf.output('blob');

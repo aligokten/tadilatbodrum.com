@@ -22,7 +22,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.11.04-1';
+export const APP_VERSION = '2026.11.06-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -884,6 +884,7 @@ function tabRolove(tb) {
           ${has ? `<a class="btn btn-ghost btn-sm" href="${url}&v=3d">${icon('cube')}3D</a><a class="btn btn-ghost btn-sm" href="${url}&v=3d&r=1">${icon('sparkle')}Render</a>` : ''}
           ${d.main && !has ? `<a class="btn btn-ghost btn-sm" href="${url}&import=1">${icon('upload')}DXF / PDF aktar</a><button class="btn btn-ghost btn-sm" data-tpl>${icon('layers')}Örnek plan</button>` : ''}
           ${hasJn(d.plan) ? `<button class="btn btn-ghost btn-sm" data-dwa="jn" title="Kapı / pencere listesi, ölçülü (PDF)">${icon('print')}Doğrama listesi</button>` : ''}
+          ${anyLv(d.plan, 'rooms') ? `<button class="btn btn-ghost btn-sm" data-dwa="iso" title="Her mahal için izometrik görünüş ve yapılacak işler (yatay A4 PDF)">${icon('cube')}Mahal paftaları</button>` : ''}
           ${anyLv(d.plan, 'rooms') ? `<button class="btn btn-ghost btn-sm" data-dwa="fl" title="Zemin kaplaması malzemelerine göre sipariş listesi (PDF)">${icon('layers')}Zemin sipariş listesi</button>` : ''}
           ${has ? `<button class="btn btn-ghost btn-sm" data-dwa="copy" title="Kopyasını oluştur">${icon('copy')}</button>` : ''}
           ${d.main ? '' : `<button class="btn btn-ghost btn-sm" data-dwa="ren" title="Yeniden adlandır">${icon('edit')}</button><button class="btn btn-ghost btn-sm danger-t" data-dwa="del" title="Sil">${icon('trash')}</button>`}
@@ -909,6 +910,7 @@ function tabRolove(tb) {
   $$('[data-dwa]', tb).forEach(b => b.onclick = async () => {
     const id = b.closest('[data-dw]').dataset.dw, d = drawingOf(j, id), a = b.dataset.dwa;
     if (a === 'jn') return printJoinery(j, d, d.plan);
+    if (a === 'iso') { const m = await import('./isosheet.js'); return m.isoSheetsDialog(j, d, S.settings, save, printDoc); }
     if (a === 'fl') return printFloorOrder(j, d, d.plan);
     if (a === 'del') {
       if (!await confirmDlg(`"${d.name}" çizimi silinecek.`)) return;
