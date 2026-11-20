@@ -278,31 +278,51 @@ için o iş akışında **Run workflow** → *tomorrow* / *today*. Fonksiyon her
 GitHub'ın yayın hizmet hesabı çağırabilir. Ekip ve şablonlar saha uygulamasında
 *Ayarlar → Keşif ekibi ve randevu hatırlatma*'dan, keşfe gidecek kişi iş sayfasından seçilir.
 
-## 7) Windows uygulaması (TadilatBodrum Saha .exe)
+## 7) Masaüstü uygulaması (Windows .exe / macOS .dmg)
 
-Windows uygulaması `desktop/` klasöründedir. İçeriği canlı siteden (`kesif.tadilatbodrum.com`)
-açtığı için **web'e yaptığınız her `firebase deploy` Windows uygulamasında da hemen geçerlidir**;
+Masaüstü uygulaması `desktop/` klasöründedir (Electron). İçeriği canlı siteden (`kesif.tadilatbodrum.com`)
+açtığı için **web'e yapılan her yayın Windows ve Mac uygulamasında da hemen geçerlidir**;
 açık pencerede "Yeni sürüm hazır — Yenile" bildirimi çıkar.
 
-Uygulamanın kendisi (pencere, menü, kurulum) değiştiğinde yeni Windows sürümü yayımlanır.
-Kurulu uygulamalar bunu açılışta ve 4 saatte bir denetler, arka planda indirir ve kurar.
+Uygulamanın kendisi (pencere, menü, kurulum) değiştiğinde yeni masaüstü sürümü yayımlanır.
+- **Windows:** kurulu uygulama açılışta ve 4 saatte bir denetler, arka planda indirir ve kurar.
+- **macOS:** uygulama Apple geliştirici kimliğiyle imzalı olmadığından otomatik kurulum yapılamaz;
+  yeni sürüm çıkınca bildirim gelir, "İndirme sayfasını aç" ile yeni `.dmg` indirilip kurulur.
 
-**Yeni Windows sürümü yayımlama:**
-1. `desktop/package.json` içindeki `"version"` değerini artırın (ör. `1.0.0` → `1.0.1`) ve main'e gönderin.
-2. GitHub → **Actions** → **Windows uygulaması** → **Run workflow** (main) ile çalıştırın.
-   Ya da etiketle: `git tag desktop-v1.0.1` ve `git push origin desktop-v1.0.1`.
-3. Birkaç dakika sonra kurulum dosyası **Releases** sayfasında yayımlanır:
+**Yeni sürüm yayımlama (Windows + macOS birlikte):**
+1. `desktop/package.json` içindeki `"version"` değerini artırın (ör. `1.1.0` → `1.1.1`) ve main'e gönderin.
+2. GitHub → **Actions** → **Masaüstü uygulaması** → **Run workflow** (main) ile çalıştırın.
+   Ya da etiketle: `git tag desktop-v1.1.1` ve `git push origin desktop-v1.1.1`.
+3. Önce Windows, ardından macOS derlenir; birkaç dakika sonra dosyalar **Releases** sayfasındadır:
    https://github.com/aligokten/tadilatbodrum.com/releases/latest
 
-**Kurulum:** Releases sayfasından `TadilatBodrum-Saha-Kurulum-<sürüm>.exe` indirilir.
-Dosya kod imzalı olmadığı için Windows ilk çalıştırmada "Windows bilgisayarınızı korudu"
+**Windows kurulumu:** `TadilatBodrum-Saha-Kurulum-<sürüm>.exe` indirilir.
+Dosya kod imzalı olmadığı için ilk çalıştırmada "Windows bilgisayarınızı korudu"
 uyarısı verebilir: **Ek bilgi → Yine de çalıştır**.
 
-**Yerelde derleme (isteğe bağlı, Windows'ta):**
+**macOS kurulumu:** `TadilatBodrum-Saha-<sürüm>.dmg` indirilir (tek dosya; Intel ve Apple Silicon M1/M2/M3/M4
+Mac'lerde çalışır, macOS 11 ve üzeri). Açılan pencerede uygulama simgesi **Applications / Uygulamalar**
+klasörüne sürüklenir. Uygulama Apple tarafından onaylanmış (notarize) olmadığından ilk açılışta uyarı çıkar:
+1. Uygulamayı bir kez açmayı deneyin, uyarıda **Bitti / Tamam** deyin.
+2. **Sistem Ayarları → Gizlilik ve Güvenlik** → aşağıda "TadilatBodrum Saha engellendi" satırında
+   **Yine de Aç** → parolanızı girin. (Eski macOS'ta: Finder'da simgeye sağ tık → **Aç** → **Aç**.)
+3. "Hasarlı" uyarısı çıkarsa Terminal'de bir kez: `xattr -cr "/Applications/TadilatBodrum Saha.app"`
+
+Bu adımlar yalnızca ilk kurulumda (ve her yeni .dmg'de) gerekir. İleride bir Apple Developer hesabı
+(yıllık ücretli) alınırsa sertifika GitHub'a eklenerek uyarısız kurulum ve Mac'te otomatik güncelleme açılabilir.
+
+**Yerelde derleme (isteğe bağlı):**
 ```powershell
+# Windows
 cd $HOME\Desktop\tadilatbodrum-guncel\desktop
 npm ci
 npm run dist        # dist\TadilatBodrum-Saha-Kurulum-<sürüm>.exe
+```
+```bash
+# macOS
+cd ~/Desktop/tadilatbodrum-guncel/desktop
+npm ci
+npm run dist:mac    # dist/TadilatBodrum-Saha-<sürüm>.dmg
 ```
 
 ---

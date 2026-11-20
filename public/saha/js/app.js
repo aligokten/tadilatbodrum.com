@@ -22,7 +22,7 @@ import { samplePlan, demoJobs, DEMO_USER, DEMO_PASS, DEMO_MODE } from './demo.js
 
 const DISTRICTS = ['Bodrum Merkez', 'Bitez', 'Gümbet', 'Ortakent', 'Yahşi', 'Turgutreis', 'Akyarlar', 'Gümüşlük', 'Yalıkavak', 'Gündoğan', 'Göltürkbükü', 'Torba', 'Gölköy', 'Konacık', 'Güvercinlik', 'Mumcular', 'Dereköy', 'Kadıkalesi', 'Peksimet', 'Gürece'];
 
-export const APP_VERSION = '2026.11.06-1';
+export const APP_VERSION = '2026.11.20-1';
 export const LICENSE = {
   owner: 'Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.',
   developer: 'SAGG+ App',
@@ -1746,18 +1746,23 @@ function settingsView() {
     <div class="card about">
       <h3>${gicon('shield')}Hakkında</h3>
       <dl class="about-dl">
-        <dt>Program</dt><dd>TadilatBodrum Saha · Sürüm ${APP_VERSION}${window.tbDesktop ? ` · Windows uygulaması ${esc(window.tbDesktop.version)}` : ''}</dd>
+        <dt>Program</dt><dd>TadilatBodrum Saha · Sürüm ${APP_VERSION}${window.tbDesktop ? ` · ${window.tbDesktop.platform === 'darwin' ? 'macOS' : 'Windows'} uygulaması ${esc(window.tbDesktop.version)}` : ''}</dd>
         <dt>Lisans sahibi</dt><dd>${esc(LICENSE.owner)}</dd>
         <dt>Geliştirici</dt><dd>${esc(LICENSE.developer)}</dd>
         <dt>İletişim</dt><dd><a href="https://www.saggplus.com" target="_blank" rel="noopener">www.saggplus.com</a> · <a href="mailto:info@saggplus.com">info@saggplus.com</a></dd>
       </dl>
       <p class="muted small">© ${new Date().getFullYear()} ${esc(LICENSE.owner)}. Tüm hakları saklıdır.</p>
-      ${window.tbDesktop ? `<div class="row wrap"><button class="btn btn-ghost btn-sm" data-dupd>${icon('download')}Güncellemeleri denetle</button><span class="muted small" id="dupdS"></span></div>` : `<p class="muted small">Windows uygulaması: <a href="https://github.com/aligokten/tadilatbodrum.com/releases/latest" target="_blank" rel="noopener">kurulum dosyasını indir</a></p>`}
+      ${window.tbDesktop ? `<div class="row wrap"><button class="btn btn-ghost btn-sm" data-dupd>${icon('download')}Güncellemeleri denetle</button><span class="muted small" id="dupdS"></span></div>` : `<p class="muted small">Masaüstü uygulaması (Windows / macOS): <a href="https://github.com/aligokten/tadilatbodrum.com/releases/latest" target="_blank" rel="noopener">kurulum dosyasını indir</a> — Windows için <b>.exe</b>, Mac için <b>.dmg</b></p>`}
     </div>`;
   const du = $('[data-dupd]');
   if (du) du.onclick = async () => {
     const st = $('#dupdS'); st.textContent = 'Denetleniyor…';
-    try { st.textContent = await window.tbDesktop.checkUpdates(); } catch (e) { st.textContent = 'Denetlenemedi: ' + (e.message || e); }
+    try {
+      st.textContent = await window.tbDesktop.checkUpdates();
+      // macOS: yeni sürüm otomatik kurulmaz, indirme sayfası açılır
+      if (window.tbDesktop.platform === 'darwin' && /Yeni sürüm/.test(st.textContent) && window.tbDesktop.openReleases) st.insertAdjacentHTML('beforeend', ' <a href="#" data-drel>İndirme sayfası</a>');
+      $('[data-drel]')?.addEventListener('click', e => { e.preventDefault(); window.tbDesktop.openReleases(); });
+    } catch (e) { st.textContent = 'Denetlenemedi: ' + (e.message || e); }
   };
   const persist = debounce(() => S.be.saveSettings(S.settings).then(() => toast('Ayarlar kaydedildi')).catch(e => toast(e.message, 'err')), 900);
   bindFields(view(), st, persist);

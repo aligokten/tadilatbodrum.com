@@ -1,7 +1,8 @@
-/* ═══ TadilatBodrum Saha — Windows uygulaması ═══
+/* ═══ TadilatBodrum Saha — Windows / macOS uygulaması ═══
  * Uygulama içeriği canlı siteden (kesif.tadilatbodrum.com) yüklenir: web'e yayınlanan her geliştirme
  * Windows uygulamasında da hemen geçerli olur, servis çalışanı sayesinde çevrimdışı da açılır.
- * Uygulamanın kendisi (bu kabuk) GitHub Releases üzerinden otomatik güncellenir.
+ * Uygulamanın kendisi (bu kabuk) GitHub Releases üzerinden güncellenir: Windows'ta otomatik indirilip kurulur;
+ * macOS'ta (Apple geliştirici imzası olmadığından otomatik kurulum yapılamaz) yeni sürüm bildirilir, indirme sayfası açılır.
  *
  * Program lisans sahibi: Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti.
  * Program geliştirici: SAGG+ App — www.saggplus.com — info@saggplus.com
@@ -16,8 +17,11 @@ const LIC = require('./license.json');
 const SITES = ['https://kesif.tadilatbodrum.com/', 'https://tadilatbodrum-kesif.web.app/'];
 const ORIGINS = SITES.map(u => new URL(u).origin);
 const UPDATE_EVERY = 4 * 60 * 60 * 1000;   // 4 saatte bir kabuk güncellemesi denetle
+const MAC = process.platform === 'darwin';
+const RELEASES = 'https://github.com/aligokten/tadilatbodrum.com/releases/latest';
+const K = k => (MAC ? 'Cmd+' : 'Ctrl+') + k;   // menü kısayolları
 
-app.setAppUserModelId('com.saggplus.tadilatbodrum.saha');
+if (!MAC) app.setAppUserModelId('com.saggplus.tadilatbodrum.saha');
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 let win = null, siteIdx = 0, manualCheck = false, updateReady = null;
@@ -36,12 +40,13 @@ function createWindow() {
     x: st.x, y: st.y, width: st.width || 1400, height: st.height || 900, minWidth: 380, minHeight: 560,
     title: 'TadilatBodrum Saha', icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#F5F6F7', show: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, spellcheck: true, additionalArguments: ['--tb-version=' + app.getVersion()] },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, spellcheck: true, additionalArguments: ['--tb-version=' + app.getVersion(), '--tb-platform=' + process.platform] },
   });
   if (st.max) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.on('close', saveState);
-  win.webContents.session.setSpellCheckerLanguages(['tr-TR']);
+  win.on('closed', () => { win = null; });
+  if (!MAC) win.webContents.session.setSpellCheckerLanguages(['tr-TR']);   // macOS sistem yazım denetimini kullanır
 
   // site dışı bağlantılar varsayılan tarayıcıda açılsın
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -66,45 +71,57 @@ const safeOrigin = u => { try { return new URL(u).origin; } catch { return ''; }
 
 /* ── menü ── */
 function buildMenu() {
+  const reloadAll = async () => { await session.defaultSession.clearCache(); win?.webContents.reloadIgnoringCache(); };
   const tpl = [
+    // macOS: uygulama menüsü (Hakkında, güncelleme, gizle, çık)
+    ...(MAC ? [{ label: app.name, submenu: [
+      { label: 'TadilatBodrum Saha Hakkında', click: about },
+      { label: 'Güncellemeleri denetle…', click: () => checkUpdates(true) },
+      { type: 'separator' },
+      { label: 'Servisler', role: 'services' },
+      { type: 'separator' },
+      { label: 'TadilatBodrum Saha’yı gizle', role: 'hide' },
+      { label: 'Diğerlerini gizle', role: 'hideOthers' },
+      { label: 'Tümünü göster', role: 'unhide' },
+      { type: 'separator' },
+      { label: 'TadilatBodrum Saha’dan çık', role: 'quit' },
+    ] }] : []),
     { label: 'Dosya', submenu: [
-      { label: 'Yenile', accelerator: 'F5', click: () => win?.webContents.reload() },
-      { label: 'Önbelleği temizle ve yenile', accelerator: 'Ctrl+F5', click: async () => {
-        await session.defaultSession.clearCache(); win?.webContents.reloadIgnoringCache();
-      } },
+      { label: 'Yenile', accelerator: MAC ? 'Cmd+R' : 'F5', click: () => win?.webContents.reload() },
+      { label: 'Önbelleği temizle ve yenile', accelerator: MAC ? 'Cmd+Shift+R' : 'Ctrl+F5', click: reloadAll },
       { type: 'separator' },
-      { label: 'Yazdır…', accelerator: 'Ctrl+P', click: () => win?.webContents.print() },
-      { type: 'separator' },
-      { label: 'Çıkış', role: 'quit' },
+      { label: 'Yazdır…', accelerator: K('P'), click: () => win?.webContents.print() },
+      ...(MAC ? [{ type: 'separator' }, { label: 'Pencereyi kapat', role: 'close' }] : [{ type: 'separator' }, { label: 'Çıkış', role: 'quit' }]),
     ] },
     { label: 'Düzen', submenu: [
-      // kısayollar sayfaya bırakılır: rölöve editörü Ctrl+Z/Y/X/C/V/A ile kendi geri al / kopyala / yapıştır işlemlerini yapar
-      { label: 'Geri al', role: 'undo', accelerator: 'Ctrl+Z', registerAccelerator: false },
-      { label: 'Yinele', role: 'redo', accelerator: 'Ctrl+Y', registerAccelerator: false }, { type: 'separator' },
-      { label: 'Kes', role: 'cut', accelerator: 'Ctrl+X', registerAccelerator: false },
-      { label: 'Kopyala', role: 'copy', accelerator: 'Ctrl+C', registerAccelerator: false },
-      { label: 'Yapıştır', role: 'paste', accelerator: 'Ctrl+V', registerAccelerator: false },
-      { label: 'Tümünü seç', role: 'selectAll', accelerator: 'Ctrl+A', registerAccelerator: false },
+      // geri al / yinele sayfaya bırakılır: rölöve editörü Ctrl/Cmd+Z/Y ile kendi geri al işlemini yapar
+      { label: 'Geri al', role: 'undo', accelerator: K('Z'), registerAccelerator: false },
+      { label: 'Yinele', role: 'redo', accelerator: MAC ? 'Cmd+Shift+Z' : 'Ctrl+Y', registerAccelerator: false }, { type: 'separator' },
+      // macOS'ta kes / kopyala / yapıştır menüde kayıtlı olmalı (yoksa metin alanlarında Cmd+C/V çalışmaz)
+      { label: 'Kes', role: 'cut', accelerator: K('X'), registerAccelerator: MAC },
+      { label: 'Kopyala', role: 'copy', accelerator: K('C'), registerAccelerator: MAC },
+      { label: 'Yapıştır', role: 'paste', accelerator: K('V'), registerAccelerator: MAC },
+      { label: 'Tümünü seç', role: 'selectAll', accelerator: K('A'), registerAccelerator: MAC },
     ] },
     { label: 'Görünüm', submenu: [
-      { label: 'Yakınlaştır', role: 'zoomIn', accelerator: 'Ctrl+=' }, { label: 'Uzaklaştır', role: 'zoomOut' }, { label: 'Gerçek boyut', role: 'resetZoom' },
+      { label: 'Yakınlaştır', role: 'zoomIn', accelerator: K('=') }, { label: 'Uzaklaştır', role: 'zoomOut' }, { label: 'Gerçek boyut', role: 'resetZoom' },
       { type: 'separator' }, { label: 'Tam ekran', role: 'togglefullscreen' },
-      { type: 'separator' }, { label: 'Geliştirici araçları', role: 'toggleDevTools', accelerator: 'Ctrl+Shift+I' },
+      { type: 'separator' }, { label: 'Geliştirici araçları', role: 'toggleDevTools', accelerator: MAC ? 'Alt+Cmd+I' : 'Ctrl+Shift+I' },
     ] },
-    { label: 'Yardım', submenu: [
-      { label: 'Güncellemeleri denetle', click: () => checkUpdates(true) },
-      { type: 'separator' },
+    ...(MAC ? [{ label: 'Pencere', role: 'windowMenu' }] : []),
+    { label: 'Yardım', role: MAC ? 'help' : undefined, submenu: [
+      ...(MAC ? [] : [{ label: 'Güncellemeleri denetle', click: () => checkUpdates(true) }, { type: 'separator' }]),
       { label: 'www.saggplus.com', click: () => shell.openExternal(LIC.web) },
       { label: 'E-posta: ' + LIC.email, click: () => shell.openExternal('mailto:' + LIC.email) },
-      { type: 'separator' },
-      { label: 'Hakkında', click: about },
+      { label: 'Tüm sürümler (Windows / macOS)', click: () => shell.openExternal(RELEASES) },
+      ...(MAC ? [] : [{ type: 'separator' }, { label: 'Hakkında', click: about }]),
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(tpl));
 }
 
 function about() {
-  dialog.showMessageBox(win, {
+  dialog.showMessageBox(win || undefined, {
     type: 'info', title: 'Hakkında', icon: path.join(__dirname, 'build', 'icon.png'),
     message: `TadilatBodrum Saha ${app.getVersion()}`,
     detail: `Program lisans sahibi:\n${LIC.owner}\n\nProgram geliştirici: ${LIC.developer}\n\n© ${new Date().getFullYear()} ${LIC.owner}\nTüm hakları saklıdır.\n\n${LIC.web.replace('https://', '')} - ${LIC.email}`,
@@ -113,9 +130,23 @@ function about() {
 }
 
 /* ── otomatik güncelleme (uygulama kabuğu) ── */
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.on('update-available', i => send(`Yeni sürüm ${i.version} indiriliyor…`));
+/* macOS: uygulama Apple geliştirici kimliğiyle imzalı değil → otomatik kurulum (Squirrel.Mac) çalışmaz;
+   yeni sürüm yalnızca bildirilir ve indirme sayfası açılır */
+autoUpdater.autoDownload = !MAC;
+autoUpdater.autoInstallOnAppQuit = !MAC;
+let macNotified = '';
+autoUpdater.on('update-available', async i => {
+  if (!MAC) return send(`Yeni sürüm ${i.version} indiriliyor…`);
+  send(`Yeni sürüm ${i.version} var — indirme sayfasından kurun.`);
+  if (!manualCheck && macNotified === i.version) return;   // otomatik denetimde aynı sürüm bir kez sorulur
+  macNotified = i.version; manualCheck = false;
+  const r = await dialog.showMessageBox(win || undefined, {
+    type: 'info', title: 'Yeni sürüm', buttons: ['İndirme sayfasını aç', 'Sonra'], defaultId: 0, cancelId: 1,
+    message: `TadilatBodrum Saha ${i.version} yayımlandı.`,
+    detail: `Kurulu sürüm: ${app.getVersion()}\n\nİndirme sayfasından "TadilatBodrum-Saha-${i.version}.dmg" dosyasını indirip açın ve uygulamayı Uygulamalar klasörüne sürükleyin (eskisinin yerine).`,
+  });
+  if (r.response === 0) shell.openExternal(RELEASES);
+});
 autoUpdater.on('update-not-available', () => {
   send('Uygulama güncel.');
   if (manualCheck) dialog.showMessageBox(win, { type: 'info', title: 'Güncelleme', message: 'TadilatBodrum Saha güncel.', detail: `Kurulu sürüm: ${app.getVersion()}` });
@@ -150,13 +181,14 @@ function checkUpdates(manual = false) {
   }
   manualCheck = manual;
   return autoUpdater.checkForUpdates()
-    .then(r => r?.updateInfo && r.updateInfo.version !== app.getVersion() ? `Yeni sürüm ${r.updateInfo.version} indiriliyor…` : 'Uygulama güncel.')
+    .then(r => r?.updateInfo && r.updateInfo.version !== app.getVersion() ? (MAC ? `Yeni sürüm ${r.updateInfo.version} var — indirme sayfasından kurun.` : `Yeni sürüm ${r.updateInfo.version} indiriliyor…`) : 'Uygulama güncel.')
     .catch(e => { throw new Error(String(e?.message || e).slice(0, 200)); });
 }
 
 ipcMain.handle('tb:check-updates', () => checkUpdates(false));
 ipcMain.handle('tb:status', () => lastStatus);
 ipcMain.on('tb:retry', () => { siteIdx = 0; win?.loadURL(SITES[0]); });
+ipcMain.on('tb:releases', () => shell.openExternal(RELEASES));
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
@@ -165,4 +197,6 @@ app.whenReady().then(() => {
   setTimeout(() => checkUpdates(false).catch(() => {}), 8000);
   setInterval(() => checkUpdates(false).catch(() => {}), UPDATE_EVERY);
 });
-app.on('window-all-closed', () => app.quit());
+// macOS: pencere kapanınca uygulama Dock'ta açık kalır, Dock simgesine tıklayınca pencere yeniden açılır
+app.on('window-all-closed', () => { if (!MAC) app.quit(); });
+app.on('activate', () => { if (!win) createWindow(); else win.show(); });
