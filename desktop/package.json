@@ -1,7 +1,7 @@
 {
   "name": "tadilatbodrum-saha",
   "productName": "TadilatBodrum Saha",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "TadilatBodrum.com keşif, rölöve, anket, 3D model, render ve teklif uygulaması (Windows / macOS)",
   "main": "main.js",
   "homepage": "https://www.saggplus.com",
@@ -41,6 +41,7 @@
       "license.json",
       "build/icon.png"
     ],
+    "afterPack": "scripts/adhoc-sign.js",
     "win": {
       "target": [
         {
@@ -92,7 +93,7 @@
       ],
       "icon": "build/icon-512.png",
       "category": "public.app-category.productivity",
-      "identity": "-",
+      "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "TadilatBodrum-Saha-${version}-mac.${ext}",

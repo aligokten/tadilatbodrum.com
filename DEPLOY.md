@@ -290,9 +290,9 @@ Uygulamanın kendisi (pencere, menü, kurulum) değiştiğinde yeni masaüstü s
   yeni sürüm çıkınca bildirim gelir, "İndirme sayfasını aç" ile yeni `.dmg` indirilip kurulur.
 
 **Yeni sürüm yayımlama (Windows + macOS birlikte):**
-1. `desktop/package.json` içindeki `"version"` değerini artırın (ör. `1.1.0` → `1.1.1`) ve main'e gönderin.
+1. `desktop/package.json` içindeki `"version"` değerini artırın (ör. `1.1.1` → `1.1.2`) ve main'e gönderin.
 2. GitHub → **Actions** → **Masaüstü uygulaması** → **Run workflow** (main) ile çalıştırın.
-   Ya da etiketle: `git tag desktop-v1.1.1` ve `git push origin desktop-v1.1.1`.
+   Ya da etiketle: `git tag desktop-v1.1.2` ve `git push origin desktop-v1.1.2`.
 3. Önce Windows, ardından macOS derlenir; birkaç dakika sonra dosyalar **Releases** sayfasındadır:
    https://github.com/aligokten/tadilatbodrum.com/releases/latest
 
