@@ -1,17 +1,23 @@
 {
   "name": "tadilatbodrum-saha",
   "productName": "TadilatBodrum Saha",
-  "version": "1.0.1",
-  "description": "TadilatBodrum.com keşif, rölöve, anket, 3D model, render ve teklif uygulaması",
+  "version": "1.1.0",
+  "description": "TadilatBodrum.com keşif, rölöve, anket, 3D model, render ve teklif uygulaması (Windows / macOS)",
   "main": "main.js",
   "homepage": "https://www.saggplus.com",
-  "author": { "name": "SAGG+ App", "email": "info@saggplus.com", "url": "https://www.saggplus.com" },
+  "author": {
+    "name": "SAGG+ App",
+    "email": "info@saggplus.com",
+    "url": "https://www.saggplus.com"
+  },
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis --x64 --publish never",
-    "release": "electron-builder --win nsis --x64 --publish always"
+    "dist:mac": "electron-builder --mac --universal --publish never",
+    "release": "electron-builder --win nsis --x64 --publish always",
+    "release:mac": "electron-builder --mac --universal --publish always"
   },
   "dependencies": {
     "electron-updater": "6.3.9"
@@ -24,10 +30,26 @@
     "appId": "com.saggplus.tadilatbodrum.saha",
     "productName": "TadilatBodrum Saha",
     "copyright": "© 2026 Sinem Ali Gökten Grup İnşaat Mimarlık Akustik Müh. San. Tic. Ltd. Şti. Tüm hakları saklıdır.",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "preload.js", "offline.html", "license.json", "build/icon.png"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "license.json",
+      "build/icon.png"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "legalTrademarks": "SAGG+ App",
       "verifyUpdateCodeSignature": false
@@ -47,10 +69,63 @@
       "uninstallDisplayName": "TadilatBodrum Saha",
       "artifactName": "TadilatBodrum-Saha-Kurulum-${version}.${ext}",
       "language": "1055",
-      "installerLanguages": ["tr_TR"],
+      "installerLanguages": [
+        "tr_TR"
+      ],
       "multiLanguageInstaller": false,
       "deleteAppDataOnUninstall": false
     },
-    "publish": [{ "provider": "github", "owner": "aligokten", "repo": "tadilatbodrum.com", "releaseType": "release" }]
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon-512.png",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "TadilatBodrum-Saha-${version}-mac.${ext}",
+      "darkModeSupport": true,
+      "minimumSystemVersion": "11.0"
+    },
+    "dmg": {
+      "title": "TadilatBodrum Saha ${version}",
+      "artifactName": "TadilatBodrum-Saha-${version}.${ext}",
+      "contents": [
+        {
+          "x": 150,
+          "y": 190
+        },
+        {
+          "x": 390,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "aligokten",
+        "repo": "tadilatbodrum.com",
+        "releaseType": "release"
+      }
+    ]
   }
 }

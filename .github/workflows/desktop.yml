@@ -1,8 +1,10 @@
-# Windows uygulamasını derler ve GitHub Releases'e yayımlar.
+# Masaüstü uygulamasını (Windows + macOS) derler ve GitHub Releases'e yayımlar.
 # Yeni sürüm: desktop/package.json içindeki "version" artırılır, ardından
-#   git tag desktop-v1.0.1 && git push origin desktop-v1.0.1
-# Kurulu uygulamalar bu sürümü otomatik bulur, indirir ve kurar.
-name: Windows uygulaması
+#   git tag desktop-v1.1.0 && git push origin desktop-v1.1.0
+# (ya da Actions → Masaüstü uygulaması → Run workflow)
+# Windows: kurulu uygulamalar yeni sürümü otomatik bulur, indirir ve kurar.
+# macOS: uygulama yeni sürümü bildirir, indirme sayfasını açar (.dmg).
+name: Masaüstü uygulaması
 
 on:
   push:
@@ -14,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    name: Windows
     runs-on: windows-latest
     defaults:
       run:
@@ -36,3 +39,26 @@ jobs:
         run: npx electron-builder --win nsis --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  mac:
+    name: macOS
+    # Windows yayımı aynı GitHub sürümünü oluşturduktan sonra (aynı anda iki sürüm açılmasın)
+    needs: build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Derle ve yayımla (Intel + Apple Silicon, tek paket)
+        run: npx electron-builder --mac --universal --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple geliştirici sertifikası yok: anahtar zincirinde aranmaz, ad-hoc imzalanır
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
